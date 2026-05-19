@@ -1,0 +1,48 @@
+# --- Local-development secrets (NEVER commit) ---
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Note: .env.local.example IS committed — it's the template.
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.tox/
+
+# --- Virtual environments ---
+.venv/
+venv/
+env/
+
+# --- Docker / Colima local state ---
+.colima/
+
+# --- IDE / OS ---
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# --- Internal spec doc — kept local, not published (D-15, user request) ---
+Security_Vulnerability_Scanner_Spec_Doc_Updated.md
+
+# --- Build artefacts that should not land in the image ---
+*.log
+.tmp/

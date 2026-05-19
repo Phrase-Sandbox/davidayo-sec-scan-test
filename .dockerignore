@@ -1,0 +1,31 @@
+# Guardrail (Appendix D-12): even though the Dockerfile only COPYs src/ +
+# pyproject.toml today, this ensures secrets / VCS / local clones can NEVER
+# be baked into a published image if a COPY is ever broadened.
+.git
+.gitignore
+.github
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.crt
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+tests/
+docs/
+scripts/
+examples/
+*.md
+docker-compose.yml
+.dockerignore
+.venv/
+venv/
+build/
+dist/
+*.egg-info/

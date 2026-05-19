@@ -1,0 +1,79 @@
+# ── Developer-facing gate wiring ────────────────────────────────────────────
+# Copy THIS file into YOUR project repo at:
+#     .github/workflows/security-scan.yml
+#
+# You only reference the centrally-hosted reusable workflow — you never hold
+# the gate logic itself, so it cannot be silently weakened (spec §7.3).
+#
+# One-time setup in your repo:
+#   1. Add a GitHub Actions secret  PHRASE_SCAN_TOKEN  (from Launchpad settings;
+#      for the personal-account simulation, any non-empty string the scanner
+#      service is configured to accept).
+#   2. Add a repo/Actions variable  SCANNER_URL  pointing at the hosted scanner.
+#   3. (Recommended) Branch protection: require the "security-scan" check.
+#
+# ── Bypassing a blocked gate (spec BR-002 / Appendix D-1, D-16) ─────────────
+# To deliberately ship past a BLOCKED gate, put the token  [security-bypass]
+# in your push commit message. If the scan has any Critical finding you MUST
+# also include  [justification: your reason here]  — without it the bypass is
+# rejected and the gate stays blocked. Every bypass is audit-logged AND posts
+# a mandatory alert to the security team's Slack. Example commit message:
+#     hotfix: patch outage  [security-bypass] [justification: SEV1, fix is minimal]
+#
+# ── Rejecting the bot's auto-fix PR ─────────────────────────────────────────
+# If you CLOSE the bot's `security/issues/*` PR without merging, that is a
+# "rejection": the security team is alerted (for High/Critical) with who
+# closed it, when, and why. State your reason in a PR comment before/while
+# closing — it is mandatory and surfaced in the alert.
+name: Security Scan
+
+on:
+  push:
+  pull_request:
+    # opened/synchronize/reopened drive the gate; closed drives the
+    # PR-rejection watcher (both jobs below are guarded accordingly).
+    types: [opened, synchronize, reopened, closed]
+
+# ── OPT-IN: auto-fix PR (Appendix D-8 — DEVIATION, pending Security/Legal
+# sign-off) ─────────────────────────────────────────────────────────────────
+# These permissions apply ONLY to this repo's own ephemeral GITHUB_TOKEN
+# (issued per job, expires with the job, scoped to THIS repo). They do NOT
+# touch the scanner service or its read-only GitHub App. If you DELETE this
+# `permissions:` block and the `open_fix_pr: true` line below, you keep the
+# original spec-compliant behaviour: report + downloadable patches only, no PR.
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  security:
+    # Skip the scan when a PR is merely closed — that path is the
+    # PR-rejection watcher's job, not a re-scan.
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'closed' }}
+    uses: davidayomide/security-scanner/.github/workflows/security-scan-reusable.yml@main
+    with:
+      # Personal-account simulation: GitHub-hosted runner.
+      # OMIT this line for the real Phrase platform (defaults to the
+      # Launchpad self-hosted runner, per spec / CLAUDE.md).
+      runner: ubuntu-latest
+      scanner_url: ${{ vars.SCANNER_URL }}
+      # Opt-in. true => when the gate BLOCKS, open/update a PR on this repo
+      # with the cleanly-applying suggested fixes (never auto-merged; you
+      # review and merge; merging re-triggers the scan). Remove or set false
+      # for spec-compliant report-only behaviour.
+      open_fix_pr: true
+    secrets:
+      PHRASE_SCAN_TOKEN: ${{ secrets.PHRASE_SCAN_TOKEN }}
+
+  # Watches for the bot's auto-fix PR being closed-without-merging
+  # (a "rejection") and alerts the security team's Slack with who/when/why.
+  # Centrally hosted — you only reference it, same as the gate. Reuses the
+  # SAME SCANNER_URL var + PHRASE_SCAN_TOKEN secret.
+  pr_rejection:
+    if: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' }}
+    uses: davidayomide/security-scanner/.github/workflows/security-pr-rejection-reusable.yml@main
+    with:
+      runner: ubuntu-latest
+      scanner_url: ${{ vars.SCANNER_URL }}
+    secrets:
+      PHRASE_SCAN_TOKEN: ${{ secrets.PHRASE_SCAN_TOKEN }}

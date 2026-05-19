@@ -1,0 +1,209 @@
+"""Tests for the Markdown report generator (§2.2 step 6, §6.1, §6.2, BR-008)."""
+
+from datetime import UTC, datetime
+from uuid import UUID
+
+from security_scanner.shared.models.enums import (
+    Confidence,
+    GateDecision,
+    ScanTarget,
+    ScanType,
+    Severity,
+    VerificationStatus,
+)
+from security_scanner.shared.models.finding import VulnerabilityFinding
+from security_scanner.shared.models.scan_result import ScanResult
+from security_scanner.shared.reports.markdown import build_markdown_report
+
+
+def _finding(
+    *,
+    severity: Severity = Severity.High,
+    confidence: Confidence = Confidence.High,
+    verification_status: VerificationStatus = VerificationStatus.unverified,
+    affected_file: str = "src/app.py",
+    vulnerability_id: str = "A03:2021",
+) -> VulnerabilityFinding:
+    return VulnerabilityFinding(
+        vulnerability_id=vulnerability_id,
+        severity=severity,
+        confidence=confidence,
+        cvss_band={
+            Severity.Critical: "9.0–10.0",
+            Severity.High: "7.0–8.9",
+            Severity.Medium: "4.0–6.9",
+            Severity.Low: "0.1–3.9",
+        }[severity],
+        affected_file=affected_file,
+        affected_lines="42-55",
+        description="SQL injection in login.",
+        suggested_fix="Use parameterised query.",
+        owasp_reference="https://owasp.org/Top10/A03_2021-Injection/",
+        patch_file_path="patches/A03-2021.patch",
+        exploit_scenario=f"Attacker sends a payload to {affected_file}.",
+        verification_status=verification_status,
+    )
+
+
+def _result(
+    *,
+    findings: list[VulnerabilityFinding] | None = None,
+    scan_type: ScanType = ScanType.deployment_gate,
+    gate_decision: GateDecision = GateDecision.advisory,
+    partial_scan: bool = False,
+    unscanned_files: list[str] | None = None,
+    findings_count: int | None = None,
+) -> ScanResult:
+    fs = findings or []
+    return ScanResult(
+        scan_id=UUID("12345678-1234-5678-1234-567812345678"),
+        repo_url="https://github.com/Phrase-Launchpad/example",
+        scan_target=ScanTarget.full_repo,
+        scan_type=scan_type,
+        triggered_by="alice@phrase.com",
+        timestamp=datetime(2026, 5, 18, 12, 0, 0, tzinfo=UTC),
+        findings_count=findings_count if findings_count is not None else len(fs),
+        gate_decision=gate_decision,
+        partial_scan=partial_scan,
+        unscanned_files=unscanned_files or [],
+        findings=fs,
+    )
+
+
+# --- Structure ---------------------------------------------------------------
+
+
+def test_report_has_top_level_header():
+    assert build_markdown_report(_result()).startswith("# Security Scan Report")
+
+
+def test_metadata_section_includes_all_required_fields():
+    report = build_markdown_report(_result())
+    assert "Scan metadata" in report
+    assert "12345678-1234-5678-1234-567812345678" in report
+    assert "https://github.com/Phrase-Launchpad/example" in report
+    assert "2026-05-18T12:00:00+00:00" in report
+    assert "deployment_gate" in report
+    assert "alice@phrase.com" in report
+
+
+def test_findings_table_present_when_findings_exist():
+    report = build_markdown_report(_result(findings=[_finding()]))
+    assert "## Findings (1)" in report
+    assert "| A03:2021 |" in report
+
+
+def test_findings_table_absent_when_no_findings():
+    report = build_markdown_report(_result(findings=[]))
+    assert "## Findings (" not in report
+
+
+def test_gate_decision_shown_for_gate_scans():
+    result = _result(scan_type=ScanType.deployment_gate, gate_decision=GateDecision.blocked)
+    report = build_markdown_report(result)
+    assert "Gate decision" in report
+    assert "BLOCKED" in report
+
+
+def test_gate_decision_omitted_for_skill_scans():
+    result = _result(scan_type=ScanType.on_demand)
+    assert "Gate decision" not in build_markdown_report(result)
+
+
+def test_footer_includes_findings_count():
+    report = build_markdown_report(_result(findings=[_finding(), _finding()]))
+    assert "*Findings: 2*" in report
+
+
+# --- Warning rendering (the four required cases) ----------------------------
+
+
+def test_partial_scan_warning_appears_with_file_list():
+    result = _result(
+        partial_scan=True,
+        unscanned_files=["src/a.py", "src/b.py"],
+        findings=[_finding()],
+    )
+    report = build_markdown_report(result)
+    assert "PARTIAL SCAN" in report
+    assert "`src/a.py`" in report
+    assert "`src/b.py`" in report
+
+
+def test_conflicting_warning_appears_for_critical_conflicting_finding():
+    finding = _finding(
+        severity=Severity.Critical,
+        confidence=Confidence.High,
+        verification_status=VerificationStatus.conflicting,
+    )
+    report = build_markdown_report(_result(findings=[finding]))
+    assert "CONFLICTING FINDINGS" in report
+    assert "1 Critical findings were not confirmed" in report
+
+
+def test_conflicting_warning_count_matches_number_of_conflicting_critical_findings():
+    findings = [
+        _finding(severity=Severity.Critical, verification_status=VerificationStatus.conflicting),
+        _finding(severity=Severity.Critical, verification_status=VerificationStatus.conflicting),
+        # Non-conflicting Critical should NOT be counted.
+        _finding(severity=Severity.Critical, verification_status=VerificationStatus.verified),
+        # High with conflicting (should never happen in practice; defensive: NOT counted).
+        _finding(severity=Severity.High, verification_status=VerificationStatus.conflicting),
+    ]
+    report = build_markdown_report(_result(findings=findings))
+    assert "2 Critical findings" in report
+
+
+def test_advisory_warning_appears_for_high_critical_with_medium_low_confidence():
+    findings = [
+        _finding(severity=Severity.High, confidence=Confidence.Medium),
+        _finding(severity=Severity.Critical, confidence=Confidence.Low),
+    ]
+    report = build_markdown_report(_result(findings=findings))
+    assert "ADVISORY" in report
+    assert "2 findings are High/Critical severity but have Medium/Low confidence" in report
+
+
+def test_empty_findings_warning_appears_when_findings_list_is_empty():
+    report = build_markdown_report(_result(findings=[]))
+    assert "NO FINDINGS DETECTED" in report
+    assert "acknowledgement required" in report
+
+
+def test_no_warnings_section_when_clean_high_confidence_finding_only():
+    """A normal verified Critical or High+High finding produces no warning banners."""
+    findings = [
+        _finding(
+            severity=Severity.Critical,
+            confidence=Confidence.High,
+            verification_status=VerificationStatus.verified,
+        ),
+    ]
+    report = build_markdown_report(_result(findings=findings))
+    assert "## Warnings" not in report
+
+
+def test_warnings_section_appears_before_findings_section():
+    """Warnings must be visible at the top — above the findings table."""
+    findings = [_finding(severity=Severity.High, confidence=Confidence.Low)]
+    report = build_markdown_report(_result(findings=findings))
+    assert report.index("## Warnings") < report.index("## Findings")
+
+
+# --- Finding detail rendering ----------------------------------------------
+
+
+def test_detail_section_renders_description_exploit_and_fix():
+    finding = _finding()
+    report = build_markdown_report(_result(findings=[finding]))
+    assert "## Finding details" in report
+    assert finding.description in report
+    assert finding.exploit_scenario in report
+    assert finding.suggested_fix in report
+    assert finding.patch_file_path in report
+
+
+def test_table_pipe_in_field_is_escaped_to_keep_table_intact():
+    finding = _finding(affected_file="src/path|weird.py")
+    report = build_markdown_report(_result(findings=[finding]))
+    assert "src/path\\|weird.py" in report

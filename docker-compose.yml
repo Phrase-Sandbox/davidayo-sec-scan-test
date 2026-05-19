@@ -1,0 +1,66 @@
+# Local-development docker-compose file.
+#
+# Two services:
+# - security-scanner       — default, production-like (port 8000)
+# - security-scanner-test  — LOCAL_TEST_MODE=true, mounts /agent/test-scan
+#                            (port 8001, profile=test, opt-in only)
+#
+# Usage:
+#   cp .env.local.example .env.local         # one-time
+#   docker compose --env-file .env.local up --build                            # prod-like
+#   docker compose --profile test --env-file .env.local up security-scanner-test --build  # test
+#
+# `read_only: true` + tmpfs /tmp matches the production Kubernetes pod's
+# securityContext, so any place the service tries to write to the filesystem
+# fails locally too (and we catch it before deploy).
+
+services:
+  security-scanner:
+    build: .
+    image: phrase-security-scanner:local
+    container_name: phrase-security-scanner
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-test-key-placeholder}
+      - GITHUB_APP_ID=${GITHUB_APP_ID:-12345}
+      - GITHUB_APP_PRIVATE_KEY=${GITHUB_APP_PRIVATE_KEY:-placeholder}
+      - GITHUB_OAUTH_CLIENT_ID=${GITHUB_OAUTH_CLIENT_ID:-placeholder}
+      - GITHUB_OAUTH_CLIENT_SECRET=${GITHUB_OAUTH_CLIENT_SECRET:-placeholder}
+      - PHRASE_SCAN_TOKEN=${PHRASE_SCAN_TOKEN:-local-test-token}
+      - LOCAL_SCAN_TOKEN=${LOCAL_SCAN_TOKEN:-}
+      - LOG_LEVEL=DEBUG
+    read_only: true
+    tmpfs:
+      - /tmp
+    user: "1000:1000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  # Opt-in test service: ``docker compose --profile test up security-scanner-test``.
+  # Mounts /agent/test-scan, which bypasses GitHub fetching with caller-
+  # supplied files. NEVER enable this profile in production deploys.
+  security-scanner-test:
+    extends:
+      service: security-scanner
+    container_name: phrase-security-scanner-test
+    ports:
+      - "8001:8000"
+    environment:
+      - PORT=8000
+      - LOCAL_TEST_MODE=true
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-test-key-placeholder}
+      - GITHUB_APP_ID=placeholder
+      - GITHUB_APP_PRIVATE_KEY=placeholder
+      - GITHUB_OAUTH_CLIENT_ID=placeholder
+      - GITHUB_OAUTH_CLIENT_SECRET=placeholder
+      - PHRASE_SCAN_TOKEN=${PHRASE_SCAN_TOKEN:-local-test-token}
+      - LOCAL_SCAN_TOKEN=${LOCAL_SCAN_TOKEN:-}
+      - LOG_LEVEL=DEBUG
+    profiles:
+      - test

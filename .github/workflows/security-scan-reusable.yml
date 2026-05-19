@@ -1,0 +1,412 @@
+# Centrally-hosted reusable deployment gate (spec §7.3, §6.1, §2.2 gate path).
+#
+# Developer repos do NOT copy this — they reference it with `uses:` (see
+# examples/dev-repo-security-scan.yml), so the gate logic cannot be tampered
+# with locally. The decision lives in the scanner service's JSON response;
+# this workflow turns `gate_decision == blocked` into a failed job.
+#
+# OPT-IN auto-fix PR (Appendix D-8/D-9, DEVIATION — needs Security/Legal
+# sign-off): when `open_fix_pr: true` AND the gate blocks, the suggested code
+# fixes are reconstructed from the scan response and applied to the CALLING
+# repo's REAL files at the scanned commit, then opened as a PR using THAT
+# repo's own ephemeral GITHUB_TOKEN. Hardcoded secrets are NEVER auto-edited —
+# the PR body lists them for manual removal + rotation (spec §14). The scanner
+# service and its read-only GitHub App are never involved. Default OFF.
+name: Security Scan (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: Runner label. Default = Phrase Launchpad self-hosted (spec-exact).
+        type: string
+        default: core-arc-ondemand-launchpad
+      scanner_url:
+        description: Base URL of the hosted scanner service.
+        type: string
+        required: true
+      open_fix_pr:
+        description: >-
+          Opt-in. If true AND the gate blocks, apply the suggested code fixes
+          to this repo and open/update a PR (never auto-merged). The caller
+          must also grant permissions: contents:write, pull-requests:write.
+          Default false (report-only, spec-compliant).
+        type: boolean
+        default: false
+      scanner_repo:
+        description: >-
+          Repo hosting the shared safe-apply gauntlet
+          (scripts/lib/safe_apply.py — the single source of truth). Checked
+          out read-only when open_fix_pr is used.
+        type: string
+        default: davidayomide/security-scanner
+      scanner_ref:
+        description: Git ref of scanner_repo to pin the gauntlet logic to.
+        type: string
+        default: main
+    secrets:
+      PHRASE_SCAN_TOKEN:
+        required: true
+
+jobs:
+  security-scan:
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - name: Check out the calling repo (at the scanned commit)
+        uses: actions/checkout@v4
+
+      - name: Run security scan
+        id: scan
+        env:
+          SCANNER_URL: ${{ inputs.scanner_url }}
+          PHRASE_SCAN_TOKEN: ${{ secrets.PHRASE_SCAN_TOKEN }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          resp="$(curl -sS --max-time 600 -X POST "${SCANNER_URL}/agent/scan" \
+            -H "Authorization: Bearer ${PHRASE_SCAN_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -H "ngrok-skip-browser-warning: true" \
+            -d "{\"repo_url\":\"${REPO_URL}\",\"scan_target\":\"full_repo\",\"triggered_by\":\"${ACTOR}\",\"ref\":\"${COMMIT_SHA}\"}")"
+          echo "${resp}" > security-scan-report.json
+          read -r decision crit high <<EOF
+          $(python3 - "$resp" <<'PY'
+          import json, sys
+          b = json.loads(sys.argv[1])
+          f = b.get("findings", [])
+          c = sum(1 for x in f if x["severity"] == "Critical")
+          h = sum(1 for x in f if x["severity"] == "High")
+          print(b.get("gate_decision", "scan_failed"), c, h)
+          PY
+          )
+          EOF
+          echo "Gate decision: ${decision} (${crit} Critical, ${high} High)"
+          {
+            echo "decision=${decision}"
+            echo "crit=${crit}"
+            echo "high=${high}"
+          } >> "$GITHUB_OUTPUT"
+
+      # Spec D-1/D-16: opt-in per-commit bypass. If the gate BLOCKED and the
+      # triggering commit message carries [security-bypass], call the central
+      # /agent/bypass endpoint (which enforces BR-002 — Critical findings need
+      # a [justification: …], rejected 422 → stays blocked — logs the audit
+      # line, and fires the mandatory #security Slack alert). The effective
+      # decision is emitted here; the Enforce step reads THIS, not the raw
+      # scan decision. Fail-closed: any bypass error keeps the gate blocked.
+      - name: Resolve gate decision (commit-token bypass)
+        id: gate
+        if: ${{ always() && steps.scan.outputs.decision != '' }}
+        env:
+          SCANNER_URL: ${{ inputs.scanner_url }}
+          PHRASE_SCAN_TOKEN: ${{ secrets.PHRASE_SCAN_TOKEN }}
+          SCAN_DECISION: ${{ steps.scan.outputs.decision }}
+          ACTOR: ${{ github.actor }}
+          COMMIT_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git log -1 --pretty=%B > "$RUNNER_TEMP/commit_msg.txt" 2>/dev/null \
+            || : > "$RUNNER_TEMP/commit_msg.txt"
+          effective="$(python3 - <<'PY'
+          import json, os, re, sys, urllib.request, urllib.error
+          scan = os.environ["SCAN_DECISION"]
+          if scan != "blocked":
+              print(scan); sys.exit(0)
+          msg = open(os.path.join(os.environ["RUNNER_TEMP"], "commit_msg.txt"),
+                     encoding="utf-8", errors="replace").read()
+          if "[security-bypass]" not in msg:
+              print("blocked"); sys.exit(0)
+          m = re.search(r"\[justification:\s*(.*?)\]", msg, re.S)
+          justification = m.group(1).strip() if m else None
+          try:
+              result = json.load(open("security-scan-report.json", encoding="utf-8"))
+          except Exception as e:  # noqa: BLE001
+              sys.stderr.write(f"bypass: cannot read scan result ({e!r}); staying blocked\n")
+              print("blocked"); sys.exit(0)
+          data = json.dumps({
+              "result": result,
+              "developer": os.environ.get("ACTOR", "unknown"),
+              "commit_sha": os.environ.get("COMMIT_SHA", ""),
+              "justification": justification,
+          }).encode()
+          req = urllib.request.Request(
+              os.environ["SCANNER_URL"].rstrip("/") + "/agent/bypass",
+              data=data, method="POST",
+              headers={
+                  "Authorization": "Bearer " + os.environ["PHRASE_SCAN_TOKEN"],
+                  "Content-Type": "application/json",
+                  "ngrok-skip-browser-warning": "true",
+              },
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=30) as r:  # noqa: S310
+                  body = json.loads(r.read() or b"{}")
+              sys.stderr.write(
+                  "Security gate BYPASSED via [security-bypass] commit token "
+                  "— audit logged + #security Slack alert sent.\n")
+              print(body.get("gate_decision", "bypassed"))
+          except urllib.error.HTTPError as e:
+              if e.code == 422:
+                  sys.stderr.write(
+                      "Bypass REJECTED: Critical findings require a written "
+                      "[justification: …] in the commit message (BR-002). "
+                      "Gate stays blocked.\n")
+              else:
+                  sys.stderr.write(
+                      f"Bypass call failed (HTTP {e.code}); gate stays blocked.\n")
+              print("blocked")
+          except Exception as e:  # noqa: BLE001
+              sys.stderr.write(f"Bypass call error ({e!r}); gate stays blocked.\n")
+              print("blocked")
+          PY
+          )"
+          echo "Effective gate decision: ${effective}"
+          echo "decision=${effective}" >> "$GITHUB_OUTPUT"
+
+      # The auto-fix splice + safety gauntlet is the SINGLE source of truth
+      # scripts/lib/safe_apply.py, run identically by scripts/open_fix_pr.sh
+      # (the personal-sim driver) and here. No more duplicated heredocs.
+      # NOTE: scanner_repo may be private; the hosting org provisions read
+      # access for this checkout (same hand-off as hosting this workflow
+      # centrally). In the personal simulation the workflow is not executed —
+      # scripts/open_fix_pr.sh exercises the identical module.
+      - name: Fetch shared safe-apply gauntlet
+        if: ${{ inputs.open_fix_pr && steps.scan.outputs.decision == 'blocked' }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.scanner_repo }}
+          ref: ${{ inputs.scanner_ref }}
+          path: .scanner
+          persist-credentials: false
+
+      - name: Set up Python for the safe-apply self-check
+        if: ${{ inputs.open_fix_pr && steps.scan.outputs.decision == 'blocked' }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Open suggested-fix PR
+        if: ${{ inputs.open_fix_pr && steps.scan.outputs.decision == 'blocked' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          HEAD_REF: ${{ github.head_ref }}
+          REF_NAME: ${{ github.ref_name }}
+          BASE_REF: ${{ github.base_ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SAFE_APPLY="${GITHUB_WORKSPACE}/.scanner/scripts/lib/safe_apply.py"
+          [ -f "$SAFE_APPLY" ] || { echo "::error::shared safe_apply.py not found (check scanner_repo/scanner_ref)"; exit 1; }
+
+          base="${HEAD_REF:-$REF_NAME}"
+          target="${BASE_REF:-$REF_NAME}"
+          safe="${base//\//-}"
+          # D-14: dedicated persistent security branch, named after the
+          # calling repo's own main branch (security/issues/main, …).
+          branch="security/issues/${safe}"
+
+          # D-14: restore the prior branch's append-only security_findings/
+          # trail so next_report_index() is cumulative across CI runs.
+          # FETCH_HEAD works on the shallow actions/checkout (no refs/remotes
+          # dependency); no prior branch → fetch fails → fresh .1 files.
+          if git fetch origin "$branch" 2>/dev/null; then
+            git checkout FETCH_HEAD -- security_findings 2>/dev/null || true
+          fi
+          mkdir -p security_findings
+
+          # Checkout is at github.sha == the scanned ref so line numbers match.
+          # Secrets are never edited — the body lists them for 1Password
+          # remove/rotate. Same gauntlet as the sim driver.
+          summary="$(python3 "$SAFE_APPLY" security-scan-report.json "$RUNNER_TEMP" .)"
+          printf '%s\n' "$summary" | sed '/^__CHANGED_FILES__$/,$d'
+          applied_count="$(printf '%s\n' "$summary" | awk '/^APPLIED /{print $2; exit}')"
+          applied_count="${applied_count:-0}"
+          # Numbered review doc safe_apply just wrote under security_findings/.
+          review_file="$(printf '%s\n' "$summary" | awk '/^REVIEW_FILE /{print $2; exit}')"
+          review_file="${review_file:-SECURITY-REVIEW.md}"
+          mapfile -t changed_files < <(printf '%s\n' "$summary" | sed -n '/^__CHANGED_FILES__$/,$p' | tail -n +2 | sed '/^$/d')
+
+          # D-13: self-checks are ADVISORY. The developer reviewing/merging
+          # the PR is the gate, so flagged fixes are annotated (loudly) but
+          # the branch/PR is still opened. The hard FLOOR (compiles, no new
+          # anti-pattern) is enforced inside safe_apply.py already.
+          SELFCHECK_NOTES="$RUNNER_TEMP/selfcheck_notes.md"
+          : > "$SELFCHECK_NOTES"
+          selfcheck_note() {
+            echo "::notice::self-check advisory (non-blocking, review carefully): $1"
+            printf -- '- ⚠️ %s\n' "$1" >> "$SELFCHECK_NOTES"
+          }
+
+          if [ "$applied_count" -eq 0 ]; then
+            echo "0 code fixes auto-applied — branch/PR still opened with security_findings/${review_file##*/} + manual suggestions for the developer."
+          fi
+          echo "Changed files: ${changed_files[*]:-none}"
+
+          # Self-check 1: every changed .py must byte-compile.
+          for f in "${changed_files[@]}"; do
+            case "$f" in
+              *.py) python3 -m py_compile "$f" 2>/tmp/c.err || { cat /tmp/c.err || true; selfcheck_note "py_compile failed for \`$f\` — review extra carefully"; } ;;
+            esac
+          done
+          echo "OK: changed .py compile"
+
+          # Self-check 2: ruff + bandit introduced-only on changed .py.
+          # A GitHub-hosted runner cannot reach the scanner, so the post-patch
+          # RE-SCAN + second-pass review (#13) run in the sim driver
+          # scripts/open_fix_pr.sh. Prod safety net: this gate re-runs on the
+          # merge/push commit per spec §2.2.
+          py_changed=(); for f in "${changed_files[@]}"; do case "$f" in *.py) py_changed+=("$f");; esac; done
+          if [ "${#py_changed[@]}" -gt 0 ]; then
+            python3 -m pip -q install ruff bandit >/dev/null 2>&1 || true
+            mkdir -p "$RUNNER_TEMP/old" "$RUNNER_TEMP/new"
+            for f in "${py_changed[@]}"; do
+              mkdir -p "$RUNNER_TEMP/old/$(dirname "$f")" "$RUNNER_TEMP/new/$(dirname "$f")"
+              git show "HEAD:$f" > "$RUNNER_TEMP/old/$f" 2>/dev/null || : > "$RUNNER_TEMP/old/$f"
+              cp "$f" "$RUNNER_TEMP/new/$f"
+            done
+            # ruff/bandit EXIT NON-ZERO when they find issues; under the
+            # step's `set -euo pipefail` that would abort before the PR is
+            # created. Neutralise the tool exit (|| true) and tolerate
+            # empty/non-JSON output so only the count matters.
+            cnt(){ if [ "$1" = ruff ]; then { ruff check --output-format json "$2" 2>/dev/null || true; } | python3 -c "import json,sys;d=sys.stdin.read().strip() or '[]';print(len(json.loads(d)))"; else { bandit -q -r -f json "$2" 2>/dev/null || true; } | python3 -c "import json,sys;t=sys.stdin.read().strip() or '{}';d=json.loads(t);print(sum(1 for r in d.get('results',[]) if r.get('issue_severity') in ('MEDIUM','HIGH')))"; fi; }
+            if command -v ruff >/dev/null && command -v bandit >/dev/null; then
+              ro=$(cnt ruff "$RUNNER_TEMP/old"); rn=$(cnt ruff "$RUNNER_TEMP/new")
+              bo=$(cnt bandit "$RUNNER_TEMP/old"); bn=$(cnt bandit "$RUNNER_TEMP/new")
+              echo "ruff old=$ro new=$rn ; bandit(>=MED) old=$bo new=$bn"
+              if { [ "$rn" -le "$ro" ] && [ "$bn" -le "$bo" ]; }; then
+                echo "OK: no new ruff/bandit issue introduced"
+              else
+                selfcheck_note "ruff/bandit flagged a NEW lint/security issue in a suggested fix — review carefully"
+              fi
+            else
+              echo "::notice::ruff/bandit unavailable — static lint self-check skipped (compile gate + gauntlet still applied)."
+            fi
+          fi
+
+          # Fold advisory self-check notes into the PR body + committed
+          # SECURITY-REVIEW.md (informational; the dev is the gate).
+          if [ -s "$SELFCHECK_NOTES" ]; then
+            {
+              echo ""
+              echo "### ⚠️ Automated self-check advisories"
+              echo "These did **not** block this PR — *you* are the reviewer. Weigh them:"
+              echo ""
+              cat "$SELFCHECK_NOTES"
+            } | tee -a "$RUNNER_TEMP/pr_body.md" >> "$review_file"
+          fi
+
+          git config user.name "phrase-security-scanner[bot]"
+          git config user.email "phrase-security-scanner[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add -A
+          # Keep the embedded scanner checkout and the throwaway ROOT scan
+          # JSON out of the dev's PR. The exact pathspec does NOT match the
+          # numbered security_findings/security-scan-report.<n>.json, so the
+          # append-only audit trail (D-14) + applied fixes stay committed.
+          git reset -q -- .scanner security-scan-report.json 2>/dev/null || true
+          git commit -m "security: suggested fixes for blocked scan ($(date -u +%FT%TZ))"
+          # The bot branch is throwaway & bot-only; we always recreate it from
+          # the scanned commit. `--force-with-lease` needs a remote-tracking
+          # ref the shallow checkout doesn't have (→ "stale info" rejection),
+          # so a plain force to THIS branch is correct. Base is never pushed.
+          git push --force origin "$branch"
+
+          # Create the PR EXPLICITLY against the calling repo via the REST API
+          # (no `gh`; avoids the fork-parent default that breaks gh on a fork).
+          owner="${GITHUB_REPOSITORY%%/*}"
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          existing="$(curl -sS -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" \
+            "${api}/pulls?head=${owner}:${branch}&state=open" \
+            | python3 -c "import json,sys; d=json.load(sys.stdin); print(d[0]['html_url'] if d else '')")"
+          if [ -n "$existing" ]; then
+            echo "PR already open (updated by the push above): $existing"
+          else
+            payload="$(python3 -c 'import json,sys; print(json.dumps({"title":"Security: suggested fixes for blocked scan","head":sys.argv[1],"base":sys.argv[2],"body":open(sys.argv[3]).read()}))' "$branch" "$target" "$RUNNER_TEMP/pr_body.md")"
+            url="$(curl -sS -X POST -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" \
+              "${api}/pulls" -d "$payload" \
+              | python3 -c "import json,sys; print(json.load(sys.stdin).get('html_url',''))")"
+            if [ -n "$url" ]; then
+              echo "PR created: $url"
+            else
+              echo "::warning::Suggested-fix PR could not be created (branch was still pushed). Gate decision is unaffected."
+            fi
+          fi
+
+      - name: Enforce gate decision
+        if: ${{ always() && steps.scan.outputs.decision != '' }}
+        shell: bash
+        env:
+          # Effective decision = post-bypass (steps.gate); falls back to the
+          # raw scan decision if the bypass-resolution step was skipped.
+          DECISION: ${{ steps.gate.outputs.decision || steps.scan.outputs.decision }}
+          CRIT: ${{ steps.scan.outputs.crit }}
+          HIGH: ${{ steps.scan.outputs.high }}
+        run: |
+          set -euo pipefail
+          case "${DECISION}" in
+            blocked)
+              echo "::error::Security scan failed: ${CRIT} Critical, ${HIGH} High findings detected. Deployment blocked. See the security-scan-report artifact (and the suggested-fix PR, if enabled)."
+              exit 1 ;;
+            bypassed)
+              echo "::warning::Deployment gate bypassed. Proceeding." ;;
+            scan_failed|advisory)
+              echo "::warning::Security scan non-blocking (${DECISION}). Deployment allowed to proceed — review manually." ;;
+            pass)
+              echo "Security scan passed." ;;
+            *)
+              echo "::warning::Unknown decision '${DECISION}' — treating as non-blocking." ;;
+          esac
+
+      - name: Publish findings to job summary
+        # CI visibility (Appendix D-12): the repo owner sees exactly what to
+        # fix in THIS repo's own Actions tab — every run, whether or not a
+        # suggested-fix PR is opened. Renders the derived findings only
+        # (file/line/severity/description) — never raw source (§12).
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -f security-scan-report.json ] || { echo "No scan report produced." >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+          python3 - security-scan-report.json >> "$GITHUB_STEP_SUMMARY" <<'PY'
+          import json, sys
+          try:
+              d = json.load(open(sys.argv[1]))
+          except Exception:
+              print("### 🛡️ Security scan\n\nScan did not return a parseable report "
+                    "(non-blocking — see logs / BR-006).")
+              raise SystemExit(0)
+          fs = d.get("findings", [])
+          dec = d.get("gate_decision", "unknown")
+          sev = lambda s: sum(1 for f in fs if f.get("severity") == s)
+          emoji = {"blocked":"❌","pass":"✅","advisory":"⚠️","bypassed":"⚠️","scan_failed":"⚠️"}.get(dec,"ℹ️")
+          print(f"## {emoji} Security scan — `{dec}`\n")
+          print(f"**{len(fs)} findings** — {sev('Critical')} Critical, "
+                f"{sev('High')} High, {sev('Medium')} Medium, {sev('Low')} Low\n")
+          if fs:
+              print("| Severity | Vulnerability | File | Lines | What to fix |")
+              print("|---|---|---|---|---|")
+              order = {"Critical":0,"High":1,"Medium":2,"Low":3}
+              for f in sorted(fs, key=lambda x: order.get(x.get("severity"),9)):
+                  desc = " ".join(str(f.get("description","")).split())
+                  if len(desc) > 160: desc = desc[:159] + "…"
+                  print(f"| {f.get('severity','')} | {f.get('vulnerability_id','')} "
+                        f"| `{f.get('affected_file','')}` | {f.get('affected_lines','') or '—'} "
+                        f"| {desc} |")
+              print("\n_Full machine-readable report: the `security-scan-report` "
+                    "artifact on this run._")
+          else:
+              print("No findings. ✅")
+          PY
+
+      - name: Upload scan report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-report
+          path: security-scan-report.json
+          if-no-files-found: ignore
