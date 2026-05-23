@@ -45,6 +45,7 @@ services:
     environment:
       - PORT=8000
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-test-key-placeholder}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-6}
       - GITHUB_APP_ID=${GITHUB_APP_ID:-12345}
       - GITHUB_APP_PRIVATE_KEY=${GITHUB_APP_PRIVATE_KEY:-placeholder}
       - GITHUB_OAUTH_CLIENT_ID=${GITHUB_OAUTH_CLIENT_ID:-placeholder}

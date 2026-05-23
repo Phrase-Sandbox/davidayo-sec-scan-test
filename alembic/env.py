@@ -18,7 +18,9 @@ from security_scanner.tokens import models  # noqa: F401 — register tables wit
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers defaults to True and wipes out uvicorn's and
+    # the app's loggers on startup — keep them.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 
