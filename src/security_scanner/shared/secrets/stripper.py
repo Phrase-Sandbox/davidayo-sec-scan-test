@@ -72,11 +72,29 @@ _QUOTED_STRING_PATTERN: re.Pattern[str] = re.compile(
 )
 
 
+@dataclass(frozen=True)
+class SecretHit:
+    """One credential occurrence found by the stripper.
+
+    The hit carries enough trace context to verify a SECRET-001 finding
+    without ever exposing the secret value itself. ``hint`` is up to 40
+    chars of the line preceding the secret (e.g. ``"ANTHROPIC_API_KEY = "``)
+    — a textual anchor a reviewer can grep for.
+    """
+
+    filename: str
+    line: int            # 1-based start line of the secret
+    end_line: int        # 1-based end line; equals ``line`` except for PEM blocks
+    hint: str            # text on the same line, immediately before the secret
+    detector: str        # which rule matched: pem, github_pat, anthropic, …
+
+
 @dataclass
 class SecretStripResult:
     cleaned_files: dict[str, str]
     secrets_found: bool
     affected_files: list[str]
+    hits: list[SecretHit]
 
 
 def strip(files: dict[str, str]) -> SecretStripResult:
@@ -89,22 +107,29 @@ def strip(files: dict[str, str]) -> SecretStripResult:
     """
     cleaned: dict[str, str] = {}
     affected: list[str] = []
+    all_hits: list[SecretHit] = []
     for filename, content in files.items():
-        new_content, had_secret = _strip_one(content)
+        new_content, file_hits = _strip_one(content, filename)
         cleaned[filename] = new_content
-        if had_secret:
+        if file_hits:
             affected.append(filename)
+            all_hits.extend(file_hits)
             log.info(f"[secret stripped from file: {filename}]", filename=filename)
     return SecretStripResult(
         cleaned_files=cleaned,
         secrets_found=bool(affected),
         affected_files=affected,
+        hits=all_hits,
     )
 
 
-def _strip_one(content: str) -> tuple[str, bool]:
-    """Return ``(cleaned_content, had_secret)`` for a single file body."""
+def _strip_one(content: str, filename: str) -> tuple[str, list[SecretHit]]:
+    """Return ``(cleaned_content, hits)`` for a single file body."""
     original = content
+    # detect-secrets is the expensive layer; run it once on the original and
+    # reuse the result for both location tracking and redaction.
+    ds_values = _detect_secrets_values(original)
+    hits = _scan_for_hits(original, filename, ds_values)
 
     # PEM first — multi-line, mustn't be fragmented by later line-by-line work.
     content = _PEM_PATTERN.sub(REDACTED, content)
@@ -131,13 +156,96 @@ def _strip_one(content: str) -> tuple[str, bool]:
     # Generic high-entropy quoted strings (truffleHog-style, length + Shannon).
     content = _QUOTED_STRING_PATTERN.sub(_redact_if_high_entropy, content)
 
-    # Supplementary scan via detect-secrets — catches anything the regex layer
-    # missed. Replace each found value literally; never log raw values.
-    for value in _detect_secrets_values(content):
+    # Supplementary detect-secrets redaction — uses values found above.
+    for value in ds_values:
         if value and value != REDACTED:
             content = content.replace(value, REDACTED)
 
-    return content, content != original
+    return content, hits
+
+
+def _line_at(content: str, offset: int) -> int:
+    return content.count("\n", 0, offset) + 1
+
+
+def _hint_before(content: str, offset: int, max_chars: int = 40) -> str:
+    """Return up to ``max_chars`` of the line preceding ``offset``.
+
+    Used as a non-sensitive anchor in SECRET-001 findings so a reviewer
+    can locate the credential by context (e.g. the variable name) without
+    the report ever including the secret value itself.
+    """
+    line_start = content.rfind("\n", 0, offset) + 1
+    return content[line_start:offset][-max_chars:].rstrip()
+
+
+def _scan_for_hits(
+    content: str, filename: str, ds_values: list[str]
+) -> list[SecretHit]:
+    """Scan ORIGINAL file content and return location metadata for each secret.
+
+    Scanning is done before any redaction so line numbers map to the source
+    the user wrote. We never store the secret value — only its position and
+    the surrounding non-sensitive prefix.
+    """
+    hits: list[SecretHit] = []
+
+    def _record(start: int, end: int, detector: str) -> None:
+        hits.append(
+            SecretHit(
+                filename=filename,
+                line=_line_at(content, start),
+                end_line=_line_at(content, end),
+                hint=_hint_before(content, start),
+                detector=detector,
+            )
+        )
+
+    for m in _PEM_PATTERN.finditer(content):
+        _record(m.start(), m.end(), "pem")
+
+    for pattern, name in (
+        (_GITHUB_PAT_PATTERN, "github_pat"),
+        (_GITHUB_TOKEN_PATTERN, "github_token"),
+        (_ANTHROPIC_PATTERN, "anthropic"),
+        (_AWS_ACCESS_KEY_PATTERN, "aws_access_key"),
+        (_GOOGLE_OAUTH_PATTERN, "google_oauth"),
+        (_JWT_PATTERN, "jwt"),
+    ):
+        for m in pattern.finditer(content):
+            _record(m.start(), m.end(), name)
+
+    for m in _BEARER_TOKEN_PATTERN.finditer(content):
+        _record(m.start(1), m.end(1), "bearer_token")
+
+    for m in _CONFIG_SECRET_PATTERN.finditer(content):
+        _record(m.start(3), m.end(3), "config_secret")
+
+    for m in _QUOTED_STRING_PATTERN.finditer(content):
+        if _shannon_entropy(m.group(2)) >= HIGH_ENTROPY_THRESHOLD_BITS_PER_CHAR:
+            _record(m.start(2), m.end(2), "high_entropy")
+
+    # detect-secrets supplementary — locate each value by literal search so
+    # we still get a line number even though detect-secrets is opaque.
+    for value in ds_values:
+        if not value or value == REDACTED:
+            continue
+        idx = content.find(value)
+        if idx != -1:
+            _record(idx, idx + len(value), "detect_secrets")
+
+    # Dedupe by (line, end_line): multiple regex layers commonly fire on the
+    # same secret (e.g. a github_pat inside a config_secret assignment). One
+    # finding per source location is what a reviewer actually wants.
+    seen: set[tuple[int, int]] = set()
+    deduped: list[SecretHit] = []
+    for h in hits:
+        key = (h.line, h.end_line)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(h)
+    return deduped
 
 
 def _redact_config_value(m: re.Match[str]) -> str:

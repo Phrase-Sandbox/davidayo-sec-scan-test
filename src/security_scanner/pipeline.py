@@ -290,23 +290,38 @@ def _parse_repo_url(repo_url: str) -> tuple[str, str] | None:
 
 
 def _build_secret_findings(strip_result: SecretStripResult) -> list[VulnerabilityFinding]:
-    """One SECRET-001 Critical finding per file the stripper redacted (BR-003)."""
-    if not strip_result.secrets_found:
-        return []
+    """One SECRET-001 Critical finding per (file, line) where the stripper hit.
+
+    Each finding carries the source line (or range, for multi-line PEM blocks)
+    and a non-sensitive textual anchor (``hint``) — e.g. ``"API_KEY = "`` —
+    so a reviewer can trace the credential back to its origin without the
+    report ever containing the secret value itself.
+    """
     findings: list[VulnerabilityFinding] = []
-    for affected_file in strip_result.affected_files:
+    for hit in strip_result.hits:
+        affected_lines = (
+            str(hit.line)
+            if hit.line == hit.end_line
+            else f"{hit.line}-{hit.end_line}"
+        )
+        hint_clause = (
+            f" Line begins with: `{hit.hint}` (no secret value shown)."
+            if hit.hint
+            else ""
+        )
         findings.append(
             VulnerabilityFinding(
                 vulnerability_id="SECRET-001",
                 severity=Severity.Critical,
                 confidence=Confidence.High,
                 cvss_band=severity_to_cvss_band(Severity.Critical),
-                affected_file=affected_file,
-                affected_lines=None,
+                affected_file=hit.filename,
+                affected_lines=affected_lines,
                 description=(
-                    "Hardcoded credentials were detected in the source file and "
-                    "redacted before analysis. Remove the credentials from the "
-                    "codebase and rotate the exposed key/token/password."
+                    f"Hardcoded credential (detector: {hit.detector}) was found "
+                    f"at line {affected_lines} and redacted before analysis. "
+                    f"Remove the credential from the codebase and rotate the "
+                    f"exposed value.{hint_clause}"
                 ),
                 suggested_fix=(
                     "Move the credential out of the repository (use environment "
@@ -317,8 +332,8 @@ def _build_secret_findings(strip_result: SecretStripResult) -> list[Vulnerabilit
                 patch_file_path="",  # no auto-patch — remediation is removal + rotation
                 exploit_scenario=(
                     f"An attacker who clones the repository extracts the "
-                    f"hardcoded credential from {affected_file} and forges "
-                    "authenticated requests using it."
+                    f"hardcoded credential from {hit.filename}:{affected_lines} "
+                    f"and forges authenticated requests using it."
                 ),
                 # Secret detection is deterministic (regex), so the finding is
                 # already verified — BR-009 second-pass is unnecessary.

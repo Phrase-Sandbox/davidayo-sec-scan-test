@@ -40,6 +40,7 @@ _SKIP_DIRS = frozenset(
         ".idea",
         ".vscode",
         "htmlcov",
+        "vuln-result",  # our own output directory — never scan it
     }
 )
 

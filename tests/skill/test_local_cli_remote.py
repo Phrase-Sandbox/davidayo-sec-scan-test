@@ -68,7 +68,7 @@ def test_logout_removes_config_and_revokes(tmp_path, monkeypatch):
 
     called = {}
 
-    def fake_urlopen(req, timeout=0):  # noqa: ARG001
+    def fake_urlopen(req, timeout=0, context=None):  # noqa: ARG001
         called["url"] = req.full_url
         called["auth"] = req.headers.get("Authorization")
         resp = MagicMock()
@@ -102,7 +102,7 @@ def test_remote_scan_posts_and_writes_report(tmp_path, monkeypatch):
 
     captured = {}
 
-    def fake_urlopen(req, timeout=0):  # noqa: ARG001
+    def fake_urlopen(req, timeout=0, context=None):  # noqa: ARG001
         captured["url"] = req.full_url
         captured["body"] = json.loads(req.data.decode())
         captured["auth"] = req.headers.get("Authorization")
@@ -133,7 +133,7 @@ def test_remote_scan_posts_and_writes_report(tmp_path, monkeypatch):
     assert captured["url"] == "https://scanner.test/scan/local"
     assert captured["auth"] == "Bearer phs_local_tok-abc_xyz"
     assert "app/main.py" in captured["body"]["files"]
-    assert (tmp_path / "security-scan-report.md").exists()
+    assert (tmp_path / "vuln-result" / "security-scan-report.md").exists()
 
 
 def test_remote_scan_returns_1_on_critical_findings(tmp_path, monkeypatch):
@@ -149,7 +149,7 @@ def test_remote_scan_returns_1_on_critical_findings(tmp_path, monkeypatch):
         "findings": [],
     }
 
-    def fake_urlopen(req, timeout=0):  # noqa: ARG001
+    def fake_urlopen(req, timeout=0, context=None):  # noqa: ARG001
         resp = MagicMock()
         resp.read.return_value = json.dumps(payload).encode()
         resp.__enter__ = lambda s: s
@@ -169,7 +169,7 @@ def test_remote_scan_returns_1_on_critical_findings(tmp_path, monkeypatch):
 def test_remote_scan_401_says_run_login(tmp_path, monkeypatch, capsys):
     (tmp_path / "main.py").write_text("print('hi')\n")
 
-    def fake_urlopen(req, timeout=0):  # noqa: ARG001
+    def fake_urlopen(req, timeout=0, context=None):  # noqa: ARG001
         from io import BytesIO
         from urllib.error import HTTPError
         raise HTTPError(req.full_url, 401, "Unauthorized", {}, BytesIO(b"nope"))
@@ -240,4 +240,4 @@ def test_main_routes_remote_scan_via_config(tmp_path, monkeypatch):
         mock_open.return_value = resp
         rc = local_cli.main([str(tmp_path)])
     assert rc == 0
-    assert (tmp_path / "security-scan-report.md").exists()
+    assert (tmp_path / "vuln-result" / "security-scan-report.md").exists()

@@ -98,7 +98,7 @@ def test_cli_writes_report_and_patch_for_sqli(tmp_path, monkeypatch):
 
     rc = local_cli.main(["--local", str(tmp_path)])
 
-    report = tmp_path / "security-scan-report.md"
+    report = tmp_path / "vuln-result" / "security-scan-report.md"
     assert report.exists()
     assert "A03:2021" in report.read_text()
     patches = list(tmp_path.glob("*.patch"))
@@ -119,7 +119,7 @@ def test_cli_flags_hardcoded_secret_as_secret_001(tmp_path, monkeypatch):
 
     rc = local_cli.main(["--local", str(tmp_path)])
 
-    report_text = (tmp_path / "security-scan-report.md").read_text()
+    report_text = (tmp_path / "vuln-result" / "security-scan-report.md").read_text()
     assert "SECRET-001" in report_text
     assert rc == 1  # SECRET-001 is Critical
 
