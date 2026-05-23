@@ -22,6 +22,6 @@ PY="${PYTHON:-python3}"
     --hidden-import=security_scanner.shared.claude.client \
     --hidden-import=security_scanner.shared.reports.markdown \
     --collect-submodules security_scanner \
-    -m security_scanner.skill.local_cli
+    src/security_scanner/skill/local_cli.py
 
 echo "Built: dist/phrase-sec-scan*"
