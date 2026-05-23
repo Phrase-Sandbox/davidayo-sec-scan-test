@@ -243,6 +243,30 @@ def test_token_from_indexed_lookup_is_not_flagged():
     assert result.cleaned_files["cli.py"] == content
 
 
+def test_all_caps_constant_in_code_file_is_not_flagged():
+    """`HTTP_401_UNAUTHORIZED` is a Python constant reference, not a credential."""
+    content = "response.status_code = status.HTTP_401_UNAUTHORIZED\n"
+    result = strip({"app.py": content})
+    assert result.secrets_found is False
+    assert result.cleaned_files["app.py"] == content
+
+
+def test_docstring_prose_in_code_file_is_not_flagged():
+    """Long English words in docstrings have no digits — shape check kills them."""
+    content = '"""Local-dev bypass: when settings.bypass is enabled."""\n'
+    result = strip({"app.py": content})
+    assert result.secrets_found is False
+    assert result.cleaned_files["app.py"] == content
+
+
+def test_credential_forgotten_in_comment_is_still_flagged():
+    """A forgotten real-shape key in a comment must still be redacted."""
+    content = "# leftover: sk_test_4eC39HqLyjWDarjtT1zdp7dc\n"
+    result = strip({"app.py": content})
+    assert result.secrets_found is True
+    assert "sk_test_4eC39HqLyjWDarjtT1zdp7dc" not in result.cleaned_files["app.py"]
+
+
 # --- Performance (§10) -------------------------------------------------------
 
 

@@ -123,12 +123,31 @@ def strip(files: dict[str, str]) -> SecretStripResult:
     )
 
 
+def _credential_shaped(value: str) -> bool:
+    """Real API keys/tokens almost always contain BOTH lowercase letters AND digits.
+
+    English prose ("Local-dev bypass"), Python ALL_CAPS constants
+    (``HTTP_401_UNAUTHORIZED``), and qualified identifiers (``received_token``)
+    all fail this check — and they are the dominant FP shapes in detect-secrets
+    matches against source files. Real credentials forgotten in a comment
+    (``# leftover: sk_test_4eC39HqLyjWDarjtT1zdp7dc``) still satisfy it.
+    """
+    has_lower = any(c.islower() for c in value)
+    has_digit = any(c.isdigit() for c in value)
+    return has_lower and has_digit
+
+
 def _strip_one(content: str, filename: str) -> tuple[str, list[SecretHit]]:
     """Return ``(cleaned_content, hits)`` for a single file body."""
     original = content
     # detect-secrets is the expensive layer; run it once on the original and
     # reuse the result for both location tracking and redaction.
     ds_values = _detect_secrets_values(original)
+    # In code files, restrict detect-secrets matches to credential-shaped
+    # values. Config files keep the permissive behavior — any high-entropy
+    # value in `.env` / `.yaml` / `.ini` is meaningful.
+    if _is_code_file(filename):
+        ds_values = [v for v in ds_values if _credential_shaped(v)]
     hits = _scan_for_hits(original, filename, ds_values)
 
     # PEM first — multi-line, mustn't be fragmented by later line-by-line work.
