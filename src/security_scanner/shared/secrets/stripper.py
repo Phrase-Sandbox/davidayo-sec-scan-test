@@ -63,7 +63,7 @@ _JWT_PATTERN: re.Pattern[str] = re.compile(
 # Value-only redaction to keep the key/separator visible for the analysis model.
 _CONFIG_SECRET_PATTERN: re.Pattern[str] = re.compile(
     r"(?i)\b((?:password|passwd|secret|token|api[_\-]?key|auth[_\-]?token)\s*[:=]\s*)"
-    r"(['\"]?)([^\s'\"]{4,})\2"
+    r"(['\"]?)([^\s'\"().\[\]{},+]{4,})\2"
 )
 
 # --- BR-003 type 1: generic high-entropy strings ≥20 chars in quoted contexts
@@ -151,7 +151,7 @@ def _strip_one(content: str, filename: str) -> tuple[str, list[SecretHit]]:
     )
 
     # password=/secret=/token=/api_key= — replace value, keep key and separator.
-    content = _CONFIG_SECRET_PATTERN.sub(_redact_config_value, content)
+    content = _CONFIG_SECRET_PATTERN.sub(_make_redact_config_value(filename), content)
 
     # Generic high-entropy quoted strings (truffleHog-style, length + Shannon).
     content = _QUOTED_STRING_PATTERN.sub(_redact_if_high_entropy, content)
@@ -219,6 +219,13 @@ def _scan_for_hits(
         _record(m.start(1), m.end(1), "bearer_token")
 
     for m in _CONFIG_SECRET_PATTERN.finditer(content):
+        quote, value = m.group(2), m.group(3)
+        if (
+            _is_code_file(filename)
+            and not quote
+            and _shannon_entropy(value) < HIGH_ENTROPY_THRESHOLD_BITS_PER_CHAR
+        ):
+            continue
         _record(m.start(3), m.end(3), "config_secret")
 
     for m in _QUOTED_STRING_PATTERN.finditer(content):
@@ -248,9 +255,37 @@ def _scan_for_hits(
     return deduped
 
 
-def _redact_config_value(m: re.Match[str]) -> str:
-    prefix, quote, _value = m.group(1), m.group(2), m.group(3)
-    return f"{prefix}{quote}{REDACTED}{quote}"
+# Source-code extensions where an unquoted `token = something` is almost
+# always a variable reference, not a config-style credential assignment.
+# For these we apply an extra entropy gate to suppress FPs. Other extensions
+# (.env, .yaml, .ini, .cfg, .toml, .properties, anything unknown) keep the
+# permissive behavior where any `key=value` is treated as a credential.
+_CODE_FILE_EXTENSIONS: frozenset[str] = frozenset(
+    {".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java", ".kt", ".rb"}
+)
+
+
+def _is_code_file(filename: str) -> bool:
+    lower = filename.lower()
+    return any(lower.endswith(ext) for ext in _CODE_FILE_EXTENSIONS)
+
+
+def _make_redact_config_value(filename: str):
+    """Closure-based redactor so we can consult the filename in the callback."""
+
+    def _redact(m: re.Match[str]) -> str:
+        prefix, quote, value = m.group(1), m.group(2), m.group(3)
+        # In source code, an unquoted `token = X` is overwhelmingly a variable
+        # reference. Only treat it as a credential if the value is high-entropy.
+        if (
+            _is_code_file(filename)
+            and not quote
+            and _shannon_entropy(value) < HIGH_ENTROPY_THRESHOLD_BITS_PER_CHAR
+        ):
+            return m.group(0)
+        return f"{prefix}{quote}{REDACTED}{quote}"
+
+    return _redact
 
 
 def _redact_if_high_entropy(m: re.Match[str]) -> str:

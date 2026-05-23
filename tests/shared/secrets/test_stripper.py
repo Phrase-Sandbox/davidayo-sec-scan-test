@@ -208,6 +208,41 @@ def test_urls_with_punctuation_not_falsely_matched():
     assert result.cleaned_files["refs.py"] == content
 
 
+# --- False-positive suppression for runtime-bound values --------------------
+
+
+def test_token_assigned_from_function_call_is_not_flagged():
+    """`token = input(...)` is a runtime input, not a hardcoded credential."""
+    content = 'token = input("Token: ").strip()\n'
+    result = strip({"cli.py": content})
+    assert result.secrets_found is False
+    assert result.cleaned_files["cli.py"] == content
+
+
+def test_token_assigned_from_attribute_lookup_is_not_flagged():
+    """Assignment from `obj.attr` reads a runtime value, not a literal."""
+    content = "token = _CallbackHandler.received_token\n"
+    result = strip({"cli.py": content})
+    assert result.secrets_found is False
+    assert result.cleaned_files["cli.py"] == content
+
+
+def test_unquoted_low_entropy_token_value_is_not_flagged():
+    """`token = some_identifier` is a variable reference, not a credential."""
+    content = "token = some_identifier\n"
+    result = strip({"cli.py": content})
+    assert result.secrets_found is False
+    assert result.cleaned_files["cli.py"] == content
+
+
+def test_token_from_indexed_lookup_is_not_flagged():
+    """`token = params.get("token", [None])[0]` is runtime indexing."""
+    content = 'token = params.get("token", [None])[0]\n'
+    result = strip({"cli.py": content})
+    assert result.secrets_found is False
+    assert result.cleaned_files["cli.py"] == content
+
+
 # --- Performance (§10) -------------------------------------------------------
 
 
