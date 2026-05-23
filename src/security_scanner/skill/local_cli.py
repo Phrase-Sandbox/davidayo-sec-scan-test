@@ -46,6 +46,7 @@ from security_scanner.shared.reports.markdown import build_markdown_report
 from security_scanner.skill.local_files import LocalFilesClient
 
 _REPORT_FILENAME = "security-scan-report.md"
+_REPORT_DIR = "vuln-result"
 _CONFIG_DIR = Path.home() / ".phrase-sec-scan"
 _CONFIG_FILE = _CONFIG_DIR / "config.yaml"
 _LOGIN_TIMEOUT_SECONDS = 120
@@ -329,14 +330,17 @@ def _scan_remote(
         print(f"ERROR: could not reach scanner at {scanner_url}: {exc}", file=sys.stderr)
         return 2
 
-    report_path = root / _REPORT_FILENAME
+    report_dir = root / _REPORT_DIR
+    report_dir.mkdir(parents=True, exist_ok=True)
+    report_path = report_dir / _REPORT_FILENAME
     report_path.write_text(payload["markdown"], encoding="utf-8")
     print(
         f"\nDone. {payload['findings_count']} findings "
         f"({payload['critical']} Critical, {payload['high']} High)."
     )
-    print(f"Wrote: {report_path.name}")
-    print(f"Open {_REPORT_FILENAME} for findings.")
+    rel = report_path.relative_to(root)
+    print(f"Wrote: {rel}")
+    print(f"Open {rel} for findings.")
     return 1 if (payload["critical"] or payload["high"]) else 0
 
 
@@ -383,9 +387,11 @@ def _scan_local(*, root: Path, directory: str) -> int:
         )
         return 2
 
-    report_path = root / _REPORT_FILENAME
+    report_dir = root / _REPORT_DIR
+    report_dir.mkdir(parents=True, exist_ok=True)
+    report_path = report_dir / _REPORT_FILENAME
     report_path.write_text(build_markdown_report(result), encoding="utf-8")
-    written = [report_path.name]
+    written = [str(report_path.relative_to(root))]
     for filename, patch_text in result.patches.items():
         (root / filename).write_text(patch_text, encoding="utf-8")
         written.append(filename)
@@ -399,7 +405,7 @@ def _scan_local(*, root: Path, directory: str) -> int:
     )
     print("Wrote: " + ", ".join(written))
     print(
-        f"Open {_REPORT_FILENAME} for findings + fix snippets. "
+        f"Open {report_path.relative_to(root)} for findings + fix snippets. "
         "Apply patches with `git apply <file>.patch` after reviewing, then re-run."
     )
     return 1 if (critical or high) else 0
