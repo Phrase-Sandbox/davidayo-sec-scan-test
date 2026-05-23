@@ -67,6 +67,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes 2>/dev/null || true
           gh release upload "${GITHUB_REF_NAME}" \
             "dist/phrase-sec-scan-${{ matrix.target }}${{ matrix.ext }}" \
             --clobber
