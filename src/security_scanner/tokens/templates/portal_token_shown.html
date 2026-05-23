@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}New token issued{% endblock %}
+{% block content %}
+<div class="card">
+  <h2 class="ok">
+    {% if issued.was_rotation %}Token rotated{% else %}Token issued{% endif %}
+  </h2>
+  <p class="danger"><strong>Copy it now &mdash; this is the only time it will be shown.</strong></p>
+  <div class="token-box" id="token">{{ issued.full_token }}</div>
+  <p style="margin-top: 1rem;">
+    <button type="button" class="btn btn-primary" onclick="copyToken()">Copy to clipboard</button>
+    <a href="/portal/" class="btn">I&rsquo;ve saved it &mdash; back to portal</a>
+  </p>
+  <p class="muted">
+    Token ID: <code>{{ issued.token_id }}</code> &mdash; stable across rotations,
+    safe to share with the security team for audit lookups.
+  </p>
+</div>
+
+<script>
+  function copyToken() {
+    const t = document.getElementById("token").textContent.trim();
+    navigator.clipboard.writeText(t).then(() => {
+      const btn = event.target;
+      const original = btn.textContent;
+      btn.textContent = "Copied!";
+      setTimeout(() => { btn.textContent = original; }, 1500);
+    });
+  }
+</script>
+{% endblock %}

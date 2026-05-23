@@ -96,7 +96,7 @@ def test_cli_writes_report_and_patch_for_sqli(tmp_path, monkeypatch):
     fake = _fake_claude([_finding("app/db.py")])
     monkeypatch.setattr(local_cli, "ClaudeClient", lambda **_: fake)
 
-    rc = local_cli.main([str(tmp_path)])
+    rc = local_cli.main(["--local", str(tmp_path)])
 
     report = tmp_path / "security-scan-report.md"
     assert report.exists()
@@ -117,7 +117,7 @@ def test_cli_flags_hardcoded_secret_as_secret_001(tmp_path, monkeypatch):
     fake = _fake_claude([])  # Claude finds nothing; secret strip is pre-Claude
     monkeypatch.setattr(local_cli, "ClaudeClient", lambda **_: fake)
 
-    rc = local_cli.main([str(tmp_path)])
+    rc = local_cli.main(["--local", str(tmp_path)])
 
     report_text = (tmp_path / "security-scan-report.md").read_text()
     assert "SECRET-001" in report_text
@@ -126,6 +126,6 @@ def test_cli_flags_hardcoded_secret_as_secret_001(tmp_path, monkeypatch):
 
 def test_cli_errors_without_api_key(tmp_path, monkeypatch, capsys):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    rc = local_cli.main([str(tmp_path)])
+    rc = local_cli.main(["--local", str(tmp_path)])
     assert rc == 2
     assert "ANTHROPIC_API_KEY" in capsys.readouterr().err

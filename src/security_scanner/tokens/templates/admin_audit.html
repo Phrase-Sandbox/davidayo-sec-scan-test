@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Admin &mdash; audit log{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Audit log</h2>
+  <p class="muted">
+    Security-relevant events on the token registry and the local-advisory scan
+    path. The DB row is the source of truth; the structured stdout log line is
+    for ops scrape.
+  </p>
+  <form method="get" action="/admin/audit">
+    <input type="text" name="user" placeholder="filter by email substring" value="{{ filter_user }}">
+    <select name="event_type">
+      <option value="">(any event)</option>
+      {% for e in event_types %}
+        <option value="{{ e }}" {% if e == filter_event_type %}selected{% endif %}>{{ e }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn">Apply</button>
+    <a href="/admin/tokens" class="btn">&larr; Tokens</a>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Page {{ page }} &mdash; {{ rows|length }} event{{ '' if rows|length == 1 else 's' }}</h2>
+  {% if rows %}
+    <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+      <thead>
+        <tr style="text-align:left; border-bottom:1px solid var(--border);">
+          <th style="padding:0.4rem;">When</th>
+          <th style="padding:0.4rem;">Event</th>
+          <th style="padding:0.4rem;">User</th>
+          <th style="padding:0.4rem;">Token ID</th>
+          <th style="padding:0.4rem;">Actor</th>
+          <th style="padding:0.4rem;">Metadata</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+          <tr style="border-bottom:1px solid var(--border); vertical-align: top;">
+            <td style="padding:0.4rem;">{{ r.at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+            <td style="padding:0.4rem;"><code>{{ r.event_type.value }}</code></td>
+            <td style="padding:0.4rem;">{{ r.user_email or "—" }}</td>
+            <td style="padding:0.4rem;"><code>{{ r.token_id or "—" }}</code></td>
+            <td style="padding:0.4rem;">{{ r.actor_email or "—" }}</td>
+            <td style="padding:0.4rem;">
+              {% if r.event_metadata %}
+                <code style="white-space: pre-wrap;">{{ r.event_metadata }}</code>
+              {% else %}<span class="muted">—</span>{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No audit events match the current filter.</p>
+  {% endif %}
+  <p style="margin-top: 1rem;">
+    {% if page > 1 %}
+      <a class="btn" href="/admin/audit?page={{ page - 1 }}{% if filter_user %}&user={{ filter_user }}{% endif %}{% if filter_event_type %}&event_type={{ filter_event_type }}{% endif %}">&larr; Prev</a>
+    {% endif %}
+    {% if has_next %}
+      <a class="btn" href="/admin/audit?page={{ page + 1 }}{% if filter_user %}&user={{ filter_user }}{% endif %}{% if filter_event_type %}&event_type={{ filter_event_type }}{% endif %}">Next &rarr;</a>
+    {% endif %}
+  </p>
+</div>
+{% endblock %}

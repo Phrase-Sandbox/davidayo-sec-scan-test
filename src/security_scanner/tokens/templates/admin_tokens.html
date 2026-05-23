@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Admin &mdash; tokens{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Token registry</h2>
+  <p class="muted">
+    All issued tokens, newest first. Use <strong>Revoke</strong> to invalidate an
+    active token immediately, or <strong>Force rotate</strong> to mint a new one
+    on the user's behalf (you'll see the plaintext once &mdash; hand it over via
+    1Password or Signal).
+  </p>
+  <form method="get" action="/admin/tokens">
+    <input type="text" name="user" placeholder="filter by email substring" value="{{ filter_user }}">
+    <label class="muted">
+      <input type="checkbox" name="active_only" value="true" {% if active_only %}checked{% endif %}>
+      active only
+    </label>
+    <button type="submit" class="btn">Apply</button>
+    <a href="/admin/audit" class="btn">Audit log &rarr;</a>
+  </form>
+</div>
+
+{% if issued_token %}
+<div class="card">
+  <h2 class="ok">New token for {{ issued_token.user_email }}</h2>
+  <p class="danger">
+    Shown <strong>once</strong>. It will NEVER be displayed again. Copy it now and
+    deliver it via a secure channel.
+  </p>
+  <div class="token-box" id="rotated-token">{{ issued_token.full_token }}</div>
+  <p>
+    <button type="button" class="btn" onclick="navigator.clipboard.writeText(document.getElementById('rotated-token').innerText)">
+      Copy to clipboard
+    </button>
+  </p>
+  <p class="muted">Token ID: <code>{{ issued_token.token_id }}</code></p>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>{{ rows|length }} token{{ '' if rows|length == 1 else 's' }}</h2>
+  {% if rows %}
+    <table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
+      <thead>
+        <tr style="text-align:left; border-bottom:1px solid var(--border);">
+          <th style="padding:0.4rem;">User</th>
+          <th style="padding:0.4rem;">Token ID</th>
+          <th style="padding:0.4rem;">Issued</th>
+          <th style="padding:0.4rem;">Last used</th>
+          <th style="padding:0.4rem;">Status</th>
+          <th style="padding:0.4rem;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:0.4rem;">{{ r.user_email }}</td>
+            <td style="padding:0.4rem;"><code>{{ r.token_id }}</code></td>
+            <td style="padding:0.4rem;">{{ r.issued_at.strftime("%Y-%m-%d %H:%M") }}</td>
+            <td style="padding:0.4rem;">
+              {% if r.last_used_at %}{{ r.last_used_at.strftime("%Y-%m-%d %H:%M") }}{% else %}<span class="muted">&mdash;</span>{% endif %}
+            </td>
+            <td style="padding:0.4rem;">
+              {% if r.revoked_at %}
+                <span class="danger">revoked</span>
+                <span class="muted">by {{ r.revoked_by or "?" }}</span>
+              {% else %}
+                <span class="ok">active</span>
+              {% endif %}
+            </td>
+            <td style="padding:0.4rem;">
+              {% if not r.revoked_at %}
+                <form method="post" action="/admin/tokens/{{ r.token_id }}/revoke">
+                  <button type="submit" class="btn btn-danger">Revoke</button>
+                </form>
+                <form method="post" action="/admin/tokens/{{ r.token_id }}/force-rotate">
+                  <button type="submit" class="btn">Force rotate</button>
+                </form>
+              {% else %}
+                <span class="muted">&mdash;</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No tokens match the current filter.</p>
+  {% endif %}
+</div>
+{% endblock %}

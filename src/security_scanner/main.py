@@ -27,10 +27,41 @@ from security_scanner.shared.config import get_settings
 from security_scanner.shared.logging_util import get_logger
 from security_scanner.skill.api import router as skill_api_router
 from security_scanner.skill.oauth import router as skill_oauth_router
+from security_scanner.tokens.admin_panel import router as admin_router
+from security_scanner.tokens.portal import router as portal_router
 
 log = get_logger(__name__)
 
 VERSION = "0.1.0"
+
+
+def _check_admin_bypass_safety(settings) -> None:
+    """Production safeguard: ADMIN_LOCAL_BYPASS must never be true with a non-local DB.
+
+    Heuristic: the DB host must contain ``localhost`` or ``postgres`` (the
+    compose service name) for the bypass to be allowed. Anything else means
+    we are pointing at a real deploy and the bypass would erase auth.
+    """
+    if not settings.ADMIN_LOCAL_BYPASS:
+        return
+    db_url = settings.DATABASE_URL or ""
+    if not any(host in db_url for host in ("localhost", "postgres", "127.0.0.1")):
+        log.error(
+            "startup refused: ADMIN_LOCAL_BYPASS=true with non-local DATABASE_URL",
+            database_url_redacted=db_url.split("@")[-1] if "@" in db_url else "(unset)",
+        )
+        sys.exit(1)
+
+
+def _run_migrations() -> None:
+    """Run Alembic upgrade to head. Called at startup when RUN_MIGRATIONS_ON_STARTUP=true."""
+    from alembic import command  # noqa: PLC0415 — lazy: alembic may be absent in some test envs
+    from alembic.config import Config
+
+    cfg = Config("alembic.ini")
+    log.info("running database migrations")
+    command.upgrade(cfg, "head")
+    log.info("database migrations applied")
 
 
 @asynccontextmanager
@@ -50,6 +81,22 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         )
         sys.exit(1)
 
+    _check_admin_bypass_safety(settings)
+
+    if settings.LOCAL_SCAN_TOKEN and settings.USE_TOKEN_REGISTRY:
+        log.warning(
+            "LOCAL_SCAN_TOKEN is set but USE_TOKEN_REGISTRY=true; the env "
+            "var is ignored. Remove it from your environment to silence "
+            "this warning.",
+        )
+
+    if settings.RUN_MIGRATIONS_ON_STARTUP and settings.DATABASE_URL:
+        try:
+            _run_migrations()
+        except Exception as exc:  # noqa: BLE001 — log and exit; broken DB = unsafe
+            log.error("startup failed: migrations error", error=type(exc).__name__)
+            sys.exit(1)
+
     if _local_test_mode_enabled():
         log.warning(
             "LOCAL_TEST_MODE is ENABLED — /agent/test-scan endpoint mounted. "
@@ -63,6 +110,8 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         port=settings.PORT,
         log_level=settings.LOG_LEVEL,
         local_test_mode=_local_test_mode_enabled(),
+        token_registry_enabled=settings.USE_TOKEN_REGISTRY,
+        admin_local_bypass=settings.ADMIN_LOCAL_BYPASS,
     )
     yield
     log.info("service shutting down", version=VERSION)
@@ -132,6 +181,13 @@ app.include_router(skill_oauth_router)
 # self-disabling: every call 401s unless LOCAL_SCAN_TOKEN is configured, and
 # it can never gate a deploy or open a PR (separate token, no gate_decision).
 app.include_router(local_scan_router)
+# Per-user token self-service portal. Always mounted; auth dep guards it.
+# In legacy mode (USE_TOKEN_REGISTRY=false) it is reachable but issuing a
+# token has no effect on /scan/local — there it still consults the env var.
+app.include_router(portal_router)
+# Admin panel — group-gated (ADMIN_GROUP_NAME). require_admin returns 403 for
+# non-admins, so it is safe to mount unconditionally.
+app.include_router(admin_router)
 
 # LOCAL_TEST_MODE: conditional, non-production-only test endpoint that
 # bypasses GitHub fetch with caller-supplied files. The env var is

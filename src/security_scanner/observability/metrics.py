@@ -46,6 +46,24 @@ findings_total = Counter(
     ["severity"],
 )
 
+# /scan/local token-verify outcomes. Labels are deliberately coarse so the
+# cardinality stays bounded — per-user identity goes in the audit log
+# (audit_events.user_email/token_id), never on a Prometheus label.
+#
+# Outcomes:
+#   ok               — registry-mode successful auth
+#   unknown_token    — token prefix not in DB (registry mode)
+#   revoked          — token revoked (registry mode)
+#   bad_signature    — token prefix valid but suffix doesn't match (registry mode)
+#   bad_format       — header missing or malformed (registry mode)
+#   legacy_ok        — legacy LOCAL_SCAN_TOKEN matched (USE_TOKEN_REGISTRY=false)
+#   legacy_unauthorized — legacy single-token mismatch / unset
+local_scan_auth_outcomes_total = Counter(
+    "local_scan_auth_outcomes_total",
+    "Outcomes of /scan/local bearer-token verification.",
+    ["outcome"],
+)
+
 
 def metrics_endpoint() -> Response:
     """Render the current metrics registry as Prometheus text format."""

@@ -34,9 +34,56 @@ class Settings(BaseSettings):
     LOCAL_SCAN_TOKEN: str | None = Field(
         default=None,
         description=(
-            "Local-advisory auth token (jurisdiction: /scan/local). Distinct "
-            "from PHRASE_SCAN_TOKEN — the boundary between the two "
-            "jurisdictions. None disables the /scan/local endpoint entirely."
+            "DEPRECATED single-shared bearer for /scan/local. Kept as a "
+            "fallback for one release while the per-user token registry "
+            "rolls out; emits a startup warning if set. The new path is "
+            "USE_TOKEN_REGISTRY=true with tokens issued via /portal/."
+        ),
+    )
+
+    # --- Token registry (Phase 1 of the LOCAL_SCAN_TOKEN per-user rollout) ---
+    DATABASE_URL: str | None = Field(
+        default=None,
+        description=(
+            "Postgres connection string for the token registry + audit log. "
+            "Required when USE_TOKEN_REGISTRY=true. Format: "
+            "postgresql+psycopg://user:pass@host:5432/db"
+        ),
+    )
+
+    USE_TOKEN_REGISTRY: bool = Field(
+        default=False,
+        description=(
+            "Feature flag. When True, /scan/local validates tokens against "
+            "the DB-backed registry instead of LOCAL_SCAN_TOKEN. Defaults "
+            "False so PR 1 lands without behavioural change."
+        ),
+    )
+
+    RUN_MIGRATIONS_ON_STARTUP: bool = Field(
+        default=False,
+        description=(
+            "When True, Alembic upgrades the DB to head before the FastAPI "
+            "app starts serving traffic. Convenient for local-dev; production "
+            "should run migrations as a separate K8s Job."
+        ),
+    )
+
+    ADMIN_GROUP_NAME: str = Field(
+        default="security-scanner-admins",
+        description=(
+            "Okta group name that grants access to /admin/*. Read from the "
+            "platform-injected X-Userinfo.groups claim."
+        ),
+    )
+
+    ADMIN_LOCAL_BYPASS: bool = Field(
+        default=False,
+        description=(
+            "LOCAL DEVELOPMENT ONLY. When True, injects a fake admin user "
+            "so /portal/* and /admin/* work without the platform's Okta "
+            "gateway. Startup REFUSES if this is True and DATABASE_URL does "
+            "not point at localhost or postgres (production safeguard)."
         ),
     )
 

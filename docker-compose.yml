@@ -15,6 +15,27 @@
 # fails locally too (and we catch it before deploy).
 
 services:
+  # Postgres backs the per-user LOCAL_SCAN_TOKEN registry and the audit log
+  # the admin UI reads. Stays inside the compose network; no host port needed
+  # for normal use (uncomment the ports: line if you want to psql from the host).
+  postgres:
+    image: postgres:15-alpine
+    container_name: phrase-security-scanner-postgres
+    environment:
+      POSTGRES_USER: scanner
+      POSTGRES_PASSWORD: scanner
+      POSTGRES_DB: scanner
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    # ports:
+    #   - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scanner -d scanner"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
   security-scanner:
     build: .
     image: phrase-security-scanner:local
@@ -31,10 +52,18 @@ services:
       - PHRASE_SCAN_TOKEN=${PHRASE_SCAN_TOKEN:-local-test-token}
       - LOCAL_SCAN_TOKEN=${LOCAL_SCAN_TOKEN:-}
       - LOG_LEVEL=DEBUG
+      - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg://scanner:scanner@postgres:5432/scanner}
+      - ADMIN_GROUP_NAME=${ADMIN_GROUP_NAME:-security-scanner-admins}
+      - ADMIN_LOCAL_BYPASS=${ADMIN_LOCAL_BYPASS:-true}
+      - USE_TOKEN_REGISTRY=${USE_TOKEN_REGISTRY:-true}
+      - RUN_MIGRATIONS_ON_STARTUP=${RUN_MIGRATIONS_ON_STARTUP:-true}
     read_only: true
     tmpfs:
       - /tmp
     user: "1000:1000"
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
       interval: 30s
@@ -62,5 +91,13 @@ services:
       - PHRASE_SCAN_TOKEN=${PHRASE_SCAN_TOKEN:-local-test-token}
       - LOCAL_SCAN_TOKEN=${LOCAL_SCAN_TOKEN:-}
       - LOG_LEVEL=DEBUG
+      - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg://scanner:scanner@postgres:5432/scanner}
+      - ADMIN_GROUP_NAME=${ADMIN_GROUP_NAME:-security-scanner-admins}
+      - ADMIN_LOCAL_BYPASS=${ADMIN_LOCAL_BYPASS:-true}
+      - USE_TOKEN_REGISTRY=${USE_TOKEN_REGISTRY:-true}
+      - RUN_MIGRATIONS_ON_STARTUP=${RUN_MIGRATIONS_ON_STARTUP:-true}
     profiles:
       - test
+
+volumes:
+  postgres-data:

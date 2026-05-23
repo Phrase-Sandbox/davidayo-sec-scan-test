@@ -7,7 +7,7 @@
 # without a public tunnel.
 #
 # Usage:
-#   REPO_URL=https://github.com/davidayomide/VAmPI ./scripts/run_gate.sh [ref]
+#   REPO_URL=https://github.com/Phrase-Sandbox/davidayo-sec-scan-test ./scripts/run_gate.sh [ref]
 #
 # Env:
 #   SCANNER_URL        default http://localhost:8000

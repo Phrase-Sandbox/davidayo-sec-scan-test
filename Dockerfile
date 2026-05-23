@@ -11,6 +11,10 @@ RUN apt-get update \
 
 COPY pyproject.toml ./
 COPY src/ ./src/
+# Alembic migrations are runtime artefacts (executed at startup when
+# RUN_MIGRATIONS_ON_STARTUP=true) — bake them in alongside the source tree.
+COPY alembic/ ./alembic/
+COPY alembic.ini ./
 
 RUN python -m venv /opt/venv \
  && /opt/venv/bin/pip install --no-cache-dir --upgrade pip \
@@ -30,6 +34,11 @@ RUN groupadd --gid 1000 app \
  && useradd --uid 1000 --gid 1000 --home /home/app --create-home --shell /usr/sbin/nologin app
 
 COPY --from=builder /opt/venv /opt/venv
+# Alembic config + migration scripts are needed by the lifespan hook when
+# RUN_MIGRATIONS_ON_STARTUP=true. Place them at the runtime WORKDIR so the
+# relative path in alembic.ini (``script_location = alembic``) resolves.
+COPY --from=builder --chown=1000:1000 /build/alembic /home/app/alembic
+COPY --from=builder --chown=1000:1000 /build/alembic.ini /home/app/alembic.ini
 
 ENV PATH="/opt/venv/bin:${PATH}" \
     PYTHONDONTWRITEBYTECODE=1 \

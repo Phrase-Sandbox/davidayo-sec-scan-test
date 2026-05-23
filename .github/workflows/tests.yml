@@ -1,4 +1,5 @@
-name: CI
+# Lint + tests + coverage gate. Runs on every push and PR to main.
+name: tests
 
 on:
   push:
@@ -8,9 +9,7 @@ on:
 
 jobs:
   test:
-    # Self-hosted runner from .phrase-platform/phrase-launchpad.yaml (github.runner).
-    # Do NOT switch to ubuntu-latest — it cannot reach internal services (ECR, EKS).
-    runs-on: core-arc-ondemand-launchpad
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,5 +28,5 @@ jobs:
         run: ruff check src tests
 
       - name: Run tests with coverage
-        # Coverage gate (≥80%) is configured in pyproject.toml addopts.
+        # Coverage gate (>=80%) is configured in pyproject.toml addopts.
         run: pytest

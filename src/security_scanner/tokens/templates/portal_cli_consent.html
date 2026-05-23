@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Approve CLI login{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Approve <code>phrase-sec-scan</code> login</h2>
+  <p>
+    The <code>phrase-sec-scan</code> CLI running on
+    <strong>{{ hostname }}</strong> is requesting a token for your account.
+  </p>
+  <p class="muted">
+    On approval, the token will be sent back to a listener on
+    <code>127.0.0.1:{{ callback_port }}</code> &mdash; it does not leave your machine.
+    Any existing token will be rotated.
+  </p>
+  <p>
+    <form method="post" action="/portal/cli/login/complete">
+      <input type="hidden" name="callback_port" value="{{ callback_port }}">
+      <input type="hidden" name="hostname" value="{{ hostname }}">
+      <button type="submit" class="btn btn-primary">Approve &amp; issue token</button>
+    </form>
+    <a href="/portal/" class="btn">Cancel</a>
+  </p>
+</div>
+{% endblock %}

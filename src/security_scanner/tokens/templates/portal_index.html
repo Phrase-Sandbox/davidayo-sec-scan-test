@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Your /scan/local token{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Your /scan/local token</h2>
+  {% if active %}
+    <p class="ok">You have an active token.</p>
+    <dl>
+      <dt>Token ID</dt><dd><code>{{ active.token_id }}</code></dd>
+      <dt>Issued</dt><dd>{{ active.issued_at.strftime("%Y-%m-%d %H:%M UTC") }}</dd>
+      <dt>Issued via</dt><dd>{{ active.issued_via.value }}</dd>
+      <dt>Last used</dt>
+      <dd>
+        {% if active.last_used_at %}
+          {{ active.last_used_at.strftime("%Y-%m-%d %H:%M UTC") }}
+        {% else %}
+          <span class="muted">never</span>
+        {% endif %}
+      </dd>
+    </dl>
+    <p class="muted" style="margin-top: 1rem;">
+      We never store the plaintext token. If you lost it, rotate to get a new one
+      &mdash; your existing token will stop working immediately.
+    </p>
+    <p>
+      <form method="post" action="/portal/tokens">
+        <button type="submit" class="btn btn-primary">Rotate token</button>
+      </form>
+      <form method="post" action="/portal/tokens/revoke">
+        <button type="submit" class="btn btn-danger">Revoke token</button>
+      </form>
+    </p>
+  {% else %}
+    <p>You don&rsquo;t have an active token.</p>
+    <p>
+      <form method="post" action="/portal/tokens">
+        <button type="submit" class="btn btn-primary">Issue token</button>
+      </form>
+    </p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>How to use it</h2>
+  <p class="muted">Pass the token as a bearer header when calling <code>/scan/local</code>:</p>
+  <pre class="token-box">curl -H "Authorization: Bearer phs_local_tok-..." \
+     -d '{"files": {...}}' \
+     https://&lt;scanner&gt;/scan/local</pre>
+  <p class="muted">
+    Or run <code>phrase-sec-scan login</code> from your machine &mdash; it will open
+    this portal in your browser and write the token to <code>~/.phrase-sec-scan/config.yaml</code>.
+  </p>
+</div>
+{% endblock %}

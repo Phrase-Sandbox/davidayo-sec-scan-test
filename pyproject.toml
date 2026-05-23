@@ -17,6 +17,11 @@ dependencies = [
   "detect-secrets>=1.4",
   "pyjwt[crypto]>=2.8",
   "prometheus-client>=0.20",
+  "sqlalchemy[asyncio]>=2.0",
+  "psycopg[binary]>=3.1",
+  "alembic>=1.13",
+  "jinja2>=3.1",
+  "python-multipart>=0.0.9",
 ]
 
 [project.scripts]
@@ -26,6 +31,8 @@ phrase-sec-scan = "security_scanner.skill.local_cli:main"
 dev = [
   "pytest>=8.0",
   "pytest-cov>=4.1",
+  "pytest-asyncio>=0.23",
+  "aiosqlite>=0.20",
   "ruff>=0.4",
   "bandit>=1.7",
 ]
@@ -40,6 +47,11 @@ providers = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# Jinja templates ship with the wheel so they resolve under
+# Path(__file__).parent / "templates" inside the container too.
+[tool.setuptools.package-data]
+"security_scanner.tokens" = ["templates/*.html"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = [
@@ -47,6 +59,7 @@ addopts = [
   "--cov-report=term-missing",
   "--cov-fail-under=80",
 ]
+asyncio_mode = "auto"
 
 [tool.coverage.run]
 source = ["src/security_scanner"]
