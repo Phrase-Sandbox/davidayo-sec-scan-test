@@ -25,9 +25,9 @@ import json
 import os
 import secrets
 import socket
+import ssl
 import stat
 import subprocess
-import ssl
 import sys
 import threading
 import urllib.parse
