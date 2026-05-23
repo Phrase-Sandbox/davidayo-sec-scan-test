@@ -27,9 +27,9 @@ import secrets
 import socket
 import stat
 import subprocess
+import ssl
 import sys
 import threading
-import ssl
 import urllib.parse
 import urllib.request
 import webbrowser
@@ -37,12 +37,6 @@ from pathlib import Path
 from urllib.error import URLError
 
 import certifi
-
-
-def _ssl_context() -> ssl.SSLContext:
-    # PyInstaller binaries on macOS/Windows don't ship the system CA store,
-    # so verification fails against valid certs. Pin to certifi's bundle.
-    return ssl.create_default_context(cafile=certifi.where())
 
 # Module-level imports for `--local` mode. Kept at module scope so test code
 # can monkeypatch ``local_cli.ClaudeClient`` etc. without chasing lazy imports.
@@ -261,7 +255,11 @@ def _logout(*, revoke_remote: bool = True) -> int:
                 headers={"Authorization": f"Bearer {cfg['token']}"},
                 data=b"",
             )
-            urllib.request.urlopen(req, timeout=10, context=_ssl_context()).read()  # noqa: S310
+            urllib.request.urlopen(  # noqa: S310
+                req,
+                timeout=10,
+                context=ssl.create_default_context(cafile=certifi.where()),
+            ).read()
         except (URLError, OSError) as exc:
             print(
                 f"WARN: could not revoke server-side token ({exc}); deleting local config anyway.",
@@ -314,7 +312,8 @@ def _scan_remote(
     )
     print(f"POST {scanner_url}/scan/local  ({len(files)} files) …")
     try:
-        with urllib.request.urlopen(req, timeout=600, context=_ssl_context()) as resp:  # noqa: S310
+        ctx = ssl.create_default_context(cafile=certifi.where())
+        with urllib.request.urlopen(req, timeout=600, context=ctx) as resp:  # noqa: S310
             payload = json.loads(resp.read())
     except urllib.error.HTTPError as exc:
         body_text = exc.read().decode("utf-8", errors="replace")
