@@ -246,7 +246,7 @@ def _logout(*, revoke_remote: bool = True) -> int:
     if revoke_remote and cfg.get("scanner_url") and cfg.get("token"):
         revoke_url = cfg["scanner_url"].rstrip("/") + "/portal/tokens/revoke"
         try:
-            req = urllib.request.Request(
+            req = urllib.request.Request(  # noqa: S310 — scanner_url is user-supplied https endpoint
                 revoke_url,
                 method="POST",
                 headers={"Authorization": f"Bearer {cfg['token']}"},
@@ -294,7 +294,7 @@ def _scan_remote(
         }
     ).encode("utf-8")
 
-    req = urllib.request.Request(
+    req = urllib.request.Request(  # noqa: S310 — scanner_url is user-supplied https endpoint
         scanner_url.rstrip("/") + "/scan/local",
         method="POST",
         data=body,

@@ -55,8 +55,9 @@ def _check_admin_bypass_safety(settings) -> None:
 
 def _run_migrations() -> None:
     """Run Alembic upgrade to head. Called at startup when RUN_MIGRATIONS_ON_STARTUP=true."""
-    from alembic import command  # noqa: PLC0415 — lazy: alembic may be absent in some test envs
     from alembic.config import Config
+
+    from alembic import command  # noqa: PLC0415 — lazy: alembic may be absent in some test envs
 
     cfg = Config("alembic.ini")
     log.info("running database migrations")

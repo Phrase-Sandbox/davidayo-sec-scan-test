@@ -21,7 +21,6 @@ from security_scanner.tokens.models import (
     LocalScanToken,
 )
 
-
 # --- parse_token --------------------------------------------------------------
 
 
@@ -113,10 +112,8 @@ async def test_verify_ok_returns_user_email_and_updates_last_used(
     assert result.user_email == "carol@phrase.com"
     assert result.token_id == issued.token_id
 
-    row = (
-        (await session.execute(select(LocalScanToken).where(LocalScanToken.token_id == issued.token_id)))
-        .scalar_one()
-    )
+    stmt = select(LocalScanToken).where(LocalScanToken.token_id == issued.token_id)
+    row = (await session.execute(stmt)).scalar_one()
     assert row.last_used_at is not None
 
 

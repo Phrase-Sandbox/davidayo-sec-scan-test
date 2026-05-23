@@ -39,7 +39,7 @@ from security_scanner.tokens.models import (
 
 # --- Token format ------------------------------------------------------------
 
-_TOKEN_PREFIX = "phs_local_"
+_TOKEN_PREFIX = "phs_local_"  # noqa: S105 — token namespace prefix, not a credential
 _TOKEN_ID_RE = re.compile(r"^tok-[0-9a-f]{12}$")
 _FULL_TOKEN_RE = re.compile(r"^phs_local_(tok-[0-9a-f]{12})_([A-Za-z0-9_\-]{43})$")
 

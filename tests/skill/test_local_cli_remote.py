@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, patch
 
 from security_scanner.skill import local_cli
 
-
 # --- Config persistence -----------------------------------------------------
 
 
@@ -171,8 +170,8 @@ def test_remote_scan_401_says_run_login(tmp_path, monkeypatch, capsys):
     (tmp_path / "main.py").write_text("print('hi')\n")
 
     def fake_urlopen(req, timeout=0):  # noqa: ARG001
-        from urllib.error import HTTPError
         from io import BytesIO
+        from urllib.error import HTTPError
         raise HTTPError(req.full_url, 401, "Unauthorized", {}, BytesIO(b"nope"))
 
     monkeypatch.setattr(local_cli.urllib.request, "urlopen", fake_urlopen)

@@ -18,7 +18,6 @@ from sqlalchemy import (
     JSON,
     DateTime,
     Enum,
-    Index,
     String,
     Uuid,
 )
@@ -32,17 +31,17 @@ from security_scanner.tokens.db import Base
 _JsonType = JSON().with_variant(JSONB(), "postgresql")
 
 
-class IssuedVia(str, enum.Enum):
+class IssuedVia(enum.StrEnum):
     self_portal = "self_portal"
     admin_force_rotate = "admin_force_rotate"
 
 
-class AuditEventType(str, enum.Enum):
+class AuditEventType(enum.StrEnum):
     scan_ok = "scan_ok"
     scan_unauthorized = "scan_unauthorized"
-    token_issued = "token_issued"
-    token_rotated = "token_rotated"
-    token_revoked = "token_revoked"
+    token_issued = "token_issued"  # noqa: S105 — audit event name, not a credential
+    token_rotated = "token_rotated"  # noqa: S105 — audit event name, not a credential
+    token_revoked = "token_revoked"  # noqa: S105 — audit event name, not a credential
     admin_force_rotate = "admin_force_rotate"
 
 
