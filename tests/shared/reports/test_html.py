@@ -555,3 +555,29 @@ def test_upload_panel_xss_safe():
     html = build_html_report(_result(findings=[f]))
     assert "<script>" not in html
     assert "&lt;script&gt;" in html
+
+
+def test_upload_context_panel_rendered_on_non_gate_scan():
+    """Upload-context panel must appear in on_demand (non-gate) renders.
+
+    Fix #3 regression guard: the panel is gated only on whether
+    context_summary is populated, NOT on the scan type.  Previously the
+    pipeline skipped context packaging for on_demand scans so context_summary
+    was always empty — now the packager runs on both paths.
+    """
+    from security_scanner.shared.models.enums import ScanType
+
+    f = _finding()
+    upload_summary = (
+        "Validation: extension allowlist (weak) — Naming: preserves user filename — "
+        "Storage: public path — Limits: none — Access: none — Processing: none"
+    )
+    f = f.model_copy(update={"context_summary": upload_summary})
+    # Use on_demand scan type (the /scan/local path) — not deployment_gate.
+    result = _result(findings=[f], scan_type=ScanType.on_demand,
+                     gate_decision=GateDecision.advisory)
+    html = build_html_report(result)
+    assert "Upload context" in html
+    assert "Validation:" in html
+    assert "Naming:" in html
+    assert "Storage:" in html

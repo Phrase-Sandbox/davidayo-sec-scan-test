@@ -292,9 +292,11 @@ class ScanPipeline:
         # Step 12: merge LLM findings with scanner candidates.
         candidates = merge_with_llm_findings(post_filtered, aggregated_candidates)
 
-        # Step 12b: cross-file context packaging (gate path only — too costly
-        # for on-demand scans / skill path).
-        if is_gate and candidates:
+        # Step 12b: cross-file context packaging — runs on both gate and
+        # on-demand paths.  Pure CPU, no LLM calls.  Upload context is cheap
+        # and needed on /scan/local so the upload-context panel renders in
+        # local-mode reports.
+        if candidates:
             bundles = await asyncio.to_thread(
                 ContextPackager().attach, candidates, files
             )
@@ -309,7 +311,10 @@ class ScanPipeline:
                 bundles=bundles,
             )
         else:
-            kept = [candidate_to_finding(c) for c in candidates]
+            kept = [
+                candidate_to_finding(c, bundle=bundles.get(id(c)))
+                for c in candidates
+            ]
 
         # Step 14: BR-009 defense-in-depth — only for Claude-only Critical findings.
         # Scanner-sourced findings have already been verified by the new verifier
