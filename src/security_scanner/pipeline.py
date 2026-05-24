@@ -303,18 +303,12 @@ class ScanPipeline:
         else:
             bundles = {}
 
-        # Step 13: production-mode vuln verifier (gate path only — too costly
-        # for on-demand scans, which return candidates unverified).
-        if is_gate:
-            kept = await asyncio.to_thread(
-                verify_vuln_candidates, candidates, files, self._claude,
-                bundles=bundles,
-            )
-        else:
-            kept = [
-                candidate_to_finding(c, bundle=bundles.get(id(c)))
-                for c in candidates
-            ]
+        # Step 13: production-mode vuln verifier — runs on both gate and
+        # on-demand paths so CLI scans don't show unverified findings.
+        kept = await asyncio.to_thread(
+            verify_vuln_candidates, candidates, files, self._claude,
+            bundles=bundles,
+        )
 
         # Step 14: BR-009 defense-in-depth — only for Claude-only Critical findings.
         # Scanner-sourced findings have already been verified by the new verifier

@@ -115,6 +115,46 @@ def test_skill_path_does_not_run_br009_verification():
     assert result.gate_decision == GateDecision.advisory
 
 
+def test_skill_path_calls_vuln_verifier():
+    """Fix #6: verify_vuln_candidates must be called on the on-demand (skill) path.
+
+    Previously the on-demand branch bypassed the verifier entirely, leaving all
+    findings with VerificationStatus.unverified.  Now both paths go through the
+    same verifier call so CLI scans get real verification results.
+    """
+    from unittest.mock import patch as mock_patch
+
+    files = {"src/handlers/login.py": "def login(u):\n    return q(u)\n"}
+    github = _gh(files)
+    claude = _claude([_high_finding_dict()])
+
+    with mock_patch(
+        "security_scanner.pipeline.verify_vuln_candidates",
+        wraps=lambda candidates, *args, **kwargs: [
+            __import__(
+                "security_scanner.shared.verification.vulns",
+                fromlist=["candidate_to_finding"],
+            ).candidate_to_finding(c)
+            for c in candidates
+        ],
+    ) as mock_verifier:
+        result = _run(
+            ScanPipeline(github, claude, mode=ScanType.on_demand),
+            repo_url=_REPO,
+            scan_target=ScanTarget.full_repo,
+            triggered_by="alice@phrase.com",
+        )
+
+    # Verifier must have been called (even on the skill/on-demand path).
+    mock_verifier.assert_called_once()
+    # The candidate list passed to the verifier must be non-empty (our finding).
+    call_args = mock_verifier.call_args
+    candidates_passed = call_args.args[0]
+    assert len(candidates_passed) >= 1
+    # Findings still arrive in the result.
+    assert result.gate_decision == GateDecision.advisory
+
+
 def test_gate_path_verifies_critical_findings_via_ask():
     """Gate path runs BR-009 for Critical findings on top of the vuln verifier."""
     critical = _high_finding_dict()

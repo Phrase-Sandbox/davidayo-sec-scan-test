@@ -184,8 +184,11 @@ def test_cli_writes_report_and_patch_for_sqli(tmp_path, monkeypatch):
     assert "app/db.py" in patches[0].read_text()
     # High finding present ⇒ non-zero exit (usable as a pre-commit hook).
     assert rc == 1
-    # on_demand mode ⇒ BR-009 verification (.ask) must NOT run.
-    fake.ask.assert_not_called()
+    # on_demand mode ⇒ the vuln verifier runs (Fix #6), so .ask MAY be
+    # called by verify_vuln_candidates.  BR-009 (verify_critical_findings)
+    # does NOT run on the skill path — the finding is High, not Critical,
+    # so BR-009 would never fire anyway.  We just confirm findings arrived.
+    assert len(report.read_text()) > 0
 
 
 def test_cli_flags_hardcoded_secret_as_secret_001(tmp_path, monkeypatch):
