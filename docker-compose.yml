@@ -46,6 +46,7 @@ services:
       - PORT=8000
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-test-key-placeholder}
       - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-6}
+      - CLAUDE_TIMEOUT_SECONDS=${CLAUDE_TIMEOUT_SECONDS:-180}
       - GITHUB_APP_ID=${GITHUB_APP_ID:-12345}
       - GITHUB_APP_PRIVATE_KEY=${GITHUB_APP_PRIVATE_KEY:-placeholder}
       - GITHUB_OAUTH_CLIENT_ID=${GITHUB_OAUTH_CLIENT_ID:-placeholder}
@@ -64,6 +65,7 @@ services:
       - SCANNER_TIMEOUT_SECONDS=${SCANNER_TIMEOUT_SECONDS:-60}
       - VULN_VERIFIER_PARALLELISM=${VULN_VERIFIER_PARALLELISM:-2}
       - VULN_VERIFIER_KEEP_CONFIDENCES=${VULN_VERIFIER_KEEP_CONFIDENCES:-high}
+      - ADVISORY_CONFIDENCES=${ADVISORY_CONFIDENCES:-medium,low}
       # Semgrep writes settings/log/version-cache on startup; redirect all to /tmp so read_only: true doesn't block it
       - SEMGREP_SETTINGS_FILE=/tmp/semgrep-settings.yml
       - SEMGREP_LOG_FILE=/tmp/semgrep.log
