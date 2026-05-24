@@ -913,9 +913,9 @@ def _card_meta_row(f: VulnerabilityFinding) -> str:
     footnote_html = (
         f' <em>— {escape(footnote)}</em>' if footnote else ""
     )
-    # "Detected by" row: show when multiple sources voted or a scanner contributed.
+    # "Detected by" row: show when sources are present (even single-voter).
     detected_by_html = ""
-    if f.consensus_score >= 1 and len(f.sources) > 1:
+    if f.consensus_score >= 1 and f.sources:
         source_list = escape(", ".join(f.sources))
         detected_by_html = (
             f" &middot; <strong>Detected by:</strong> {source_list} "

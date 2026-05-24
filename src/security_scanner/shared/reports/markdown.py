@@ -170,9 +170,9 @@ def _detailed_findings(findings: list[VulnerabilityFinding]) -> str:
             if f.affected_lines
             else f"`{f.affected_file}`"
         )
-        # "Detected by" row: only when consensus score >= 1 and multiple sources.
+        # "Detected by" row: show when sources are present (even single-voter).
         detected_by_line = ""
-        if f.consensus_score >= 1 and len(f.sources) > 1:
+        if f.consensus_score >= 1 and f.sources:
             source_list = ", ".join(f.sources)
             detected_by_line = (
                 f"- **Detected by**: {source_list} "

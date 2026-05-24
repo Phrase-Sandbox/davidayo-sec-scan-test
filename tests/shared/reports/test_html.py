@@ -557,6 +557,34 @@ def test_upload_panel_xss_safe():
     assert "&lt;script&gt;" in html
 
 
+def test_detected_by_renders_for_single_voter_claude_finding():
+    """Fix #5: a Claude-only finding (sources=['claude']) must show Detected by: claude."""
+    f = _finding(verification_status=VerificationStatus.verified)
+    f = f.model_copy(update={"sources": ["claude"], "consensus_score": 1})
+    html = build_html_report(_result(findings=[f]))
+    assert "Detected by:" in html
+    assert "claude" in html
+
+
+def test_detected_by_renders_for_multi_voter_finding():
+    """Fix #5 regression: multi-voter findings still show Detected by: with voter count."""
+    f = _finding(verification_status=VerificationStatus.verified)
+    f = f.model_copy(update={"sources": ["claude", "bandit"], "consensus_score": 2})
+    html = build_html_report(_result(findings=[f]))
+    assert "Detected by:" in html
+    assert "claude" in html
+    assert "bandit" in html
+    assert "2 voters" in html
+
+
+def test_detected_by_absent_when_sources_empty():
+    """A finding with no sources must NOT emit a Detected by: line."""
+    f = _finding(verification_status=VerificationStatus.unverified)
+    f = f.model_copy(update={"sources": [], "consensus_score": 0})
+    html = build_html_report(_result(findings=[f]))
+    assert "Detected by:" not in html
+
+
 def test_upload_context_panel_rendered_on_non_gate_scan():
     """Upload-context panel must appear in on_demand (non-gate) renders.
 

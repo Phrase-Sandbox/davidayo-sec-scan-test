@@ -281,6 +281,34 @@ def test_upload_context_panel_has_all_fields_in_markdown():
         assert label in report, f"Missing label {label!r} in upload context markdown panel"
 
 
+def test_detected_by_renders_for_single_voter_claude_finding():
+    """Fix #5: a Claude-only finding (sources=['claude']) must show Detected by: claude."""
+    f = _finding(verification_status=VerificationStatus.verified)
+    f = f.model_copy(update={"sources": ["claude"], "consensus_score": 1})
+    report = build_markdown_report(_result(findings=[f]))
+    assert "Detected by" in report
+    assert "claude" in report
+
+
+def test_detected_by_renders_for_multi_voter_finding():
+    """Fix #5 regression: multi-voter findings still show Detected by: with voter count."""
+    f = _finding(verification_status=VerificationStatus.verified)
+    f = f.model_copy(update={"sources": ["claude", "bandit"], "consensus_score": 2})
+    report = build_markdown_report(_result(findings=[f]))
+    assert "Detected by" in report
+    assert "claude" in report
+    assert "bandit" in report
+    assert "2 voter" in report
+
+
+def test_detected_by_absent_when_sources_empty():
+    """A finding with no sources must NOT emit a Detected by: line."""
+    f = _finding(verification_status=VerificationStatus.unverified)
+    f = f.model_copy(update={"sources": [], "consensus_score": 0})
+    report = build_markdown_report(_result(findings=[f]))
+    assert "Detected by" not in report
+
+
 def test_non_upload_context_summary_renders_cross_file_in_markdown():
     """Non-upload context_summary still renders as Cross-file context in markdown."""
     f = _finding()
