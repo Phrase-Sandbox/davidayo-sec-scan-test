@@ -1,9 +1,27 @@
 rules:
+  - id: python-sqli-fstring
+    patterns:
+      - pattern: $CUR.execute($Q)
+      - metavariable-regex:
+          metavariable: $Q
+          # Match f-strings: starts with f" or f' and contains { (interpolation)
+          regex: "^f[\"'].*\\{"
+    message: >
+      SQL query constructed with an f-string interpolating user-controlled input.
+      Use parameterised queries: cursor.execute("... WHERE id = %s", (value,))
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: sqli
+      owasp: A03:2021
+
   - id: python-sqli-string-format
     patterns:
-      - pattern: $CUR.execute(f"...{$X}...")
-      - pattern: $CUR.execute("..." + $X + "...")
-      - pattern: $CUR.execute("..." % $X)
+      - pattern: $CUR.execute($Q)
+      - metavariable-regex:
+          metavariable: $Q
+          # Match % formatting or + concatenation in the query argument
+          regex: ".*(%\\s*\\w|\"\\s*\\+|'\\s*\\+)"
     message: >
       SQL query constructed by string formatting with user-controlled input.
       Use parameterised queries: cursor.execute("... WHERE id = %s", (value,))

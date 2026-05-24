@@ -12,6 +12,7 @@ import json
 import shutil
 from pathlib import Path
 
+from security_scanner.observability.metrics import scanner_runs_total
 from security_scanner.shared.logging_util import get_logger
 from security_scanner.shared.scanners.models import ScannerCandidate
 from security_scanner.shared.scanners.normalize import normalize
@@ -64,11 +65,14 @@ async def scan(workspace: ScannerWorkspace) -> list[ScannerCandidate]:
         _rc, stdout, stderr = await run_scanner(cmd, cwd=workspace.root)
     except ScannerTimeout:
         log.warning("semgrep adapter: timed out")
+        scanner_runs_total.labels(tool=TOOL, outcome="timeout").inc()
         return []
     except Exception as exc:  # noqa: BLE001
         log.warning("semgrep adapter: subprocess error", error=str(exc))
+        scanner_runs_total.labels(tool=TOOL, outcome="error").inc()
         return []
 
+    scanner_runs_total.labels(tool=TOOL, outcome="success").inc()
     return _parse_output(stdout)
 
 
