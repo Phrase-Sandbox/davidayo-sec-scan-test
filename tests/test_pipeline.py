@@ -487,6 +487,64 @@ def test_findings_in_test_directories_are_post_filtered():
     assert "A05:2021" in surviving_ids
 
 
+# --- Phase-1: filter-before-LLM (perf — strip still sees all files) --------
+
+
+def test_filter_runs_before_llm_input_not_after():
+    """Minified/vendor files must be excluded from the LLM call but the
+    stripper must still receive them (so secrets inside .min.js are caught).
+
+    We pass {"a.py": ..., "vendor.min.js": ...} to the pipeline and assert:
+    1. analyse_async is NOT called with vendor.min.js (it's filtered out).
+    2. The stripper IS called with both files (via the strip() function).
+    """
+    from unittest.mock import call as mock_call, patch as mock_patch
+
+    py_content = "def login(u):\n    return db.query(u)\n"
+    min_js_content = "!function(){var a=1;}();"  # typical minified JS
+
+    files = {
+        "src/handlers/login.py": py_content,
+        "static/vendor.min.js": min_js_content,
+    }
+    github = _gh(files)
+    claude = _claude([])
+
+    strip_calls: list[dict] = []
+
+    original_strip = __import__(
+        "security_scanner.shared.secrets.stripper", fromlist=["strip"]
+    ).strip
+
+    def capturing_strip(f):
+        strip_calls.append(dict(f))
+        return original_strip(f)
+
+    with mock_patch("security_scanner.pipeline.strip", side_effect=capturing_strip):
+        _run(
+            ScanPipeline(github, claude, mode=ScanType.on_demand),
+            repo_url=_REPO,
+            scan_target=ScanTarget.full_repo,
+            triggered_by="alice@phrase.com",
+        )
+
+    # Stripper must have seen BOTH files (secrets in .min.js should be caught).
+    assert len(strip_calls) == 1, "strip() should be called exactly once"
+    assert "static/vendor.min.js" in strip_calls[0], (
+        "strip() must receive vendor.min.js so secrets inside it are detected"
+    )
+    assert "src/handlers/login.py" in strip_calls[0], (
+        "strip() must receive login.py"
+    )
+
+    # LLM must NOT have received the minified JS file.
+    if claude.analyse_async.called:
+        sent_files = claude.analyse_async.call_args.args[0]
+        assert "static/vendor.min.js" not in sent_files, (
+            "analyse_async must not receive vendor.min.js — it should be filtered out"
+        )
+
+
 # --- Smoke: response is JSON-serialisable (lets callers ship as artifact) --
 
 

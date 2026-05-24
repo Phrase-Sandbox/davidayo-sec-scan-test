@@ -180,7 +180,7 @@ class ScanPipeline:
                 unscanned_files=[],
             )
 
-        # Step 6: strip secrets.
+        # Step 6: strip secrets (runs on ALL files so secrets in .min.js etc are caught).
         strip_result = strip(files)
         secret_findings = _build_secret_findings(strip_result)
         # LLM verification of Layer-2/3 hits runs against the ORIGINAL files.
@@ -191,10 +191,11 @@ class ScanPipeline:
             verify_secret_findings,
             secret_findings, strip_result.hits, original_files, self._claude
         )
-        files = strip_result.cleaned_files
 
-        # Step 7: filter to source files only.
-        files = filter_files(files)
+        # Step 7: filter AFTER strip so the LLM only receives source files
+        # (not minified JS/CSS/vendor bundles).  The stripper above already saw
+        # every file, so secrets in filtered-out files are still reported.
+        files = filter_files(strip_result.cleaned_files)
 
         # If filtering removed everything, treat as no scannable source.
         if not files:
