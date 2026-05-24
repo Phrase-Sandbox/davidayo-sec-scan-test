@@ -138,6 +138,7 @@ _GOSEC_MAP: dict[str, str] = {
 # ---------------------------------------------------------------------------
 _SEMGREP_MAP: dict[str, str] = {
     # OWASP top-ten vendored rules
+    "python-sqli-fstring": "sqli",
     "python-sqli-string-format": "sqli",
     "python-sqli-concat": "sqli",
     "python-eval-input": "code_injection",
