@@ -65,6 +65,11 @@ COPY --from=builder /opt/venv /opt/venv
 # relative path in alembic.ini (``script_location = alembic``) resolves.
 COPY --from=builder --chown=1000:1000 /build/alembic /home/app/alembic
 COPY --from=builder --chown=1000:1000 /build/alembic.ini /home/app/alembic.ini
+# Vendored scanner configs — adapters resolve these via Path(__file__).parents[5]
+# which lands at /opt/venv/lib/python3.12/. Copy them there so semgrep + eslint
+# adapters can find their pinned rulesets without network egress.
+COPY --from=builder /build/semgrep_configs /opt/venv/lib/python3.12/semgrep_configs
+COPY --from=builder /build/eslint_security /opt/venv/lib/python3.12/eslint_security
 
 ENV PATH="/opt/venv/bin:${PATH}" \
     PYTHONDONTWRITEBYTECODE=1 \
