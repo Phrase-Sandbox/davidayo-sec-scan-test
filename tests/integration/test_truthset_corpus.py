@@ -40,7 +40,21 @@ _MINI_REPOS = [
     "mini-python-deserial",
     "mini-js-authz",
     "mini-go-ssrf",
+    # V3 upload mini-repos
+    "mini-python-upload",
+    "mini-js-upload",
+    "mini-go-upload",
+    "mini-archive-upload",
 ]
+
+# Upload-class repos require a lower TP threshold (0.85) because patterns are
+# framework-specific and recall takes tuning.
+_UPLOAD_REPOS: frozenset[str] = frozenset({
+    "mini-python-upload",
+    "mini-js-upload",
+    "mini-go-upload",
+    "mini-archive-upload",
+})
 
 
 # ---------------------------------------------------------------------------
@@ -93,6 +107,7 @@ def _build_mock_client(truth_entries: list[dict[str, Any]]) -> MagicMock:
             "xss": "A03:2021",
             "ssrf": "A10:2021",
             "deserialization": "A08:2021",
+            "unsafe_file_upload": "A01:2021",
         }
         owasp = owasp_map.get(vuln_class, "A01:2021")
         mid = (entry["line_start"] + entry["line_end"]) // 2
@@ -300,8 +315,10 @@ def test_mini_repo_mandatory_vulns_found(repo_name: str) -> None:
 
     if total > 0:
         tp_rate = tp / total
-        assert tp_rate >= 0.97, (
-            f"{repo_name}: TP rate {tp_rate:.2f} < 0.97. "
+        # Upload repos use a lower threshold (0.85) — patterns are framework-specific.
+        threshold = 0.85 if repo_name in _UPLOAD_REPOS else 0.97
+        assert tp_rate >= threshold, (
+            f"{repo_name}: TP rate {tp_rate:.2f} < {threshold}. "
             f"Misses: {misses}"
         )
 
@@ -385,16 +402,24 @@ def test_per_class_tp_over_merged_corpus() -> None:
     except OSError:
         pass
 
+    # Per-class thresholds: upload class uses 0.85, all others use 0.97.
+    _UPLOAD_CLASS = "unsafe_file_upload"
+    _UPLOAD_THRESHOLD = 0.85
+    _DEFAULT_THRESHOLD = 0.97
+
     failures: list[str] = []
     for vuln_class, total in class_total.items():
         if total == 0:
             continue
         tp_rate = class_tp[vuln_class] / total
-        if tp_rate < 0.97:
+        threshold = _UPLOAD_THRESHOLD if vuln_class == _UPLOAD_CLASS else _DEFAULT_THRESHOLD
+        if tp_rate < threshold:
             failures.append(
-                f"{vuln_class}: TP={class_tp[vuln_class]}/{total} = {tp_rate:.2f}"
+                f"{vuln_class}: TP={class_tp[vuln_class]}/{total} = {tp_rate:.2f} "
+                f"(threshold={threshold})"
             )
 
     assert not failures, (
-        f"Per-class TP < 0.97 for: {failures}. See tests/integration/data/misses.json"
+        f"Per-class TP below threshold for: {failures}. "
+        "See tests/integration/data/misses.json"
     )

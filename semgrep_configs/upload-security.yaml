@@ -1,0 +1,246 @@
+# Upload security Semgrep rules
+#
+# Rule families:
+# (a) upload-attacker-filename  — attacker filename concatenated into filesystem path
+# (b) upload-extension-only     — extension-only validation (no magic-byte check)
+# (c) upload-mime-only          — MIME-only validation from user-supplied Content-Type
+# (d) upload-blocklist-ext      — blocklist instead of allowlist for extensions
+# (e) upload-webroot-storage    — save/write/move under static/, public/, uploads/ (webroot)
+# (f) upload-no-size-limit      — save/write/move with no nearby size validation
+# (g) upload-zip-slip           — zipfile.extractall / tarfile.extractall without child-path validation
+# (h) upload-risky-parser       — yaml.load, ElementTree.parse, template render on uploaded files
+
+rules:
+
+  # -----------------------------------------------------------------------
+  # (a) Attacker-controlled filename concatenated into filesystem path
+  # -----------------------------------------------------------------------
+
+  - id: upload-attacker-filename
+    patterns:
+      - pattern: os.path.join($DIR, request.files[$FIELD].filename)
+    message: >
+      Unsafe file upload: attacker-controlled filename concatenated into a
+      filesystem path. An attacker can supply '../../../etc/cron.d/backdoor' or
+      a double-extension '.php.png' to achieve path traversal or place a
+      webshell. Use a server-generated name (uuid.uuid4().hex) instead.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: unsafe_file_upload
+      owasp: "A01:2021"
+      cwe: "CWE-434"
+
+  - id: upload-attacker-filename-django
+    patterns:
+      - pattern: os.path.join($DIR, request.FILES[$FIELD].name)
+    message: >
+      Unsafe file upload (Django): attacker-controlled filename in os.path.join.
+      Use a server-generated filename instead of the user-supplied name.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: unsafe_file_upload
+      owasp: "A01:2021"
+      cwe: "CWE-434"
+
+  - id: upload-attacker-filename-js
+    patterns:
+      - pattern: path.join($DIR, $REQ.file.originalname)
+    message: >
+      Unsafe file upload (Express/multer): req.file.originalname is
+      attacker-controlled and used directly in a file path. Use a UUID or hash
+      as the stored filename.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      vuln_class: unsafe_file_upload
+      owasp: "A01:2021"
+      cwe: "CWE-434"
+
+  # -----------------------------------------------------------------------
+  # (b) Extension-only validation
+  # -----------------------------------------------------------------------
+
+  - id: upload-extension-only
+    patterns:
+      - pattern: |
+          $F = request.files[...]
+          ...
+          $F.filename.endswith(...)
+    message: >
+      Unsafe file upload: validation checks only the filename extension, which
+      is trivially forged. An attacker can rename 'evil.php' to 'evil.php.png'.
+      Add server-side magic-byte (binary header) validation.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      vuln_class: unsafe_file_upload
+      owasp: "A01:2021"
+      cwe: "CWE-434"
+
+  # -----------------------------------------------------------------------
+  # (c) MIME-only validation (user-supplied Content-Type)
+  # -----------------------------------------------------------------------
+
+  - id: upload-mime-only
+    patterns:
+      - pattern: |
+          $F = request.files[...]
+          ...
+          $F.content_type
+    message: >
+      Unsafe file upload: validation relies solely on Content-Type, which is
+      supplied by the client and trivially forged. Perform server-side
+      magic-byte validation to verify the actual file type.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      vuln_class: unsafe_file_upload
+      owasp: "A01:2021"
+      cwe: "CWE-434"
+
+  # -----------------------------------------------------------------------
+  # (d) Blocklist extension check (incomplete defence)
+  # -----------------------------------------------------------------------
+
+  - id: upload-blocklist-ext
+    patterns:
+      - pattern: |
+          $EXT not in $BLOCKED
+    message: >
+      Unsafe file upload: using a blocklist of extensions rather than an
+      allowlist. Blocklists are incomplete by nature — new executable
+      extensions (e.g. .phtml, .shtml, .php7) may bypass them.
+      Use an explicit allowlist of safe extensions instead.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      vuln_class: unsafe_file_upload
+      owasp: "A01:2021"
+      cwe: "CWE-434"
+
+  # -----------------------------------------------------------------------
+  # (e) Storage under web-accessible directories
+  # -----------------------------------------------------------------------
+
+  - id: upload-webroot-storage-flask
+    patterns:
+      - pattern: |
+          $F.save(os.path.join(app.static_folder, ...))
+      - pattern: |
+          $F.save(os.path.join("static", ...))
+      - pattern: |
+          $F.save(os.path.join("public", ...))
+      - pattern: |
+          $F.save(os.path.join("uploads", ...))
+    message: >
+      Unsafe file upload: uploaded file stored inside a web-accessible
+      directory. An attacker can upload a webshell and execute it directly
+      via the URL. Store uploads outside the webroot.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: unsafe_file_upload
+      owasp: "A01:2021"
+      cwe: "CWE-434"
+
+  # -----------------------------------------------------------------------
+  # (f) No size limit — save without nearby size validation
+  # -----------------------------------------------------------------------
+
+  - id: upload-no-size-limit
+    pattern: |
+      $F.save(...)
+    message: >
+      Potential missing size limit on file upload. Ensure MAX_CONTENT_LENGTH
+      or an equivalent size check is configured to prevent denial-of-service
+      via oversized uploads.
+    languages: [python]
+    severity: INFO
+    metadata:
+      vuln_class: unsafe_file_upload
+      owasp: "A01:2021"
+      cwe: "CWE-770"
+
+  # -----------------------------------------------------------------------
+  # (g) Zip-slip — zipfile.extractall / tarfile.extractall without containment
+  # -----------------------------------------------------------------------
+
+  - id: upload-zip-slip
+    patterns:
+      - pattern: |
+          $Z = zipfile.ZipFile(...)
+          ...
+          $Z.extractall(...)
+      - pattern: |
+          with zipfile.ZipFile(...) as $Z:
+            ...
+            $Z.extractall(...)
+    message: >
+      Zip-slip vulnerability: zipfile.extractall() used without validating
+      that extracted member paths stay within the target directory. An attacker
+      can embed '../../../etc/cron.d/evil' as a zip entry path to write
+      arbitrary files. Validate each member path with os.path.commonpath before
+      extraction.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: unsafe_file_upload
+      owasp: "A01:2021"
+      cwe: "CWE-22"
+
+  - id: upload-tar-slip
+    patterns:
+      - pattern: |
+          $T = tarfile.open(...)
+          ...
+          $T.extractall(...)
+      - pattern: |
+          with tarfile.open(...) as $T:
+            ...
+            $T.extractall(...)
+    message: >
+      Tar-slip vulnerability: tarfile.extractall() used without path containment
+      validation. Equivalent to zip-slip — validate each member path before
+      extraction.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: unsafe_file_upload
+      owasp: "A01:2021"
+      cwe: "CWE-22"
+
+  # -----------------------------------------------------------------------
+  # (h) Risky parser invocations on uploaded content
+  # -----------------------------------------------------------------------
+
+  - id: upload-risky-parser-yaml
+    patterns:
+      - pattern: yaml.load($F, Loader=yaml.Loader)
+      - pattern: yaml.load($F, Loader=yaml.FullLoader)
+      - pattern: yaml.unsafe_load($F)
+    message: >
+      Unsafe YAML parsing of uploaded content: yaml.load() with an
+      unsafe Loader (Loader or FullLoader) allows arbitrary code execution
+      via Python object deserialization. Use yaml.safe_load() for untrusted
+      input.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: unsafe_file_upload
+      owasp: "A08:2021"
+      cwe: "CWE-502"
+
+  - id: upload-risky-parser-xml
+    pattern: xml.etree.ElementTree.parse($F)
+    message: >
+      Unsafe XML parsing of uploaded content: xml.etree.ElementTree.parse()
+      does not defend against XML External Entity (XXE) attacks. Use
+      defusedxml.ElementTree.parse() for untrusted XML input.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: unsafe_file_upload
+      owasp: "A05:2021"
+      cwe: "CWE-611"

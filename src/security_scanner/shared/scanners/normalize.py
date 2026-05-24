@@ -9,7 +9,7 @@ Taxonomy members
 ----------------
 sqli, xss, command_injection, path_traversal, ssrf, deserialization,
 weak_crypto, xxe, csrf, open_redirect, auth_bypass, code_injection,
-insecure_random, unsafe_yaml
+insecure_random, unsafe_yaml, unsafe_file_upload
 """
 
 from __future__ import annotations
@@ -70,6 +70,7 @@ _BANDIT_MAP: dict[str, str] = {
     "B503": "weak_crypto",          # ssl_with_bad_defaults
     "B504": "weak_crypto",          # ssl_with_no_version
     "B505": "weak_crypto",          # weak_cryptographic_key
+    "B202": "unsafe_file_upload",   # tarfile_unsafe_extract
     "B506": "unsafe_yaml",          # yaml_load
     "B507": "ssrf",                 # ssh_no_host_key_verification
     "B601": "command_injection",    # paramiko_calls
@@ -163,6 +164,25 @@ _SEMGREP_MAP: dict[str, str] = {
     "code-injection": "code_injection",
     "insecure-random": "insecure_random",
     "unsafe-yaml": "unsafe_yaml",
+    # upload-security.yaml rule IDs
+    "upload-attacker-filename": "unsafe_file_upload",
+    "upload-extension-only": "unsafe_file_upload",
+    "upload-mime-only": "unsafe_file_upload",
+    "upload-blocklist-ext": "unsafe_file_upload",
+    "upload-webroot-storage": "unsafe_file_upload",
+    "upload-no-size-limit": "unsafe_file_upload",
+    "upload-zip-slip": "unsafe_file_upload",
+    "upload-tar-slip": "unsafe_file_upload",
+    "upload-risky-parser": "unsafe_file_upload",
+    "unsafe-file-upload": "unsafe_file_upload",
+    # Bandit rule IDs sometimes leak through as Semgrep raw IDs in test
+    # fixtures and via consolidated reports.
+    "B202": "unsafe_file_upload",
+    # Catch-all upload- prefix so vendor-specific rule variants
+    # (e.g. upload-attacker-filename-django, upload-webroot-storage-flask)
+    # also map even when not enumerated explicitly. The prefix-iteration
+    # in normalize() will pick this up via raw_rule_id.startswith("upload-").
+    "upload-": "unsafe_file_upload",
 }
 
 # ---------------------------------------------------------------------------

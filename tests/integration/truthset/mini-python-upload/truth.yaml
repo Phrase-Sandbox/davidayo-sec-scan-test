@@ -1,0 +1,40 @@
+vulnerabilities:
+  # BUG 1: Extension-only check + attacker filename preserved in static/uploads/
+  - id: "py_upload_ext_only_01"
+    class: "unsafe_file_upload"
+    file: "app.py"
+    line_start: 15
+    line_end: 22
+    mandatory: true
+
+  # BUG 2: MIME-only validation via content_type (user-supplied)
+  - id: "py_upload_mime_only_02"
+    class: "unsafe_file_upload"
+    file: "app.py"
+    line_start: 28
+    line_end: 35
+    mandatory: true
+
+  # BUG 3: No validation, attacker filename preserved in static/uploads/
+  - id: "py_upload_preserved_filename_03"
+    class: "unsafe_file_upload"
+    file: "app.py"
+    line_start: 41
+    line_end: 46
+    mandatory: true
+
+  # NEGATIVE: magic-byte + UUID + outside-webroot — should NOT be reported
+  - id: "py_upload_safe_neg_01"
+    class: "unsafe_file_upload"
+    file: "app.py"
+    line_start: 56
+    line_end: 65
+    mandatory: false
+
+  # NEGATIVE: allowlist + UUID + outside-webroot — should NOT be reported
+  - id: "py_upload_safe2_neg_02"
+    class: "unsafe_file_upload"
+    file: "app.py"
+    line_start: 70
+    line_end: 77
+    mandatory: false

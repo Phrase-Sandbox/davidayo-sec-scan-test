@@ -247,3 +247,44 @@ def test_context_summary_absent_when_empty():
     f = _finding()
     report = build_markdown_report(_result(findings=[f]))
     assert "Cross-file context" not in report
+
+
+# --- v3: upload context panel (markdown) -------------------------------------
+
+
+def test_upload_context_panel_rendered_in_markdown():
+    """Finding with upload context_summary renders Upload context section in markdown."""
+    f = _finding()
+    upload_summary = (
+        "Validation: none — Naming: preserved-user-filename — "
+        "Storage: public-path — Limits: none — Access: none — "
+        "Processing: archive-extract"
+    )
+    f = f.model_copy(update={"context_summary": upload_summary})
+    report = build_markdown_report(_result(findings=[f]))
+    assert "Upload context" in report
+    assert "Validation:" in report
+    assert "archive-extract" in report
+
+
+def test_upload_context_panel_has_all_fields_in_markdown():
+    """All 6 upload context labels appear in the markdown panel."""
+    f = _finding()
+    upload_summary = (
+        "Validation: extension-allowlist — Naming: server-generated — "
+        "Storage: outside-webroot — Limits: yes — Access: yes — "
+        "Processing: none"
+    )
+    f = f.model_copy(update={"context_summary": upload_summary})
+    report = build_markdown_report(_result(findings=[f]))
+    for label in ("Validation:", "Naming:", "Storage:", "Limits:", "Access:", "Processing:"):
+        assert label in report, f"Missing label {label!r} in upload context markdown panel"
+
+
+def test_non_upload_context_summary_renders_cross_file_in_markdown():
+    """Non-upload context_summary still renders as Cross-file context in markdown."""
+    f = _finding()
+    f = f.model_copy(update={"context_summary": "ROUTES: GET /docs → get_doc"})
+    report = build_markdown_report(_result(findings=[f]))
+    assert "Cross-file context" in report
+    assert "Upload context" not in report

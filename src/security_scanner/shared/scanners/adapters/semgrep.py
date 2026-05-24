@@ -25,6 +25,7 @@ log = get_logger(__name__)
 _CONFIGS_DIR = Path(__file__).parents[5] / "semgrep_configs"
 _OWASP_CONFIG = _CONFIGS_DIR / "owasp-top-ten.yaml"
 _AUDIT_CONFIG = _CONFIGS_DIR / "security-audit.yaml"
+_UPLOAD_CONFIG = _CONFIGS_DIR / "upload-security.yaml"
 
 TOOL = "semgrep"
 
@@ -51,8 +52,13 @@ async def scan(workspace: ScannerWorkspace) -> list[ScannerCandidate]:
         "--error",
         "--config", str(_OWASP_CONFIG),
         "--config", str(_AUDIT_CONFIG),
-        ".",
     ]
+
+    # Add upload config if present (best-effort — not required for scan to proceed).
+    if _UPLOAD_CONFIG.exists():
+        cmd.extend(["--config", str(_UPLOAD_CONFIG)])
+
+    cmd.append(".")
 
     try:
         _rc, stdout, stderr = await run_scanner(cmd, cwd=workspace.root)

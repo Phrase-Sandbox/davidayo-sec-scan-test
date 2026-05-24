@@ -62,3 +62,44 @@ def test_case_insensitive_tool() -> None:
     """Tool names are normalised to lowercase."""
     assert normalize("Bandit", "B608") == "sqli"
     assert normalize("BANDIT", "B608") == "sqli"
+
+
+# ---------------------------------------------------------------------------
+# V3: unsafe_file_upload taxonomy additions
+# ---------------------------------------------------------------------------
+
+def test_semgrep_upload_attacker_filename_maps_to_unsafe_file_upload() -> None:
+    assert normalize("semgrep", "upload-attacker-filename") == "unsafe_file_upload"
+
+
+def test_semgrep_upload_extension_only_maps_to_unsafe_file_upload() -> None:
+    assert normalize("semgrep", "upload-extension-only") == "unsafe_file_upload"
+
+
+def test_semgrep_upload_mime_only_maps_to_unsafe_file_upload() -> None:
+    assert normalize("semgrep", "upload-mime-only") == "unsafe_file_upload"
+
+
+def test_semgrep_upload_zip_slip_maps_to_unsafe_file_upload() -> None:
+    assert normalize("semgrep", "upload-zip-slip") == "unsafe_file_upload"
+
+
+def test_semgrep_upload_risky_parser_maps_to_unsafe_file_upload() -> None:
+    assert normalize("semgrep", "upload-risky-parser") == "unsafe_file_upload"
+
+
+def test_semgrep_upload_webroot_storage_maps_to_unsafe_file_upload() -> None:
+    assert normalize("semgrep", "upload-webroot-storage") == "unsafe_file_upload"
+
+
+def test_bandit_b202_maps_to_unsafe_file_upload() -> None:
+    """B202 tarfile_unsafe_extract must map to unsafe_file_upload."""
+    assert normalize("bandit", "B202") == "unsafe_file_upload"
+
+
+def test_semgrep_upload_no_size_limit_maps_to_unsafe_file_upload() -> None:
+    assert normalize("semgrep", "upload-no-size-limit") == "unsafe_file_upload"
+
+
+def test_semgrep_upload_blocklist_maps_to_unsafe_file_upload() -> None:
+    assert normalize("semgrep", "upload-blocklist-ext") == "unsafe_file_upload"

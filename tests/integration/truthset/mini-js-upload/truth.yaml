@@ -1,0 +1,32 @@
+vulnerabilities:
+  # BUG 1: multer with no fileFilter, storing in public/uploads/
+  - id: "js_upload_no_filter_01"
+    class: "unsafe_file_upload"
+    file: "app.js"
+    line_start: 13
+    line_end: 21
+    mandatory: true
+
+  # BUG 2: req.file.originalname used as storage filename in public path
+  - id: "js_upload_originalname_02"
+    class: "unsafe_file_upload"
+    file: "app.js"
+    line_start: 26
+    line_end: 37
+    mandatory: true
+
+  # BUG 3: No limits option — no file size cap
+  - id: "js_upload_no_limits_03"
+    class: "unsafe_file_upload"
+    file: "app.js"
+    line_start: 42
+    line_end: 51
+    mandatory: true
+
+  # NEGATIVE: fileFilter + limits + UUID + outside-webroot — should NOT report
+  - id: "js_upload_safe_neg_01"
+    class: "unsafe_file_upload"
+    file: "app.js"
+    line_start: 57
+    line_end: 80
+    mandatory: false

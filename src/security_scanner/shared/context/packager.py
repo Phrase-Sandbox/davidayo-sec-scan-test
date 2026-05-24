@@ -27,6 +27,9 @@ from security_scanner.shared.context.models import (
 )
 from security_scanner.shared.context.ownership_checks import scan_ownership_checks
 from security_scanner.shared.context.route_extractors import extract_routes
+from security_scanner.shared.context.upload_context import extract_upload_context
+from security_scanner.shared.context.upload_finder import find_upload_handlers
+from security_scanner.shared.context.upload_models import UploadContext
 from security_scanner.shared.logging_util import get_logger
 from security_scanner.shared.scanners.types import CandidateForVerification
 
@@ -139,6 +142,34 @@ class ContextPackager:
         callees = self._find_callees(snippet)
         ownership = self._find_ownership(candidate.file, files)
 
+        # Attach upload context when candidate is an upload class OR the file
+        # contains an upload handler detected by upload_finder.
+        upload_ctx: UploadContext | None = None
+        try:
+            is_upload_class = candidate.vuln_class.lower() == "unsafe_file_upload"
+            if is_upload_class:
+                # Use the first upload handler found in the candidate file.
+                file_handlers = find_upload_handlers({candidate.file: file_content})
+                if file_handlers:
+                    upload_ctx = extract_upload_context(file_handlers[0], files)
+                else:
+                    # No handler found — still build an empty UploadContext so
+                    # the verifier knows this is an upload class.
+                    upload_ctx = UploadContext()
+            else:
+                # Check whether this file happens to contain an upload handler.
+                file_handlers = find_upload_handlers({candidate.file: file_content})
+                if file_handlers:
+                    upload_ctx = extract_upload_context(file_handlers[0], files)
+        except Exception as exc:  # noqa: BLE001
+            log.warning(
+                "context packager: upload context extraction failed",
+                file=candidate.file,
+                error=type(exc).__name__,
+                error_message=str(exc),
+            )
+            upload_ctx = None
+
         return ContextBundle(
             file=candidate.file,
             vuln_class=candidate.vuln_class,
@@ -148,6 +179,7 @@ class ContextPackager:
             callers=tuple(callers),
             callees=tuple(callees),
             ownership_checks=tuple(ownership),
+            upload_context=upload_ctx,
         )
 
     def _extract_snippet(self, content: str, line_start: int, line_end: int | None) -> str:

@@ -147,6 +147,54 @@ def _chunk(items: list[int], size: int) -> Iterator[list[int]]:
         yield items[i : i + size]
 
 
+def _render_upload_context_section(bundle: ContextBundle) -> str:
+    """Render the UPLOAD CONTEXT block when the bundle has upload context.
+
+    Returns an empty string when upload_context is None or all fields empty.
+    """
+    uc = bundle.upload_context
+    if uc is None:
+        return ""
+
+    # Check if any field has meaningful content — only render if non-trivial.
+    any_content = any([
+        uc.route_summary,
+        uc.middleware_summary,
+        uc.authz_signals,
+        uc.filename_handling and uc.filename_handling != ["unknown"],
+        uc.validation_signals and uc.validation_signals != ["none"],
+        uc.size_limit_signals and uc.size_limit_signals != ["none"],
+        uc.storage_signals and uc.storage_signals != ["unknown"],
+        uc.retrieval_signals and uc.retrieval_signals != ["none"],
+        uc.post_processing_signals and uc.post_processing_signals != ["none"],
+    ])
+    if not any_content:
+        return ""
+
+    parts: list[str] = ["UPLOAD CONTEXT:"]
+
+    if uc.route_summary:
+        parts.append("  Routes: " + "; ".join(uc.route_summary))
+    if uc.middleware_summary:
+        parts.append("  Middleware: " + " → ".join(uc.middleware_summary))
+    if uc.authz_signals:
+        parts.append("  Auth/z: " + "; ".join(uc.authz_signals))
+    if uc.filename_handling:
+        parts.append("  Naming: " + " | ".join(uc.filename_handling))
+    if uc.validation_signals:
+        parts.append("  Validation: " + " | ".join(uc.validation_signals))
+    if uc.size_limit_signals:
+        parts.append("  Limits: " + " | ".join(uc.size_limit_signals))
+    if uc.storage_signals:
+        parts.append("  Storage: " + " | ".join(uc.storage_signals))
+    if uc.retrieval_signals:
+        parts.append("  Retrieval: " + " | ".join(uc.retrieval_signals))
+    if uc.post_processing_signals:
+        parts.append("  Processing: " + " | ".join(uc.post_processing_signals))
+
+    return "\n".join(parts)
+
+
 def _render_bundle_sections(bundle: ContextBundle) -> str:
     """Render labelled context sections from a ContextBundle.
 
@@ -216,9 +264,13 @@ def _build_candidate_block(
         else str(candidate.line_start or "unknown")
     )
 
+    # File path can contain attacker-controlled chars (e.g. a malicious
+    # filename echoed from a candidate). Defang so it can't smuggle a
+    # ``</source_code>`` close-tag into the verifier user message.
+    safe_file = _defang_source_code_tags(candidate.file)
     parts = [
         f"CANDIDATE #{idx}",
-        f"FILE: {candidate.file}",
+        f"FILE: {safe_file}",
         f"LINES: {lines_text}",
         f"VULN CLASS: {candidate.vuln_class}",
         f"SOURCES: {', '.join(candidate.sources)}",
@@ -230,6 +282,11 @@ def _build_candidate_block(
 
     # Render cross-file context sections before the primary code block.
     if bundle is not None:
+        # Upload context block first (when present).
+        upload_section = _render_upload_context_section(bundle)
+        if upload_section:
+            parts.append(upload_section)
+        # Then regular context sections.
         context_sections = _render_bundle_sections(bundle)
         if context_sections:
             parts.append(context_sections)
@@ -238,7 +295,7 @@ def _build_candidate_block(
     # Use a non-XML delimiter so a literal </source_code> can't appear in the
     # rendered message via the wrapper itself — the defang routine handles
     # any such tokens inside the snippet content.
-    parts.append(f"<<<BEGIN CODE filename={candidate.file}>>>")
+    parts.append(f"<<<BEGIN CODE filename={safe_file}>>>")
     parts.append(safe_snippet)
     parts.append("<<<END CODE>>>")
 
@@ -404,11 +461,19 @@ def candidate_to_finding(
     candidate: CandidateForVerification,
     *,
     verification_status: VerificationStatus = VerificationStatus.unverified,
+    bundle: ContextBundle | None = None,
 ) -> VulnerabilityFinding:
     """Convert a ``CandidateForVerification`` to a ``VulnerabilityFinding``.
 
     Public so the pipeline can use it on the skill path where the verifier
     is skipped for cost — candidates flow through unverified.
+
+    Parameters
+    ----------
+    bundle:
+        Optional context bundle.  When present and the bundle has an
+        ``UploadContext``, ``context_summary`` is populated from
+        ``UploadContext.overall_summary``.
     """
     # Map severity string to enum.
     try:
@@ -431,6 +496,11 @@ def candidate_to_finding(
 
     vuln_id = candidate.vulnerability_id or candidate.vuln_class.upper()
 
+    # Populate context_summary from UploadContext.overall_summary when available.
+    context_summary = ""
+    if bundle is not None and bundle.upload_context is not None:
+        context_summary = bundle.upload_context.overall_summary or ""
+
     return VulnerabilityFinding(
         vulnerability_id=vuln_id,
         severity=severity,
@@ -446,6 +516,7 @@ def candidate_to_finding(
         verification_status=verification_status,
         sources=candidate.sources,
         consensus_score=candidate.consensus_score,
+        context_summary=context_summary,
     )
 
 

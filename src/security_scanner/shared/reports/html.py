@@ -748,6 +748,70 @@ def _advisory_real_badge() -> str:
     )
 
 
+# Prefix that identifies an upload context summary (produced by UploadContext.overall_summary).
+_UPLOAD_CTX_PREFIX = "Validation:"
+
+# Labels for the upload context panel fields (parsed from overall_summary).
+_UPLOAD_FIELD_RE = re.compile(
+    r"Validation:\s*([^—]+)"
+    r"—\s*Naming:\s*([^—]+)"
+    r"—\s*Storage:\s*([^—]+)"
+    r"—\s*Limits:\s*([^—]+)"
+    r"—\s*Access:\s*([^—]+)"
+    r"—\s*Processing:\s*(.+)",
+    re.DOTALL,
+)
+
+
+def _upload_context_panel(context_summary: str) -> str:
+    """Render a compact upload context panel from context_summary.
+
+    Returns an empty string when context_summary is not an upload summary.
+
+    The panel shows:
+      Validation: <value> | Naming: <value> | Storage: <value> |
+      Limits: <value> | Access: <value> | Processing: <value>
+    """
+    if not context_summary or _UPLOAD_CTX_PREFIX not in context_summary:
+        return ""
+
+    m = _UPLOAD_FIELD_RE.search(context_summary)
+    if m:
+        validation = m.group(1).strip()
+        naming = m.group(2).strip()
+        storage = m.group(3).strip()
+        limits = m.group(4).strip()
+        access = m.group(5).strip()
+        processing = m.group(6).strip()
+    else:
+        # Can't parse — render as a simple pre block.
+        return (
+            '<details class="code-toggle">'
+            "<summary>Upload context</summary>"
+            f'<pre style="white-space:pre-wrap;font-size:0.85em">{escape(context_summary)}</pre>'
+            "</details>"
+        )
+
+    rows = [
+        ("Validation", validation),
+        ("Naming", naming),
+        ("Storage", storage),
+        ("Limits", limits),
+        ("Access", access),
+        ("Processing", processing),
+    ]
+    cells = " | ".join(
+        f"<strong>{escape(label)}:</strong> {escape(value)}"
+        for label, value in rows
+    )
+    return (
+        '<details class="code-toggle">'
+        "<summary>Upload context</summary>"
+        f'<div style="padding:0.5em 0;font-size:0.88em">{cells}</div>'
+        "</details>"
+    )
+
+
 def _finding_card(
     f: VulnerabilityFinding,
     idx: int,
@@ -777,8 +841,12 @@ def _finding_card(
         f'<div class="risk-callout">{escape(f.exploit_scenario)}</div>',
         _ai_prompt_block(_synthesize_ai_prompt(f), header="Paste this into your AI editor"),
     ]
-    # Render context summary when present.
-    if f.context_summary:
+    # Render upload context panel when present (upload findings).
+    upload_panel = _upload_context_panel(f.context_summary)
+    if upload_panel:
+        parts.append(upload_panel)
+    elif f.context_summary:
+        # Fallback: generic cross-file context toggle.
         parts.append(
             '<details class="code-toggle">'
             "<summary>Cross-file context</summary>"

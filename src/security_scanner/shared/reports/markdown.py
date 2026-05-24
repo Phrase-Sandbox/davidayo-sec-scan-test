@@ -184,13 +184,17 @@ def _detailed_findings(findings: list[VulnerabilityFinding]) -> str:
             if f.verification_status == VerificationStatus.advisory_real
             else ""
         )
-        # Context summary block when present.
+        # Context summary block: upload context panel or generic cross-file context.
         context_block = ""
         if f.context_summary:
-            context_block = (
-                f"\n**Cross-file context**\n\n"
-                f"```\n{f.context_summary}\n```\n"
-            )
+            if "Validation:" in f.context_summary:
+                # Upload context panel — render as a compact list.
+                context_block = _upload_context_md_panel(f.context_summary)
+            else:
+                context_block = (
+                    f"\n**Cross-file context**\n\n"
+                    f"```\n{f.context_summary}\n```\n"
+                )
         sections.append(
             f"### {f.vulnerability_id} — {f.severity.value} "
             f"(confidence: {f.confidence.value}, verification: "
@@ -232,3 +236,42 @@ def _fmt_timestamp(ts: datetime) -> str:
 
 def _fmt_uuid(value: UUID) -> str:
     return str(value)
+
+
+import re as _re
+
+_UPLOAD_FIELD_RE = _re.compile(
+    r"Validation:\s*([^—]+)"
+    r"—\s*Naming:\s*([^—]+)"
+    r"—\s*Storage:\s*([^—]+)"
+    r"—\s*Limits:\s*([^—]+)"
+    r"—\s*Access:\s*([^—]+)"
+    r"—\s*Processing:\s*(.+)",
+    _re.DOTALL,
+)
+
+
+def _upload_context_md_panel(context_summary: str) -> str:
+    """Render the upload context summary as a compact Markdown panel.
+
+    Returns a non-empty string starting with a newline.
+    """
+    m = _UPLOAD_FIELD_RE.search(context_summary)
+    if not m:
+        return (
+            f"\n**Upload context**\n\n"
+            f"```\n{context_summary}\n```\n"
+        )
+    validation = m.group(1).strip()
+    naming = m.group(2).strip()
+    storage = m.group(3).strip()
+    limits = m.group(4).strip()
+    access = m.group(5).strip()
+    processing = m.group(6).strip()
+
+    return (
+        "\n**Upload context**\n\n"
+        f"- Validation: {validation} — Naming: {naming} — "
+        f"Storage: {storage} — Limits: {limits} — "
+        f"Access: {access} — Processing: {processing}\n"
+    )

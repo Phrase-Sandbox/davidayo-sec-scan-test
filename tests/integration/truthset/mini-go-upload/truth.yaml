@@ -1,0 +1,24 @@
+vulnerabilities:
+  # BUG 1: r.FormFile saved using header.Filename (path traversal), no size limit
+  - id: "go_upload_path_traversal_01"
+    class: "unsafe_file_upload"
+    file: "main.go"
+    line_start: 18
+    line_end: 34
+    mandatory: true
+
+  # BUG 2: No size limit (no MaxBytesReader); public upload directory
+  - id: "go_upload_no_size_limit_02"
+    class: "unsafe_file_upload"
+    file: "main.go"
+    line_start: 38
+    line_end: 52
+    mandatory: true
+
+  # NEGATIVE: MaxBytesReader + server-generated name + outside webroot
+  - id: "go_upload_safe_neg_01"
+    class: "unsafe_file_upload"
+    file: "main.go"
+    line_start: 57
+    line_end: 78
+    mandatory: false

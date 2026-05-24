@@ -501,3 +501,57 @@ def test_context_summary_absent_when_empty():
     f = _finding()
     html = build_html_report(_result(findings=[f]))
     assert "Cross-file context" not in html
+
+
+# --- v3: upload context panel -------------------------------------------------
+
+
+def test_upload_context_panel_rendered_for_upload_findings():
+    """A finding with an upload context_summary renders the Upload context panel."""
+    f = _finding()
+    upload_summary = (
+        "Validation: none — Naming: preserved-user-filename — "
+        "Storage: public-path — Limits: none — Access: none — "
+        "Processing: archive-extract"
+    )
+    f = f.model_copy(update={"context_summary": upload_summary})
+    html = build_html_report(_result(findings=[f]))
+    assert "Upload context" in html
+    assert "Validation:" in html
+    assert "archive-extract" in html
+
+
+def test_upload_context_panel_shows_all_fields():
+    """All 6 field labels appear in the upload context panel."""
+    f = _finding()
+    upload_summary = (
+        "Validation: extension-allowlist — Naming: server-generated — "
+        "Storage: outside-webroot — Limits: yes — Access: yes — "
+        "Processing: none"
+    )
+    f = f.model_copy(update={"context_summary": upload_summary})
+    html = build_html_report(_result(findings=[f]))
+    for label in ("Validation:", "Naming:", "Storage:", "Limits:", "Access:", "Processing:"):
+        assert label in html, f"Missing label {label!r} in upload context panel"
+
+
+def test_non_upload_context_summary_renders_cross_file_toggle():
+    """Non-upload context_summary still renders as Cross-file context."""
+    f = _finding()
+    f = f.model_copy(update={"context_summary": "ROUTES: GET /docs → get_doc"})
+    html = build_html_report(_result(findings=[f]))
+    assert "Cross-file context" in html
+    assert "Upload context" not in html
+
+
+def test_upload_panel_xss_safe():
+    """Attacker-controlled strings in context_summary are HTML-escaped."""
+    f = _finding()
+    upload_summary = (
+        "Validation: <script>alert(1)</script> — Naming: server-generated — "
+        "Storage: outside-webroot — Limits: yes — Access: yes — Processing: none"
+    )
+    f = f.model_copy(update={"context_summary": upload_summary})
+    html = build_html_report(_result(findings=[f]))
+    assert "<script>" not in html
+    assert "&lt;script&gt;" in html

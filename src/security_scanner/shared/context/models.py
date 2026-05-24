@@ -7,6 +7,10 @@ concurrent workers without locking.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from security_scanner.shared.context.upload_models import UploadContext
 
 
 @dataclass(frozen=True)
@@ -123,3 +127,8 @@ class ContextBundle:
 
     ownership_checks: tuple[OwnershipCheckInfo, ...] = field(default_factory=tuple)
     """Ownership / permission checks found near the candidate."""
+
+    upload_context: "UploadContext | None" = field(default=None, hash=False, compare=False)
+    """Upload-flow context when the candidate involves file uploads.
+    ``None`` means not applicable or extraction failed.
+    Excluded from hash/compare because UploadContext fields are mutable lists."""

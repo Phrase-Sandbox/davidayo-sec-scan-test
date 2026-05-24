@@ -26,6 +26,9 @@ from __future__ import annotations
 # Vulnerability classes that trigger the authz-specific rubric.
 _AUTHZ_CLASSES: frozenset[str] = frozenset({"auth_bypass", "idor"})
 
+# Vulnerability classes that trigger the upload-specific rubric.
+_UPLOAD_CLASSES: frozenset[str] = frozenset({"unsafe_file_upload"})
+
 
 def build_authz_verifier_rubric() -> str:
     """Return the authz/IDOR-specific rubric appended to the verifier prompt.
@@ -56,6 +59,50 @@ Apply the following additional steps before issuing a verdict:
 
 4. Only mark `false_positive` if you can point to a specific guard (decorator, middleware
    entry, or SQL WHERE clause involving ``current_user``) that prevents cross-user access.
+"""
+
+
+def build_upload_verifier_rubric() -> str:
+    """Return the unsafe_file_upload-specific rubric appended to the verifier prompt.
+
+    The returned string contains these LITERAL substrings (tested character-for-character):
+    - "Treat uploaded files as attacker-controlled."
+    - "Do NOT trust Content-Type headers alone as proof of file type."
+    - "If the application preserves attacker-controlled filenames or stores uploads in a web-accessible or executable location, treat this as exploitable unless strong compensating controls are shown."
+    - "If archive extraction or risky parsing runs on uploaded files without path and content validation, treat this as exploitable."
+    - "Answer `real` only if you can describe what malicious file or filename the attacker would upload and why the shown checks would not stop it."
+    """
+    return """\
+
+## File upload security analysis rubric
+
+This candidate may involve unsafe file upload handling.
+Apply the following additional steps before issuing a verdict:
+
+1. Treat uploaded files as attacker-controlled. The filename, content type,
+   and binary content of the upload are all attacker-supplied and must be
+   treated as untrusted.
+
+2. Do NOT trust Content-Type headers alone as proof of file type. A browser
+   sets Content-Type from file extension; an attacker can send any value.
+   Only server-side magic-byte validation (reading and checking the file's
+   actual binary header) constitutes reliable type verification.
+
+3. If the application preserves attacker-controlled filenames or stores uploads in a web-accessible or executable location, treat this as exploitable unless strong compensating controls are shown.
+   Compensating controls include: server-generated UUID filenames, storage
+   outside the web root, and strict extension allowlists combined with
+   magic-byte verification.
+
+4. If archive extraction or risky parsing runs on uploaded files without path and content validation, treat this as exploitable.
+   For zip/tar: check for an explicit ``os.path.commonpath`` containment
+   guard. For YAML/XML: ``yaml.safe_load`` and ``defusedxml`` are safe;
+   ``yaml.load(Loader=Loader)`` and bare ``xml.etree.ElementTree.parse``
+   are not.
+
+5. Answer `real` only if you can describe what malicious file or filename the attacker would upload and why the shown checks would not stop it.
+   If the existing checks (extension allowlist + magic bytes + server-generated
+   filename + outside-webroot storage) are all present and correctly applied,
+   mark as ``false_positive``.
 """
 
 
@@ -142,7 +189,14 @@ Where N is the candidate's 1-based number.
 
 No JSON, no markdown, no preamble. Only the verdict blocks.
 """
-    # Append the authz rubric for auth_bypass / idor classes.
-    if vuln_class and vuln_class.lower() in _AUTHZ_CLASSES:
-        base_prompt += build_authz_verifier_rubric()
+    # Class→rubric registry (exclusive):
+    # auth_bypass / idor → authz rubric only
+    # unsafe_file_upload → upload rubric only
+    # other → no rubric appended
+    if vuln_class:
+        norm = vuln_class.lower()
+        if norm in _AUTHZ_CLASSES:
+            base_prompt += build_authz_verifier_rubric()
+        elif norm in _UPLOAD_CLASSES:
+            base_prompt += build_upload_verifier_rubric()
     return base_prompt

@@ -1,0 +1,40 @@
+vulnerabilities:
+  # BUG 1: zipfile.extractall without path containment (zip-slip)
+  - id: "archive_zip_slip_01"
+    class: "unsafe_file_upload"
+    file: "app.py"
+    line_start: 18
+    line_end: 25
+    mandatory: true
+
+  # BUG 2: tarfile.extractall without path containment (tar-slip)
+  - id: "archive_tar_slip_02"
+    class: "unsafe_file_upload"
+    file: "app.py"
+    line_start: 30
+    line_end: 37
+    mandatory: true
+
+  # BUG 3: yaml.load with unsafe Loader on uploaded content
+  - id: "archive_yaml_unsafe_03"
+    class: "unsafe_file_upload"
+    file: "app.py"
+    line_start: 42
+    line_end: 49
+    mandatory: true
+
+  # NEGATIVE: os.path.commonpath containment check — should NOT report zip-slip
+  - id: "archive_safe_neg_01"
+    class: "unsafe_file_upload"
+    file: "app.py"
+    line_start: 54
+    line_end: 68
+    mandatory: false
+
+  # NEGATIVE: yaml.safe_load — should NOT report
+  - id: "archive_yaml_safe_neg_02"
+    class: "unsafe_file_upload"
+    file: "app.py"
+    line_start: 72
+    line_end: 80
+    mandatory: false
