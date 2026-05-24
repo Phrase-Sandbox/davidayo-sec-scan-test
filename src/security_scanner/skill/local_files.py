@@ -17,8 +17,13 @@ OAuth). The spec skill path is unchanged and still available.
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
+
+import pathspec
+
+log = logging.getLogger(__name__)
 
 # Directories that never contain developer-authored source worth scanning.
 _SKIP_DIRS = frozenset(
@@ -56,8 +61,9 @@ _MAX_FILE_BYTES = 1_000_000
 class LocalFilesClient:
     """Returns ``{relative_posix_path: utf-8 text}`` for a local directory tree."""
 
-    def __init__(self, root: str | Path) -> None:
+    def __init__(self, root: str | Path, *, respect_gitignore: bool = True) -> None:
         self._root = Path(root).resolve()
+        self._respect_gitignore = respect_gitignore
 
     # --- pipeline-facing API (mirrors GitHubClient) -----------------------
 
@@ -72,14 +78,34 @@ class LocalFilesClient:
         if not base.is_dir():
             return {}
 
+        # Patterns at ``base/.gitignore`` declare files the developer has
+        # explicitly excluded from version control. They are typically build
+        # artefacts, machine-local secrets files, vendored caches, etc. —
+        # not "the codebase" — so respecting them avoids both wasted work
+        # and FP findings on intentionally-uncommitted credentials.
+        spec = self._load_gitignore_spec(base) if self._respect_gitignore else None
+
         files: dict[str, str] = {}
         for dirpath, dirnames, filenames in os.walk(base):
             # Prune skip-dirs in place so os.walk doesn't descend into them.
             dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
+            if spec is not None:
+                # Additionally prune directories matching .gitignore patterns.
+                # Trailing slash signals "directory" to pathspec — required
+                # for ``build/`` style patterns to match.
+                rel_dir = Path(dirpath).relative_to(base).as_posix()
+                prefix = "" if rel_dir == "." else f"{rel_dir}/"
+                dirnames[:] = [
+                    d for d in dirnames if not spec.match_file(f"{prefix}{d}/")
+                ]
             for filename in filenames:
                 if filename == _REPORT_FILENAME or filename.endswith(_SKIP_SUFFIXES):
                     continue
                 full = Path(dirpath) / filename
+                if spec is not None:
+                    rel_to_base = full.relative_to(base).as_posix()
+                    if spec.match_file(rel_to_base):
+                        continue
                 try:
                     if full.stat().st_size > _MAX_FILE_BYTES:
                         continue
@@ -90,6 +116,28 @@ class LocalFilesClient:
                 rel = full.relative_to(self._root).as_posix()
                 files[rel] = text
         return files
+
+    @staticmethod
+    def _load_gitignore_spec(base: Path) -> pathspec.PathSpec | None:
+        """Return a parsed PathSpec for ``base/.gitignore``, or ``None``.
+
+        ``None`` covers both "no .gitignore present" and "unreadable
+        .gitignore" — a malformed file must not fail the scan. The caller
+        treats ``None`` as "apply no extra filtering".
+        """
+        gi = base / ".gitignore"
+        if not gi.is_file():
+            return None
+        try:
+            text = gi.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            log.warning(
+                "could not read .gitignore at %s (%s); skipping gitignore filter",
+                gi,
+                exc,
+            )
+            return None
+        return pathspec.PathSpec.from_lines("gitignore", text.splitlines())
 
     def get_diff_files(
         self,

@@ -338,3 +338,123 @@ def test_detect_secrets_supplementary_path_executes_without_error():
     content = 'CREDENTIAL = "AbCdEfGhIjKlMnOpQrSt0123456789+/=BcDeFgHiJkLmNoPqRsTu"'
     result = strip({"app.py": content})
     assert result.secrets_found is True
+
+
+# --- Extended detection: URL credentials, env-var suffixes, SQL literals -----
+
+
+def test_url_with_basic_auth_credentials_is_flagged():
+    """`postgres://user:pw@host` carries a real credential — must not be dropped."""
+    content = 'db = "postgres://app_user:s3cret_passw0rd@db.example.com:5432/prod"\n'
+    result = strip({"config.py": content})
+    assert result.secrets_found is True
+
+
+def test_plain_url_is_not_flagged():
+    """Bare URLs (no user:pw@ segment) remain FPs and must stay suppressed."""
+    content = 'api = "https://api.example.com/v1/users/list"\n'
+    result = strip({"app.py": content})
+    assert result.secrets_found is False
+
+
+def test_filesystem_path_is_not_flagged():
+    content = 'log_path = "/var/log/app/requests.log"\n'
+    result = strip({"app.py": content})
+    assert result.secrets_found is False
+
+
+def test_env_var_key_suffix_is_flagged():
+    """STRIPE_KEY = "..." now matches the widened keyword arm."""
+    content = 'STRIPE_KEY = "sk_test_4eC39HqLyjWDarjtT1zdp7dc"\n'
+    result = strip({"settings.py": content})
+    assert result.secrets_found is True
+
+
+def test_env_var_password_suffix_is_flagged():
+    content = 'DB_PASSWORD = "supersecretpw"\n'
+    result = strip({"settings.py": content})
+    assert result.secrets_found is True
+
+
+def test_private_key_keyword_is_flagged():
+    content = 'private_key: "abc123def456ghi"\n'
+    result = strip({"conf.yaml": content})
+    assert result.secrets_found is True
+
+
+def test_sql_md5_password_literal_is_flagged():
+    """`md5('password')` — the dvpwa fixture shape — must be flagged."""
+    content = "INSERT INTO users (name, pwd_hash) VALUES ('admin', md5('hunter2'));\n"
+    result = strip({"migrations/001-fixtures.sql": content})
+    assert result.secrets_found is True
+
+
+def test_sql_update_password_literal_is_flagged():
+    content = "UPDATE users SET password='hunter2' WHERE id=1;\n"
+    result = strip({"fixture.sql": content})
+    assert result.secrets_found is True
+
+
+def test_is_template_file_recognises_common_suffixes():
+    from security_scanner.shared.secrets.stripper import _is_template_file
+
+    yes = [
+        ".env.example",
+        ".env.local.example",
+        "config.yaml.sample",
+        "docker-compose.template",
+        "app.config.tmpl",
+        "Makefile.dist",
+        "PATH/TO/.env.Local.EXAMPLE",  # case-insensitive
+    ]
+    no = [
+        "app.py",
+        ".env.local",
+        ".env",
+        "config.yaml",
+        "README.md",
+        "tests/sample_data.txt",  # ``sample`` in path, not as suffix
+    ]
+    for f in yes:
+        assert _is_template_file(f) is True, f
+    for f in no:
+        assert _is_template_file(f) is False, f
+
+
+def test_slack_webhook_is_flagged_and_redacted():
+    """Slack incoming-webhook URLs are credentials — caught by the Layer-1 regex."""
+    url = "https://hooks.slack.com/services/T01234567/B89ABCDEF/aBcDeFgHiJkLmNoPqRsTuVwX"
+    content = f"WEBHOOK = \"{url}\"\n"
+    result = strip({"alerts.py": content})
+    assert result.secrets_found is True
+    assert url not in result.cleaned_files["alerts.py"]
+    assert REDACTED in result.cleaned_files["alerts.py"]
+
+
+def test_slack_webhook_partial_match_is_not_flagged():
+    """An incomplete Slack URL (no bot/token segments) must not be flagged."""
+    content = 'doc = "https://hooks.slack.com/services/T01234567"\n'
+    result = strip({"app.py": content})
+    assert result.secrets_found is False
+
+
+def test_dotted_vendor_token_is_flagged():
+    """SendGrid-style ``SG.aaa.bbb`` tokens — ``.`` must be in value class."""
+    content = (
+        "SENDGRID_TOKEN=SG.aB1cD2eF3gH4iJ5kL6mN7oP."
+        "qR8sT9uV0wX1yZ2aB3cD4eF5gH6iJ7kL8mN9oP\n"
+    )
+    result = strip({"prod.env": content})
+    assert result.secrets_found is True
+
+
+def test_sql_literal_pattern_does_not_fire_on_python_file():
+    """The SQL detector is scoped to .sql files only — guards the scoping."""
+    content = '''sql = """
+INSERT INTO users (name, pwd_hash) VALUES ('a', md5('hunter2'));
+"""\n'''
+    result = strip({"app.py": content})
+    # The SQL-literal detector must NOT fire here; the only other detectors
+    # that could possibly match (high_entropy, config_secret) won't because
+    # 'hunter2' is short and the surrounding shape isn't keyword=value.
+    assert result.secrets_found is False

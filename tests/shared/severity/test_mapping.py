@@ -71,10 +71,35 @@ def test_should_block_critical_high_confidence_verified_blocks():
 
 
 def test_should_block_high_severity_high_confidence_blocks():
-    """High + High confidence blocks regardless of verification_status (BR-009 is Critical-only)."""
+    """High + High confidence blocks regardless of verification_status (BR-009 is Critical-only).
+
+    v2 note: advisory_real never blocks (it's the auto-triaged advisory lane).
+    """
     for vs in VerificationStatus:
+        if vs == VerificationStatus.advisory_real:
+            continue  # advisory_real is always non-blocking regardless of severity
         finding = _finding(Severity.High, Confidence.High, vs)
         assert should_block(finding) is True, f"High/High should block when verif={vs.value}"
+
+
+def test_should_block_false_for_advisory_real_regardless_of_severity():
+    """advisory_real findings never block — they are auto-triaged advisory lane."""
+    for severity in Severity:
+        for confidence in Confidence:
+            finding = _finding(severity, confidence, VerificationStatus.advisory_real)
+            assert should_block(finding) is False, (
+                f"advisory_real should not block: severity={severity.value}, conf={confidence.value}"
+            )
+
+
+def test_is_advisory_only_true_for_advisory_real_regardless_of_severity():
+    """advisory_real findings are always advisory_only."""
+    for severity in Severity:
+        for confidence in Confidence:
+            finding = _finding(severity, confidence, VerificationStatus.advisory_real)
+            assert is_advisory_only(finding) is True, (
+                f"advisory_real should be advisory_only: severity={severity.value}"
+            )
 
 
 # --- should_block: negatives caused by BR-001-A (confidence gate) ----------
@@ -140,10 +165,16 @@ def test_is_advisory_only_false_for_critical_high_confidence_verified():
 
 
 def test_is_advisory_only_false_for_high_severity_high_confidence():
-    """High + High confidence blocks — not advisory regardless of verification status."""
+    """High + High confidence blocks — not advisory unless explicitly set to advisory_real.
+
+    v2 note: advisory_real is always advisory regardless of severity/confidence.
+    The test excludes advisory_real which has its own separate test.
+    """
     for vs in VerificationStatus:
+        if vs == VerificationStatus.advisory_real:
+            continue  # advisory_real is always advisory regardless of severity
         finding = _finding(Severity.High, Confidence.High, vs)
-        assert is_advisory_only(finding) is False
+        assert is_advisory_only(finding) is False, f"High/High should not be advisory for vs={vs.value}"
 
 
 def test_is_advisory_only_false_for_critical_high_confidence_unverified():
@@ -160,9 +191,15 @@ def test_is_advisory_only_false_for_critical_high_confidence_unverified():
 @pytest.mark.parametrize("severity", [Severity.Medium, Severity.Low])
 @pytest.mark.parametrize("confidence", list(Confidence))
 def test_is_advisory_only_false_for_medium_and_low_severity(severity, confidence):
-    """Medium/Low are naturally advisory — they don't get the 'demoted-blocker' header warning."""
-    finding = _finding(severity, confidence, VerificationStatus.unverified)
-    assert is_advisory_only(finding) is False
+    """Medium/Low are naturally advisory — they don't get the 'demoted-blocker' header warning.
+
+    v2 note: tests only non-advisory_real statuses; advisory_real has its own test.
+    """
+    for vs in [VerificationStatus.verified, VerificationStatus.unverified, VerificationStatus.conflicting]:
+        finding = _finding(severity, confidence, vs)
+        assert is_advisory_only(finding) is False, (
+            f"Medium/Low severity should not be advisory_only for vs={vs.value}"
+        )
 
 
 # --- Mutual exclusion sanity check -----------------------------------------

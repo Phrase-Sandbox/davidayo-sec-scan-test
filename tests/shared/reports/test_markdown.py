@@ -207,3 +207,43 @@ def test_table_pipe_in_field_is_escaped_to_keep_table_intact():
     finding = _finding(affected_file="src/path|weird.py")
     report = build_markdown_report(_result(findings=[finding]))
     assert "src/path\\|weird.py" in report
+
+
+# --- v2: advisory_real badge and context_summary ---------------------------
+
+
+def test_advisory_real_badge_appears_in_detail():
+    """advisory_real findings carry the auto-triaged badge phrase in Markdown."""
+    f = _finding(verification_status=VerificationStatus.advisory_real)
+    report = build_markdown_report(_result(findings=[f]))
+    assert "Potential issue (auto-triaged, not blocking)" in report
+
+
+def test_advisory_real_warning_in_header():
+    """AUTO-TRIAGED warning appears when advisory_real findings are present."""
+    f = _finding(verification_status=VerificationStatus.advisory_real)
+    report = build_markdown_report(_result(findings=[f]))
+    assert "AUTO-TRIAGED" in report
+
+
+def test_non_advisory_real_has_no_badge():
+    """verified findings must NOT carry the auto-triaged badge."""
+    f = _finding(verification_status=VerificationStatus.verified)
+    report = build_markdown_report(_result(findings=[f]))
+    assert "Potential issue (auto-triaged, not blocking)" not in report
+
+
+def test_context_summary_renders_in_detail_when_present():
+    """When context_summary is set, a Cross-file context block appears."""
+    f = _finding()
+    f = f.model_copy(update={"context_summary": "ROUTES: GET /docs → get_doc"})
+    report = build_markdown_report(_result(findings=[f]))
+    assert "Cross-file context" in report
+    assert "ROUTES: GET /docs" in report
+
+
+def test_context_summary_absent_when_empty():
+    """When context_summary is empty, no context block appears."""
+    f = _finding()
+    report = build_markdown_report(_result(findings=[f]))
+    assert "Cross-file context" not in report

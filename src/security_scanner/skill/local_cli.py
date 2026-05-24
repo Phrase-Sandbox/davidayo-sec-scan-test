@@ -30,6 +30,7 @@ import stat
 import subprocess
 import sys
 import threading
+import time
 import urllib.parse
 import urllib.request
 import webbrowser
@@ -42,6 +43,7 @@ import certifi
 # can monkeypatch ``local_cli.ClaudeClient`` etc. without chasing lazy imports.
 from security_scanner.shared.claude.client import ClaudeClient
 from security_scanner.shared.models.enums import ScanTarget, ScanType, Severity
+from security_scanner.shared.reports.html import build_html_report
 from security_scanner.shared.reports.markdown import build_markdown_report
 from security_scanner.skill.local_files import LocalFilesClient
 
@@ -277,8 +279,12 @@ def _logout(*, revoke_remote: bool = True) -> int:
 # --- Remote-mode scan --------------------------------------------------------
 
 
-def _collect_files(root: Path, directory: str) -> dict[str, str]:
-    return LocalFilesClient(root).get_repo_files(path=directory)
+def _collect_files(
+    root: Path, directory: str, *, respect_gitignore: bool = True
+) -> dict[str, str]:
+    return LocalFilesClient(
+        root, respect_gitignore=respect_gitignore
+    ).get_repo_files(path=directory)
 
 
 def _scan_remote(
@@ -287,8 +293,9 @@ def _scan_remote(
     directory: str,
     scanner_url: str,
     token: str,
+    respect_gitignore: bool = True,
 ) -> int:
-    files = _collect_files(root, directory)
+    files = _collect_files(root, directory, respect_gitignore=respect_gitignore)
     if not files:
         print("ERROR: no files to scan.", file=sys.stderr)
         return 2
@@ -312,42 +319,66 @@ def _scan_remote(
         },
     )
     print(f"POST {scanner_url}/scan/local  ({len(files)} files) …")
-    try:
-        ctx = ssl.create_default_context(cafile=certifi.where())
-        with urllib.request.urlopen(req, timeout=600, context=ctx) as resp:  # noqa: S310
-            payload = json.loads(resp.read())
-    except urllib.error.HTTPError as exc:
-        body_text = exc.read().decode("utf-8", errors="replace")
-        if exc.code == 401:
-            print(
-                "ERROR: 401 from scanner. Run `phrase-sec-scan login` to refresh your token.",
-                file=sys.stderr,
-            )
-        else:
-            print(f"ERROR: scanner returned HTTP {exc.code}: {body_text}", file=sys.stderr)
-        return 2
-    except (URLError, OSError) as exc:
-        print(f"ERROR: could not reach scanner at {scanner_url}: {exc}", file=sys.stderr)
+    ctx = ssl.create_default_context(cafile=certifi.where())
+    payload: dict | None = None
+    for attempt in (1, 2):  # one retry on 429+Retry-After
+        try:
+            with urllib.request.urlopen(req, timeout=600, context=ctx) as resp:  # noqa: S310
+                payload = json.loads(resp.read())
+            break
+        except urllib.error.HTTPError as exc:
+            body_text = exc.read().decode("utf-8", errors="replace")
+            if exc.code == 429 and attempt == 1:
+                retry_after_raw = exc.headers.get("Retry-After", "10")
+                try:
+                    retry_after = max(1, min(int(retry_after_raw), 60))
+                except ValueError:
+                    retry_after = 10
+                print(
+                    f"Scanner is busy (429). Retrying in {retry_after}s …",
+                    file=sys.stderr,
+                )
+                time.sleep(retry_after)
+                continue
+            if exc.code == 401:
+                print(
+                    "ERROR: 401 from scanner. Run `phrase-sec-scan login` to refresh your token.",
+                    file=sys.stderr,
+                )
+            else:
+                print(f"ERROR: scanner returned HTTP {exc.code}: {body_text}", file=sys.stderr)
+            return 2
+        except (URLError, OSError) as exc:
+            print(f"ERROR: could not reach scanner at {scanner_url}: {exc}", file=sys.stderr)
+            return 2
+    if payload is None:  # both attempts exhausted
+        print("ERROR: scanner remained busy after retry; try again shortly.", file=sys.stderr)
         return 2
 
     report_dir = root / _REPORT_DIR
     report_dir.mkdir(parents=True, exist_ok=True)
-    report_path = report_dir / _REPORT_FILENAME
-    report_path.write_text(payload["markdown"], encoding="utf-8")
+    md_path = report_dir / _REPORT_FILENAME
+    md_path.write_text(payload["markdown"], encoding="utf-8")
+    written = [md_path.relative_to(root)]
+    # Older servers may not ship the html field — guard so the CLI stays
+    # compatible. Newer servers always include it.
+    if payload.get("html"):
+        html_path = report_dir / _REPORT_FILENAME.replace(".md", ".html")
+        html_path.write_text(payload["html"], encoding="utf-8")
+        written.append(html_path.relative_to(root))
     print(
         f"\nDone. {payload['findings_count']} findings "
         f"({payload['critical']} Critical, {payload['high']} High)."
     )
-    rel = report_path.relative_to(root)
-    print(f"Wrote: {rel}")
-    print(f"Open {rel} for findings.")
+    print("Wrote: " + ", ".join(str(p) for p in written))
+    print(f"Open {written[-1]} for findings.")
     return 1 if (payload["critical"] or payload["high"]) else 0
 
 
 # --- Local-mode scan (original behaviour) ------------------------------------
 
 
-def _scan_local(*, root: Path, directory: str) -> int:
+def _scan_local(*, root: Path, directory: str, respect_gitignore: bool = True) -> int:
     import asyncio  # noqa: PLC0415
 
     from security_scanner.pipeline import ScanPipeline, TokenLimitError  # noqa: PLC0415
@@ -363,7 +394,7 @@ def _scan_local(*, root: Path, directory: str) -> int:
 
     scan_target = ScanTarget.directory if directory else ScanTarget.full_repo
     pipeline = ScanPipeline(
-        LocalFilesClient(root),
+        LocalFilesClient(root, respect_gitignore=respect_gitignore),
         ClaudeClient(api_key=api_key),
         mode=ScanType.on_demand,
     )
@@ -389,9 +420,23 @@ def _scan_local(*, root: Path, directory: str) -> int:
 
     report_dir = root / _REPORT_DIR
     report_dir.mkdir(parents=True, exist_ok=True)
-    report_path = report_dir / _REPORT_FILENAME
-    report_path.write_text(build_markdown_report(result), encoding="utf-8")
-    written = [str(report_path.relative_to(root))]
+    md_path = report_dir / _REPORT_FILENAME
+    md_path.write_text(build_markdown_report(result), encoding="utf-8")
+    html_path = report_dir / _REPORT_FILENAME.replace(".md", ".html")
+    # Re-collect files so the HTML report can show the actual vulnerable
+    # lines behind a per-finding "Show vulnerable code" toggle. The pipeline
+    # has already finished; this second read is small change vs. the value
+    # of letting a reviewer eyeball the offending lines without a checkout.
+    snippet_files = _collect_files(
+        root, directory, respect_gitignore=respect_gitignore
+    )
+    html_path.write_text(
+        build_html_report(result, files=snippet_files), encoding="utf-8"
+    )
+    written = [
+        str(md_path.relative_to(root)),
+        str(html_path.relative_to(root)),
+    ]
     for filename, patch_text in result.patches.items():
         (root / filename).write_text(patch_text, encoding="utf-8")
         written.append(filename)
@@ -405,7 +450,7 @@ def _scan_local(*, root: Path, directory: str) -> int:
     )
     print("Wrote: " + ", ".join(written))
     print(
-        f"Open {report_path.relative_to(root)} for findings + fix snippets. "
+        f"Open {html_path.relative_to(root)} (or the .md) for findings + fix snippets. "
         "Apply patches with `git apply <file>.patch` after reviewing, then re-run."
     )
     return 1 if (critical or high) else 0
@@ -437,6 +482,12 @@ def _build_scan_parser() -> argparse.ArgumentParser:
         "--local", action="store_true",
         help="Run the scan pipeline on this machine (needs ANTHROPIC_API_KEY) "
              "instead of POSTing to the deployed scanner.",
+    )
+    p.add_argument(
+        "--no-gitignore", action="store_true",
+        help="Do NOT exclude files matched by .gitignore at the scan root. "
+             "By default, gitignored files are skipped to avoid wasted work "
+             "and false positives on intentionally-uncommitted secrets.",
     )
     return p
 
@@ -484,8 +535,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: {root} is not a directory.", file=sys.stderr)
         return 2
 
+    respect_gitignore = not args.no_gitignore
+
     if args.local:
-        return _scan_local(root=root, directory=args.directory)
+        return _scan_local(
+            root=root, directory=args.directory, respect_gitignore=respect_gitignore
+        )
 
     scanner_url, token = _resolve_endpoint()
     if not scanner_url or not token:
@@ -496,7 +551,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
     return _scan_remote(
-        root=root, directory=args.directory, scanner_url=scanner_url, token=token
+        root=root, directory=args.directory, scanner_url=scanner_url, token=token,
+        respect_gitignore=respect_gitignore,
     )
 
 

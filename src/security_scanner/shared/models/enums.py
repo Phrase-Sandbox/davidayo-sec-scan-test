@@ -29,6 +29,7 @@ class VerificationStatus(StrEnum):
     verified = "verified"
     unverified = "unverified"
     conflicting = "conflicting"
+    advisory_real = "advisory_real"
 
 
 class GateDecision(StrEnum):

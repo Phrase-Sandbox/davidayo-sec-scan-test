@@ -1,0 +1,13 @@
+high_risk_paths:
+  - "auth/"
+  - "authentication/"
+  - "authorization/"
+  - "permissions/"
+  - "billing/"
+  - "payments/"
+  - "admin/"
+  - "tenancy/"
+  - "orgs/"
+  - "accounts/"
+  - "webhooks/"
+  - "integrations/"

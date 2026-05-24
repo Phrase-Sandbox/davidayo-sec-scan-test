@@ -22,6 +22,7 @@ Hard rules from §7.2 and §5 (EC-001..EC-004):
 
 from __future__ import annotations
 
+import asyncio
 import os
 import time
 from collections.abc import Callable
@@ -198,6 +199,20 @@ class ClaudeClient:
         """
         message = self._call_with_retry(system_prompt, user_message)
         return self._extract_text(message)
+
+    # --- Async wrappers (thin asyncio.to_thread delegates) ------------------
+
+    async def analyse_async(self, files: dict[str, str]) -> list[dict]:
+        """Async wrapper around ``analyse`` for use in an event loop.
+
+        Runs the blocking Anthropic SDK call in a thread-pool worker so the
+        event loop is not blocked while waiting for the API response.
+        """
+        return await asyncio.to_thread(self.analyse, files)
+
+    async def ask_async(self, system: str, user: str) -> str:
+        """Async wrapper around ``ask`` for use in an event loop."""
+        return await asyncio.to_thread(self.ask, system, user)
 
     # --- Internals ----------------------------------------------------------
 

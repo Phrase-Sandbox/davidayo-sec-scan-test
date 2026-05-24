@@ -11,8 +11,26 @@ from __future__ import annotations
 import json
 import logging
 import sys
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any
+
+# ---------------------------------------------------------------------------
+# Scan-ID context variable — set once per ScanPipeline.run() and propagated
+# into every coroutine/thread via contextvars.  Concurrent scans each get
+# their own copy so log lines are unambiguously attributed to one request.
+# ---------------------------------------------------------------------------
+_SCAN_ID_VAR: ContextVar[str | None] = ContextVar("_SCAN_ID_VAR", default=None)
+
+
+def set_scan_id(scan_id: str) -> None:
+    """Set the scan_id for the current async task / thread context."""
+    _SCAN_ID_VAR.set(scan_id)
+
+
+def get_scan_id() -> str | None:
+    """Return the scan_id for the current context, or None if not set."""
+    return _SCAN_ID_VAR.get()
 
 REDACT_FIELDS: frozenset[str] = frozenset(
     {"content", "source_code", "code", "file_content", "prompt", "payload"}
@@ -50,6 +68,10 @@ class JSONFormatter(logging.Formatter):
             "level": record.levelname,
             "message": record.getMessage(),
         }
+        # Inject scan_id when one is set for this async context.
+        scan_id = get_scan_id()
+        if scan_id is not None:
+            payload["scan_id"] = scan_id
         for key, value in record.__dict__.items():
             if key in _STANDARD_RECORD_ATTRS or key.startswith("_"):
                 continue

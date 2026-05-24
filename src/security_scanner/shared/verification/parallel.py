@@ -17,6 +17,13 @@ pass's free-text fields never appear in the second call's user message.
 
 Skill (on-demand) path skips this entire module for cost control — see
 BR-009 final sentence.
+
+BR-009 narrowing (post multi-scanner addition):
+    This function is only called on findings where ``f.sources == ["claude"]``.
+    Findings that include scanner sources (semgrep, bandit, etc.) have already
+    been verified by the production-mode verifier in
+    ``shared/verification/vulns.py`` and do not need a second LLM call here.
+    This avoids doubling LLM costs for scanner-corroborated findings.
 """
 
 from __future__ import annotations

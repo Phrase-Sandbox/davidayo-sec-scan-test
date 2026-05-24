@@ -1,0 +1,24 @@
+vulnerabilities:
+  # SQLi: string concatenation with username.
+  - id: "py_sqli_01"
+    class: "sqli"
+    file: "db.py"
+    line_start: 11
+    line_end: 14
+    mandatory: true
+
+  # SQLi: f-string interpolation of order_id.
+  - id: "py_sqli_02"
+    class: "sqli"
+    file: "db.py"
+    line_start: 19
+    line_end: 21
+    mandatory: true
+
+  # SQLi: % format string with name.
+  - id: "py_sqli_03"
+    class: "sqli"
+    file: "db.py"
+    line_start: 26
+    line_end: 28
+    mandatory: true

@@ -168,3 +168,71 @@ def test_local_token_cannot_reach_ci_gate(client):
         headers={"Authorization": f"Bearer {_LOCAL_TOKEN}"},
     )
     assert r.status_code == 401
+
+
+# --- Backpressure: payload cap, concurrency cap ---------------------------
+
+
+def test_content_length_over_cap_returns_413(client):
+    """Fast-path reject before we read the body."""
+    # Send a real (small) body but lie about Content-Length so we don't
+    # actually have to transfer 100+ MB through the test client.
+    r = client.post(
+        "/scan/local",
+        content=b'{"files": {"x": "y"}, "triggered_by": "t", "repo_url": "https://github.com/x/y"}',
+        headers={
+            "Authorization": f"Bearer {_LOCAL_TOKEN}",
+            "Content-Length": str(200 * 1024 * 1024),  # 200 MB
+        },
+    )
+    assert r.status_code == 413
+    assert "Use --directory" in r.json()["detail"]
+
+
+def test_max_concurrent_scans_env_var_override(monkeypatch):
+    """The cap is tunable for higher Anthropic tiers via env var."""
+    from security_scanner.agent.local_scan import _read_max_concurrent_scans
+
+    monkeypatch.setenv("MAX_CONCURRENT_SCANS", "12")
+    assert _read_max_concurrent_scans() == 12
+
+    monkeypatch.setenv("MAX_CONCURRENT_SCANS", "200")  # clamped down to 64
+    assert _read_max_concurrent_scans() == 64
+
+    monkeypatch.setenv("MAX_CONCURRENT_SCANS", "-3")  # clamped up to 1
+    assert _read_max_concurrent_scans() == 1
+
+    monkeypatch.setenv("MAX_CONCURRENT_SCANS", "not-a-number")  # falls back
+    assert _read_max_concurrent_scans() == 4
+
+    monkeypatch.delenv("MAX_CONCURRENT_SCANS", raising=False)
+    assert _read_max_concurrent_scans() == 4
+
+
+def test_returns_429_when_semaphore_is_drained(client, monkeypatch):
+    """Saturate the semaphore and verify a fresh request gets 429+Retry-After."""
+    import security_scanner.agent.local_scan as ls_mod
+
+    # Drain all slots manually to simulate other in-flight scans.
+    drained = []
+    for _ in range(ls_mod._MAX_CONCURRENT_SCANS):
+        # ``locked()`` becomes True only once ``_value <= 0``. We push
+        # the value to 0 by acquiring without awaiting (cheap in tests).
+        ls_mod._scan_semaphore._value -= 1
+    try:
+        r = client.post(
+            "/scan/local",
+            json={
+                "files": {"x.py": "print(1)"},
+                "triggered_by": "tester",
+                "repo_url": "https://github.com/x/y",
+            },
+            headers={"Authorization": f"Bearer {_LOCAL_TOKEN}"},
+        )
+    finally:
+        # Restore the semaphore so subsequent tests aren't broken.
+        for _ in range(ls_mod._MAX_CONCURRENT_SCANS):
+            ls_mod._scan_semaphore._value += 1
+    assert r.status_code == 429
+    assert r.headers["Retry-After"] == "10"
+    assert "at capacity" in r.json()["detail"]

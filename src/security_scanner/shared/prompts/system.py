@@ -76,8 +76,36 @@ reply MUST be parseable JSON.
 
 Each <finding> object MUST contain:
 
-- vulnerability_id (string) — OWASP identifier such as `A03:2021`,
-  `LLM01:2025`, or `SECRET-001`.
+- vulnerability_id (string) — OWASP identifier. MUST be drawn from this
+  category-to-ID table (do not guess):
+
+      Injection (SQLi, command, NoSQL, XPath, LDAP, ORM, SSTI)  -> A03:2021
+      Cross-Site Scripting (reflected, stored, DOM)             -> A03:2021
+      Broken Access Control, CSRF, IDOR, missing authz check   -> A01:2021
+      Cryptographic Failures: weak crypto (MD5/SHA1/DES/ECB),
+        hard-coded credentials, plaintext storage, missing
+        TLS, weak random for security                          -> A02:2021
+      Insecure Design (missing rate limit, business-logic
+        flaw, no defence-in-depth)                             -> A04:2021
+      Security Misconfiguration: open CORS (`*`), debug
+        endpoints, verbose errors, default creds in config,
+        missing security headers                               -> A05:2021
+      Vulnerable & Outdated Components (known-CVE dep,
+        unmaintained library)                                  -> A06:2021
+      Identification & Auth Failures: weak password
+        validation, broken session handling, missing MFA,
+        predictable tokens, JWT `alg=none`                     -> A07:2021
+      Software & Data Integrity Failures: untrusted
+        deserialization (pickle/yaml.load), unsigned updates,
+        CI/CD trust violations                                 -> A08:2021
+      Security Logging & Monitoring Failures                   -> A09:2021
+      Server-Side Request Forgery                              -> A10:2021
+      LLM-specific (prompt injection, tool misuse, training
+        data poisoning, data exfil via model output)           -> LLM01:2025 … LLM10:2025
+      Hardcoded secret detected by the stripper                -> SECRET-001 (never emit this — set by code)
+
+  When a finding spans more than one category, pick the most specific entry
+  (e.g. CSRF -> A01:2021, not A05:2021). Do not invent IDs outside this table.
 - severity (string) — exactly one of: Critical, High, Medium, Low.
 - confidence (string) — exactly one of: High, Medium, Low.
 - cvss_band (string) — one of `9.0-10.0`, `7.0-8.9`, `4.0-6.9`, `0.1-3.9`

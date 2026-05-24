@@ -1,0 +1,64 @@
+"""Tests for the normalisation mapping tables."""
+
+from __future__ import annotations
+
+from security_scanner.shared.scanners.normalize import normalize
+
+
+def test_bandit_b608_maps_to_sqli() -> None:
+    assert normalize("bandit", "B608") == "sqli"
+
+
+def test_bandit_b301_maps_to_deserialization() -> None:
+    assert normalize("bandit", "B301") == "deserialization"
+
+
+def test_bandit_b311_maps_to_insecure_random() -> None:
+    assert normalize("bandit", "B311") == "insecure_random"
+
+
+def test_gosec_g201_maps_to_sqli() -> None:
+    assert normalize("gosec", "G201") == "sqli"
+
+
+def test_gosec_g401_maps_to_weak_crypto() -> None:
+    assert normalize("gosec", "G401") == "weak_crypto"
+
+
+def test_gosec_g404_maps_to_insecure_random() -> None:
+    assert normalize("gosec", "G404") == "insecure_random"
+
+
+def test_semgrep_sqli_maps_to_sqli() -> None:
+    assert normalize("semgrep", "python-sqli-string-format") == "sqli"
+
+
+def test_semgrep_eval_maps_to_code_injection() -> None:
+    assert normalize("semgrep", "python-eval-input") == "code_injection"
+
+
+def test_eslint_sql_maps_to_sqli() -> None:
+    assert normalize("eslint", "security/detect-sql-literal-injection") == "sqli"
+
+
+def test_eslint_child_process_maps_to_command_injection() -> None:
+    assert normalize("eslint", "security/detect-child-process") == "command_injection"
+
+
+def test_unknown_rule_falls_back_gracefully() -> None:
+    """Unknown rule IDs produce a sanitised string rather than raising."""
+    result = normalize("bandit", "B999")
+    assert isinstance(result, str)
+    assert len(result) > 0
+
+
+def test_unknown_tool_falls_back_gracefully() -> None:
+    """Unknown tool names produce a sanitised string rather than raising."""
+    result = normalize("unknown_tool", "SOME-RULE")
+    assert isinstance(result, str)
+
+
+def test_case_insensitive_tool() -> None:
+    """Tool names are normalised to lowercase."""
+    assert normalize("Bandit", "B608") == "sqli"
+    assert normalize("BANDIT", "B608") == "sqli"

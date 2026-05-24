@@ -1,0 +1,36 @@
+vulnerabilities:
+  # SQLi in student creation — raw string interpolation with user input.
+  # sqli/dao/student.py line 42-43: VALUES ('%(name)s')" % {'name': name}
+  - id: "dvpwa_sqli_01"
+    class: "sqli"
+    file: "sqli/dao/student.py"
+    line_start: 42
+    line_end: 43
+    mandatory: true
+
+  # SQLi in course listing — LIMIT/OFFSET via string concatenation without proper param binding.
+  # sqli/dao/course.py lines 30-34: q += ' LIMIT + %(limit)s ' (note the literal + inside the string)
+  - id: "dvpwa_sqli_02"
+    class: "sqli"
+    file: "sqli/dao/course.py"
+    line_start: 28
+    line_end: 36
+    mandatory: true
+
+  # IDOR — student view fetches any student by URL param without authorization check.
+  # sqli/views.py lines 63-80: student_id from URL, no ownership check.
+  - id: "dvpwa_idor_01"
+    class: "idor"
+    file: "sqli/views.py"
+    line_start: 63
+    line_end: 80
+    mandatory: true
+
+  # XSS via Jinja2 template rendering user-supplied review text (not escaped in template).
+  # sqli/views.py lines 111-133: review_text from user submitted to template.
+  - id: "dvpwa_xss_01"
+    class: "xss"
+    file: "sqli/views.py"
+    line_start: 111
+    line_end: 133
+    mandatory: false

@@ -29,9 +29,12 @@ Claude call.
 
 from __future__ import annotations
 
+import asyncio
 import hmac
+import os
 import re
 from collections.abc import Callable
+from html import escape
 from dataclasses import dataclass
 from typing import Annotated
 
@@ -46,6 +49,7 @@ from security_scanner.shared.config import Settings, get_settings
 from security_scanner.shared.logging_util import get_logger
 from security_scanner.shared.models.enums import ScanTarget, ScanType, Severity
 from security_scanner.shared.models.finding import VulnerabilityFinding
+from security_scanner.shared.reports.html import build_html_report
 from security_scanner.shared.reports.markdown import build_markdown_report
 from security_scanner.tokens import audit as token_audit
 from security_scanner.tokens import registry as token_registry
@@ -57,6 +61,33 @@ log = get_logger(__name__)
 router = APIRouter(prefix="/scan", tags=["local-scan"])
 
 _REPO_URL_RE = re.compile(r"^https://github\.com/[^/\s]+/[^/\s]+?(\.git)?/?$")
+
+def _read_max_concurrent_scans(default: int = 4) -> int:
+    """Per-process concurrent-scan cap, tunable via ``MAX_CONCURRENT_SCANS``.
+
+    Clamped to [1, 64]. The cap protects the shared Anthropic key from
+    one client stacking up async tasks that all compete for the same
+    per-minute quota.
+    """
+    raw = os.environ.get("MAX_CONCURRENT_SCANS")
+    if not raw:
+        return default
+    try:
+        n = int(raw)
+    except ValueError:
+        return default
+    return max(1, min(n, 64))
+
+
+_MAX_CONCURRENT_SCANS = _read_max_concurrent_scans()
+_scan_semaphore = asyncio.Semaphore(_MAX_CONCURRENT_SCANS)
+_BUSY_RETRY_AFTER_SECONDS = 10
+
+# Hard ceiling on request body size. Token-limit gate later would catch
+# legitimate over-large repos, but only AFTER Pydantic has deserialised
+# the whole dict into RAM. This fast-path rejects obvious garbage
+# (accidentally pointing the CLI at $HOME, etc.) before that.
+_MAX_REQUEST_BYTES = 100 * 1024 * 1024  # 100 MB
 
 # User-facing messages. The registry path can produce a more specific detail
 # (the outcome) without leaking exploit-useful info — see _detail_for_outcome.
@@ -196,6 +227,7 @@ class LocalScanResponse(BaseModel):
     the local jurisdiction cannot communicate an enforcement verdict."""
 
     markdown: str
+    html: str
     findings_count: int
     critical: int
     high: int
@@ -250,12 +282,60 @@ async def _record_scan_ok_audit(
         await session.commit()
 
 
-@router.post("/local", response_model=LocalScanResponse)
+async def _check_request_size(request: Request) -> None:
+    """Reject oversized requests before the body is read into memory.
+
+    This is a router-level dependency so it runs **before** Pydantic
+    deserialises ``LocalScanRequest`` — that order is what protects the
+    server from holding a 2 GB dict in RAM just to reject it.
+    """
+    cl = request.headers.get("content-length")
+    if not cl:
+        return
+    try:
+        size = int(cl)
+    except ValueError:
+        return  # bad header — let normal parsing fail it
+    if size > _MAX_REQUEST_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=(
+                f"Request body too large ({size // 1_000_000} MB > "
+                f"{_MAX_REQUEST_BYTES // 1_000_000} MB cap). "
+                "Use --directory to scan a sub-tree."
+            ),
+        )
+
+
+async def _check_concurrency_slot() -> None:
+    """Reject when the per-process scan budget is exhausted.
+
+    Returns 429 with ``Retry-After`` instead of waiting in line so callers
+    can decide whether to back off or escalate.
+    """
+    if _scan_semaphore.locked() and _scan_semaphore._value <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            headers={"Retry-After": str(_BUSY_RETRY_AFTER_SECONDS)},
+            detail=(
+                "Scanner is at capacity. Retry shortly — the CLI will do this "
+                "automatically. (Set MAX_CONCURRENT_SCANS higher to raise the "
+                "limit if your Anthropic tier can handle it.)"
+            ),
+        )
+
+
+@router.post(
+    "/local",
+    response_model=LocalScanResponse,
+    dependencies=[Depends(_check_request_size), Depends(_check_concurrency_slot)],
+)
 async def scan_local(
     body: LocalScanRequest,
     caller: _CallerDep,
     factory: _FactoryDep,
 ) -> LocalScanResponse:
+
     if not _REPO_URL_RE.match(body.repo_url):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -279,51 +359,62 @@ async def scan_local(
     )
 
     pipeline = factory(body.files)
-    try:
-        result = await pipeline.run(
-            repo_url=body.repo_url,
-            scan_target=ScanTarget.directory if body.directory else ScanTarget.full_repo,
-            triggered_by=body.triggered_by,
-            directory=body.directory,
-        )
-    except TokenLimitError as exc:
-        return LocalScanResponse(
-            markdown=(
-                "# Security Scan Report\n\n"
-                f"> Project too large to scan in one pass "
+    # Hold a semaphore slot for the duration of the pipeline call. The
+    # locked() pre-check above ensures we don't *wait* for a slot if all
+    # are taken; this `async with` is only entered when capacity exists.
+    async with _scan_semaphore:
+        try:
+            result = await pipeline.run(
+                repo_url=body.repo_url,
+                scan_target=ScanTarget.directory if body.directory else ScanTarget.full_repo,
+                triggered_by=body.triggered_by,
+                directory=body.directory,
+            )
+        except TokenLimitError as exc:
+            oversize_msg = (
+                f"Project too large to scan in one pass "
                 f"(~{exc.estimated_tokens} tokens > {exc.threshold}). "
-                "Re-run scoped to a sub-directory.\n"
-            ),
-            findings_count=0,
-            critical=0,
-            high=0,
-            medium=0,
-            low=0,
-            findings=[],
+                "Re-run scoped to a sub-directory."
+            )
+            return LocalScanResponse(
+                markdown=f"# Security Scan Report\n\n> {oversize_msg}\n",
+                html=(
+                    "<!DOCTYPE html>\n<html lang=\"en\"><head>"
+                    "<meta charset=\"utf-8\"><title>Security Scan Report</title>"
+                    "</head><body><h1>Security Scan Report</h1>"
+                    f"<p>{escape(oversize_msg)}</p></body></html>\n"
+                ),
+                findings_count=0,
+                critical=0,
+                high=0,
+                medium=0,
+                low=0,
+                findings=[],
+            )
+
+        def _count(sev: Severity) -> int:
+            return sum(1 for f in result.findings if f.severity == sev)
+
+        severity_counts = {
+            "critical": _count(Severity.Critical),
+            "high": _count(Severity.High),
+            "medium": _count(Severity.Medium),
+            "low": _count(Severity.Low),
+        }
+
+        # Audit the successful scan (registry mode only — no-op in legacy mode).
+        # Done AFTER the pipeline so we record real outcomes, not just intent.
+        await _record_scan_ok_audit(
+            caller=caller,
+            file_count=len(body.files),
+            findings_count=result.findings_count,
+            severity_counts=severity_counts,
         )
 
-    def _count(sev: Severity) -> int:
-        return sum(1 for f in result.findings if f.severity == sev)
-
-    severity_counts = {
-        "critical": _count(Severity.Critical),
-        "high": _count(Severity.High),
-        "medium": _count(Severity.Medium),
-        "low": _count(Severity.Low),
-    }
-
-    # Audit the successful scan (registry mode only — no-op in legacy mode).
-    # Done AFTER the pipeline so we record real outcomes, not just intent.
-    await _record_scan_ok_audit(
-        caller=caller,
-        file_count=len(body.files),
-        findings_count=result.findings_count,
-        severity_counts=severity_counts,
-    )
-
-    return LocalScanResponse(
-        markdown=build_markdown_report(result),
-        findings_count=result.findings_count,
-        **severity_counts,
-        findings=result.findings,
-    )
+        return LocalScanResponse(
+            markdown=build_markdown_report(result),
+            html=build_html_report(result, files=body.files),
+            findings_count=result.findings_count,
+            **severity_counts,
+            findings=result.findings,
+        )

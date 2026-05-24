@@ -23,6 +23,8 @@ dependencies = [
   "jinja2>=3.1",
   "python-multipart>=0.0.9",
   "certifi>=2024.2.2",
+  "pathspec>=0.12",
+  "pyyaml>=6.0",
 ]
 
 [project.scripts]
@@ -44,6 +46,13 @@ dev = [
 providers = [
   "google-genai>=0.3",
 ]
+# Multi-scanner Layer-1 Python tool dependencies.
+# Install with: pip install .[scanners]
+# gosec and ESLint are installed separately (see Dockerfile).
+scanners = [
+  "semgrep>=1.80",
+  "bandit>=1.7",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -52,6 +61,8 @@ where = ["src"]
 # Path(__file__).parent / "templates" inside the container too.
 [tool.setuptools.package-data]
 "security_scanner.tokens" = ["templates/*.html"]
+"security_scanner.shared.reports" = ["assets/*.png"]
+"security_scanner.shared.context" = ["*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

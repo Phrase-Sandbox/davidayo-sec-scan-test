@@ -24,9 +24,12 @@ appropriate ``gate_decision`` (``scan_failed`` / ``advisory``).
 
 from __future__ import annotations
 
+import asyncio
+import os
 import re
 from datetime import UTC, datetime
 from urllib.parse import urlparse
+from uuid import uuid4
 
 from security_scanner.shared.claude.client import (
     ClaudeClient,
@@ -34,10 +37,11 @@ from security_scanner.shared.claude.client import (
     ClaudeTimeoutError,
     ClaudeUnavailableError,
 )
+from security_scanner.shared.context import ContextPackager
 from security_scanner.shared.filters.file_filter import filter as filter_files
 from security_scanner.shared.filters.post_filter import filter_findings
 from security_scanner.shared.github.client import GitHubAuthError, GitHubClient, GitHubError
-from security_scanner.shared.logging_util import get_logger
+from security_scanner.shared.logging_util import get_logger, get_scan_id, set_scan_id
 from security_scanner.shared.models.enums import (
     Confidence,
     GateDecision,
@@ -49,6 +53,8 @@ from security_scanner.shared.models.enums import (
 from security_scanner.shared.models.finding import VulnerabilityFinding
 from security_scanner.shared.models.scan_result import ScanResult
 from security_scanner.shared.reports.patch import generate_all_patches
+from security_scanner.shared.scanners import run_layer1
+from security_scanner.shared.scanners.merge import merge_with_llm_findings
 from security_scanner.shared.secrets.stripper import SecretStripResult, strip
 from security_scanner.shared.severity.mapping import (
     severity_to_cvss_band,
@@ -65,11 +71,20 @@ from security_scanner.shared.validation.schema import validate
 from security_scanner.shared.verification.parallel import (
     verify_critical_findings,
 )
+from security_scanner.shared.verification.secrets import verify_secret_findings
+from security_scanner.shared.verification.vulns import (
+    candidate_to_finding,
+    verify_vuln_candidates,
+)
 
 log = get_logger(__name__)
 
 SECRET_OWASP_REFERENCE = (
-    "https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/"  # noqa: S105 — OWASP URL, not a credential
+    # A02:2021 Cryptographic Failures is the 2021-edition entry that explicitly
+    # calls out "hard-coded passwords" as an example. A05:2025 Security
+    # Misconfiguration is the 2025-edition counterpart — surfaced by the HTML
+    # report's edition footnote.
+    "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"  # noqa: S105 — OWASP URL, not a credential
 )
 
 
@@ -110,6 +125,20 @@ class ScanPipeline:
         head: str | None = None,
         directory: str = "",
     ) -> ScanResult:
+        # Set scan_id in the context variable so all log lines for this
+        # request carry it, and concurrent scans don't interleave.
+        scan_id = uuid4().hex
+        set_scan_id(scan_id)
+
+        is_gate = self._mode == ScanType.deployment_gate
+
+        # Feature-flag for multi-scanner layer.  Default: on for gate path,
+        # off for /scan/local (ENABLE_MULTI_SCANNER env overrides both).
+        _default_scanner = "true" if is_gate else "false"
+        _enable_scanner = (
+            os.environ.get("ENABLE_MULTI_SCANNER", _default_scanner).lower() == "true"
+        )
+
         # Step 1: parse owner/repo.
         parsed = _parse_repo_url(repo_url)
         if parsed is None:
@@ -154,6 +183,14 @@ class ScanPipeline:
         # Step 6: strip secrets.
         strip_result = strip(files)
         secret_findings = _build_secret_findings(strip_result)
+        # LLM verification of Layer-2/3 hits runs against the ORIGINAL files.
+        # Wrapped in asyncio.to_thread so the blocking ThreadPoolExecutor inside
+        # verify_secret_findings does not block the event loop.
+        original_files = files  # pre-redaction copy for secret verifier
+        secret_findings = await asyncio.to_thread(
+            verify_secret_findings,
+            secret_findings, strip_result.hits, original_files, self._claude
+        )
         files = strip_result.cleaned_files
 
         # Step 7: filter to source files only.
@@ -165,7 +202,7 @@ class ScanPipeline:
                 repo_url=repo_url, scan_target=scan_target, scan_type=self._mode,
                 triggered_by=triggered_by,
                 findings=secret_findings,
-                gate_decision=_decide_gate(secret_findings, partial=False),
+                gate_decision=_decide_gate(secret_findings, partial=False, is_gate=is_gate),
                 partial_scan=False,
                 unscanned_files=[],
             )
@@ -174,20 +211,29 @@ class ScanPipeline:
         if exceeds_limit(files):
             raise TokenLimitError(token_count(files), TOKEN_THRESHOLD)
 
-        # Step 9: Claude — first pass.
+        # Step 9: Parallel Claude first-pass + Layer-1 scanner.
         partial_scan = False
         unscanned: list[str] = []
-        try:
-            raw_findings = self._claude.analyse(files)
-        except ClaudeTimeoutError as exc:
-            log.warning("claude timeout — marking partial_scan", reason=str(exc))
-            partial_scan = True
-            unscanned = list(files.keys())
-            raw_findings = []
-        except ClaudeUnavailableError as exc:
-            if self._mode == ScanType.deployment_gate:
+        raw_findings: list[dict] = []
+
+        if _enable_scanner:
+            # Run Claude and scanners concurrently.
+            llm_task = asyncio.create_task(self._claude.analyse_async(files))
+            scanner_task = asyncio.create_task(run_layer1(files, scan_id))
+            try:
+                raw_findings, aggregated_candidates = await asyncio.gather(
+                    llm_task, scanner_task, return_exceptions=False
+                )
+            except ClaudeTimeoutError as exc:
+                log.warning("claude timeout — marking partial_scan", reason=str(exc))
+                partial_scan = True
+                unscanned = list(files.keys())
+                raw_findings = []
+                aggregated_candidates = []
+            except ClaudeUnavailableError as exc:
                 log.warning(
-                    "claude unavailable on gate path — BR-006 advisory fallback",
+                    "claude unavailable — degraded scan with advisory result",
+                    mode=self._mode.value,
                     reason=str(exc),
                 )
                 return _build_result(
@@ -195,20 +241,47 @@ class ScanPipeline:
                     triggered_by=triggered_by,
                     findings=secret_findings,
                     gate_decision=GateDecision.advisory,
-                    partial_scan=False,
-                    unscanned_files=[],
+                    partial_scan=True,
+                    unscanned_files=list(files.keys()),
                 )
-            # Skill path: bubble up so the developer sees the EC-002 message.
-            raise
-        except ClaudeResponseError as exc:
-            log.warning("claude response malformed", reason=str(exc))
-            return _scan_failed(
-                repo_url, scan_target, self._mode, triggered_by,
-                reason=f"Claude response could not be parsed: {exc}",
-            )
+            except ClaudeResponseError as exc:
+                log.warning("claude response malformed", reason=str(exc))
+                return _scan_failed(
+                    repo_url, scan_target, self._mode, triggered_by,
+                    reason=f"Claude response could not be parsed: {exc}",
+                )
+        else:
+            # Scanner disabled — fall back to Claude-only (original behaviour).
+            aggregated_candidates = []
+            try:
+                raw_findings = await self._claude.analyse_async(files)
+            except ClaudeTimeoutError as exc:
+                log.warning("claude timeout — marking partial_scan", reason=str(exc))
+                partial_scan = True
+                unscanned = list(files.keys())
+                raw_findings = []
+            except ClaudeUnavailableError as exc:
+                log.warning(
+                    "claude unavailable — degraded scan with advisory result",
+                    mode=self._mode.value,
+                    reason=str(exc),
+                )
+                return _build_result(
+                    repo_url=repo_url, scan_target=scan_target, scan_type=self._mode,
+                    triggered_by=triggered_by,
+                    findings=secret_findings,
+                    gate_decision=GateDecision.advisory,
+                    partial_scan=True,
+                    unscanned_files=list(files.keys()),
+                )
+            except ClaudeResponseError as exc:
+                log.warning("claude response malformed", reason=str(exc))
+                return _scan_failed(
+                    repo_url, scan_target, self._mode, triggered_by,
+                    reason=f"Claude response could not be parsed: {exc}",
+                )
 
         # Step 10: schema validation.
-        is_gate = self._mode == ScanType.deployment_gate
         total_lines = sum(content.count("\n") + 1 for content in files.values())
         validation = validate(raw_findings, total_lines, is_gate_path=is_gate)
         valid_findings = validation.valid_findings
@@ -216,20 +289,45 @@ class ScanPipeline:
         # Step 11: post-filter.
         post_filtered = filter_findings(valid_findings)
 
-        # Step 12: BR-009 verification on the gate path only.
+        # Step 12: merge LLM findings with scanner candidates.
+        candidates = merge_with_llm_findings(post_filtered, aggregated_candidates)
+
+        # Step 12b: cross-file context packaging (gate path only — too costly
+        # for on-demand scans / skill path).
+        if is_gate and candidates:
+            bundles = await asyncio.to_thread(
+                ContextPackager().attach, candidates, files
+            )
+        else:
+            bundles = {}
+
+        # Step 13: production-mode vuln verifier (gate path only — too costly
+        # for on-demand scans, which return candidates unverified).
         if is_gate:
-            post_filtered = verify_critical_findings(post_filtered, files, self._claude)
+            kept = await asyncio.to_thread(
+                verify_vuln_candidates, candidates, files, self._claude,
+                bundles=bundles,
+            )
+        else:
+            kept = [candidate_to_finding(c) for c in candidates]
 
-        all_findings = [*secret_findings, *post_filtered]
+        # Step 14: BR-009 defense-in-depth — only for Claude-only Critical findings.
+        # Scanner-sourced findings have already been verified by the new verifier
+        # in step 13.  Skipping BR-009 for them avoids a duplicate LLM call.
+        if is_gate:
+            claude_only = [f for f in kept if f.sources == ["claude"]]
+            scanner_sourced = [f for f in kept if f.sources != ["claude"]]
+            verified_claude = await asyncio.to_thread(
+                verify_critical_findings, claude_only, files, self._claude
+            )
+            kept = [*verified_claude, *scanner_sourced]
 
-        # Step 13: gate decision. We deliberately ignore ``validation.scan_failed``
-        # because it was raised against the *pre-verification* state — every
-        # Critical finding arrived as ``unverified`` from Claude. By this point
-        # the verifier has rewritten those statuses to ``verified`` /
-        # ``conflicting``, and the gate decision below reflects the final state.
-        gate_decision = _decide_gate(all_findings, partial=partial_scan)
+        all_findings = [*secret_findings, *kept]
 
-        # Step 14: patches — populates each finding's patch_file_path as a side effect.
+        # Step 15: gate decision.
+        gate_decision = _decide_gate(all_findings, partial=partial_scan, is_gate=is_gate)
+
+        # Step 16: patches.
         result = _build_result(
             repo_url=repo_url, scan_target=scan_target, scan_type=self._mode,
             triggered_by=triggered_by,
@@ -238,11 +336,6 @@ class ScanPipeline:
             partial_scan=partial_scan,
             unscanned_files=unscanned,
         )
-        # generate_all_patches mutates each finding's patch_file_path AND
-        # returns the {filename: patch_text} dict so the caller can ship
-        # patches as files. Attach the dict to the result so callers don't
-        # need to re-run patch generation (the source files have already
-        # been consumed by Claude at this point).
         result.patches = generate_all_patches(result, files)
         return result
 
@@ -344,10 +437,16 @@ def _build_secret_findings(strip_result: SecretStripResult) -> list[Vulnerabilit
 
 
 def _decide_gate(
-    findings: list[VulnerabilityFinding], *, partial: bool
+    findings: list[VulnerabilityFinding],
+    *,
+    partial: bool,
+    is_gate: bool = True,
 ) -> GateDecision:
     if any(should_block(f) for f in findings):
-        return GateDecision.blocked
+        # On-demand (skill) scans are informational — demote blockers to
+        # advisory so the developer is notified but not stopped. Only the
+        # deployment gate path actually blocks.
+        return GateDecision.blocked if is_gate else GateDecision.advisory
     if partial:
         return GateDecision.advisory
     if findings:

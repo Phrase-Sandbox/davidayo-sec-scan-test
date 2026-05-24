@@ -50,7 +50,9 @@ def test_verification_status_members_match_spec():
     assert VerificationStatus.verified.value == "verified"
     assert VerificationStatus.unverified.value == "unverified"
     assert VerificationStatus.conflicting.value == "conflicting"
-    assert len(VerificationStatus) == 3
+    # v2 addition: advisory_real lane for medium-confidence reals (non-blocking).
+    assert VerificationStatus.advisory_real.value == "advisory_real"
+    assert len(VerificationStatus) == 4
 
 
 def test_gate_decision_members_match_spec_and_pass_keyword_workaround():

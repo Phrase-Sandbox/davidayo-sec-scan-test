@@ -15,19 +15,45 @@ COPY src/ ./src/
 # RUN_MIGRATIONS_ON_STARTUP=true) — bake them in alongside the source tree.
 COPY alembic/ ./alembic/
 COPY alembic.ini ./
+# Vendored scanner configs — copied at build time so scans never hit external networks.
+COPY semgrep_configs/ ./semgrep_configs/
+COPY eslint_security/ ./eslint_security/
 
 RUN python -m venv /opt/venv \
  && /opt/venv/bin/pip install --no-cache-dir --upgrade pip \
- && /opt/venv/bin/pip install --no-cache-dir ".[providers]"
+ && /opt/venv/bin/pip install --no-cache-dir ".[providers,scanners]"
 
 # --- Runtime stage -------------------------------------------------------------
 FROM python:3.12-slim AS runtime
 
-# curl is needed for the HEALTHCHECK probe below. Nothing else from the
-# apt cache is kept.
+# curl is needed for the HEALTHCHECK probe below.
+# nodejs + npm are needed for the ESLint-security scanner adapter.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends curl \
+ && apt-get install -y --no-install-recommends curl nodejs npm \
  && rm -rf /var/lib/apt/lists/*
+
+# Install ESLint and eslint-plugin-security at pinned versions.
+# These must match the versions in eslint_security/.eslintrc.security.json.
+RUN npm install -g eslint@8.57.0 eslint-plugin-security@3.0.0 eslint-plugin-no-unsanitized@4.0.2 \
+ && npm cache clean --force
+
+# Install gosec (Go security checker) from a pinned GitHub release.
+# TODO: verify SHA-256 before merge — download the release asset from
+# https://github.com/securego/gosec/releases/download/v2.21.4/gosec_2.21.4_linux_amd64.tar.gz
+# and run: sha256sum gosec_2.21.4_linux_amd64.tar.gz
+# Then replace the placeholder below with the actual hash.
+# Pinned URL: https://github.com/securego/gosec/releases/download/v2.21.4/gosec_2.21.4_linux_amd64.tar.gz
+# Expected SHA-256: TODO: verify SHA-256 before merge
+RUN set -eux; \
+    GOSEC_VERSION="2.21.4"; \
+    GOSEC_URL="https://github.com/securego/gosec/releases/download/v${GOSEC_VERSION}/gosec_${GOSEC_VERSION}_linux_amd64.tar.gz"; \
+    curl -fsSL "${GOSEC_URL}" -o /tmp/gosec.tar.gz; \
+    # TODO: verify SHA-256 before merge — uncomment and fill in after verifying:
+    # echo "<SHA256_HASH>  /tmp/gosec.tar.gz" | sha256sum -c -; \
+    tar -xzf /tmp/gosec.tar.gz -C /tmp gosec; \
+    mv /tmp/gosec /usr/local/bin/gosec; \
+    chmod +x /usr/local/bin/gosec; \
+    rm /tmp/gosec.tar.gz
 
 # Non-root user, no login shell, fixed uid for K8s PSP compatibility.
 RUN groupadd --gid 1000 app \

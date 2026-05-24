@@ -52,7 +52,10 @@ def should_block(finding: VulnerabilityFinding) -> bool:
     - Confidence must be High (BR-001-A — low-confidence findings are advisory).
     - For Critical findings only: ``verification_status`` must be ``verified``
       (BR-009 — unverified or conflicting Criticals are advisory).
+    - advisory_real findings never block (they are auto-triaged advisory).
     """
+    if finding.verification_status == VerificationStatus.advisory_real:
+        return False
     if finding.severity not in _BLOCKING_SEVERITIES:
         return False
     if finding.confidence != Confidence.High:
@@ -68,10 +71,13 @@ def is_advisory_only(finding: VulnerabilityFinding) -> bool:
     These are findings that "look like blockers" but were demoted:
     - High/Critical severity with Medium/Low confidence (BR-001-A demotion).
     - Critical with ``verification_status == conflicting`` (BR-009 demotion).
+    - Any finding with ``verification_status == advisory_real`` (auto-triaged lane).
 
     Medium/Low findings are *not* flagged here — they are naturally advisory
     and need no extra header warning.
     """
+    if finding.verification_status == VerificationStatus.advisory_real:
+        return True
     if finding.severity in _BLOCKING_SEVERITIES and finding.confidence in _LOW_CONFIDENCES:
         return True
     if (

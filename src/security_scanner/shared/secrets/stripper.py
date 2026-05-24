@@ -45,6 +45,14 @@ _GITHUB_PAT_PATTERN: re.Pattern[str] = re.compile(r"\bgithub_pat_[A-Za-z0-9_]{82
 _ANTHROPIC_PATTERN: re.Pattern[str] = re.compile(r"\bsk-ant-[A-Za-z0-9_\-]{20,}\b")
 # AWS Access Key ID (AKIA = long-lived, ASIA = STS temporary)
 _AWS_ACCESS_KEY_PATTERN: re.Pattern[str] = re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")
+# Slack incoming-webhook URLs. The trailing token segment is the credential —
+# anyone with the URL can post into the linked Slack channel. The URL filter
+# in ``_detect_secrets_values`` drops these (no Basic-Auth segment) and
+# ``detect-secrets`` has no Slack-webhook plugin, so a dedicated Layer-1
+# regex is the only way to surface them.
+_SLACK_WEBHOOK_PATTERN: re.Pattern[str] = re.compile(
+    r"\bhttps://hooks\.slack\.com/services/T[A-Z0-9]+/B[A-Z0-9]+/[A-Za-z0-9]{20,}\b"
+)
 
 # --- BR-003 type 2: OAuth tokens --------------------------------------------
 # RFC 6750 Bearer scheme — replace the token, keep "Bearer" for context.
@@ -61,14 +69,38 @@ _JWT_PATTERN: re.Pattern[str] = re.compile(
 
 # --- BR-003 type 5: password=, secret=, token=, api_key=, auth_token= -------
 # Value-only redaction to keep the key/separator visible for the analysis model.
+# Two alternation arms:
+#   1. lowercase keyword vocabulary (case-insensitive via (?i))
+#   2. ALL_CAPS env-var shapes ending in _KEY/_TOKEN/_SECRET/_PASSWORD/_PWD
+#      (e.g. STRIPE_KEY, DB_PASSWORD, JWT_SECRET) — not covered by arm 1
+#      because the keyword has to appear as a whole word.
 _CONFIG_SECRET_PATTERN: re.Pattern[str] = re.compile(
-    r"(?i)\b((?:password|passwd|secret|token|api[_\-]?key|auth[_\-]?token)\s*[:=]\s*)"
-    r"(['\"]?)([^\s'\"().\[\]{},+]{4,})\2"
+    r"(?i)\b((?:"
+    r"password|passwd|pwd|pass|secret|token|api[_\-]?key|auth[_\-]?token"
+    r"|private[_\-]?key|client[_\-]?secret|access[_\-]?key|credential|bearer"
+    r"|[A-Z][A-Z0-9]*_(?:KEY|TOKEN|SECRET|PASSWORD|PWD)"
+    r")\s*[:=]\s*)"
+    # ``.`` is allowed in the value class so dotted vendor tokens (SendGrid
+    # ``SG.xxx.yyy``, Mailchimp ``xxx-us1``, JWT ``a.b.c``) match. Python
+    # expression FPs like ``token = obj.attr`` are still filtered by the
+    # entropy gate in ``_scan_for_hits`` for unquoted code-file values.
+    r"(['\"]?)([^\s'\"()\[\]{},+]{4,})\2"
 )
 
 # --- BR-003 type 1: generic high-entropy strings ≥20 chars in quoted contexts
 _QUOTED_STRING_PATTERN: re.Pattern[str] = re.compile(
     rf"(['\"])([A-Za-z0-9+/=_\-]{{{HIGH_ENTROPY_MIN_LENGTH},}})\1"
+)
+
+# --- SQL fixture credentials -------------------------------------------------
+# Matches ``password='hunter2'``, ``md5('hunter2')``, ``crypt('pw')`` —
+# shapes where the credential is a quoted argument rather than a
+# ``keyword = value`` assignment. Constrained to ``.sql`` files in the
+# call sites below to avoid FP explosion on every quoted short string in
+# code files.
+_SQL_CREDENTIAL_LITERAL_PATTERN: re.Pattern[str] = re.compile(
+    r"(?i)\b(password|passwd|pwd|secret|token|api[_\-]?key|md5|sha1|sha256|crypt|hash)"
+    r"\s*[(=]\s*['\"]([^'\"]{1,128})['\"]"
 )
 
 
@@ -159,6 +191,7 @@ def _strip_one(content: str, filename: str) -> tuple[str, list[SecretHit]]:
         _GITHUB_TOKEN_PATTERN,
         _ANTHROPIC_PATTERN,
         _AWS_ACCESS_KEY_PATTERN,
+        _SLACK_WEBHOOK_PATTERN,
         _GOOGLE_OAUTH_PATTERN,
         _JWT_PATTERN,
     ):
@@ -171,6 +204,11 @@ def _strip_one(content: str, filename: str) -> tuple[str, list[SecretHit]]:
 
     # password=/secret=/token=/api_key= — replace value, keep key and separator.
     content = _CONFIG_SECRET_PATTERN.sub(_make_redact_config_value(filename), content)
+
+    # SQL fixture credentials — quoted arguments next to password columns
+    # or md5()/crypt() calls. Scoped to .sql to avoid FP explosion.
+    if filename.lower().endswith(".sql"):
+        content = _SQL_CREDENTIAL_LITERAL_PATTERN.sub(_redact_sql_literal, content)
 
     # Generic high-entropy quoted strings (truffleHog-style, length + Shannon).
     content = _QUOTED_STRING_PATTERN.sub(_redact_if_high_entropy, content)
@@ -228,6 +266,7 @@ def _scan_for_hits(
         (_GITHUB_TOKEN_PATTERN, "github_token"),
         (_ANTHROPIC_PATTERN, "anthropic"),
         (_AWS_ACCESS_KEY_PATTERN, "aws_access_key"),
+        (_SLACK_WEBHOOK_PATTERN, "slack_webhook"),
         (_GOOGLE_OAUTH_PATTERN, "google_oauth"),
         (_JWT_PATTERN, "jwt"),
     ):
@@ -246,6 +285,10 @@ def _scan_for_hits(
         ):
             continue
         _record(m.start(3), m.end(3), "config_secret")
+
+    if filename.lower().endswith(".sql"):
+        for m in _SQL_CREDENTIAL_LITERAL_PATTERN.finditer(content):
+            _record(m.start(2), m.end(2), "sql_credential")
 
     for m in _QUOTED_STRING_PATTERN.finditer(content):
         if _shannon_entropy(m.group(2)) >= HIGH_ENTROPY_THRESHOLD_BITS_PER_CHAR:
@@ -289,6 +332,27 @@ def _is_code_file(filename: str) -> bool:
     return any(lower.endswith(ext) for ext in _CODE_FILE_EXTENSIONS)
 
 
+# Committed template files (``.env.example``, ``.env.local.example``,
+# ``.tmpl``, ``.dist``) exist to teach a hardcoding *shape* with placeholder
+# values. They get special handling in the verifier: Layer-1 vendor matches
+# are not auto-verified (so a real key accidentally pasted into a template
+# is still caught), and structural-placeholder matches are downgraded to
+# Medium with a 1Password-policy advisory rather than reported as Critical.
+_TEMPLATE_FILE_SUFFIXES: frozenset[str] = frozenset(
+    {".example", ".sample", ".template", ".tmpl", ".dist"}
+)
+
+
+def _is_template_file(filename: str) -> bool:
+    """True iff ``filename`` ends with a committed-template suffix.
+
+    Covers ``.env.example``, ``.env.local.example``, ``config.yaml.sample``,
+    ``docker-compose.template``, ``app.config.tmpl``, ``Makefile.dist`` etc.
+    """
+    lower = filename.lower()
+    return any(lower.endswith(suffix) for suffix in _TEMPLATE_FILE_SUFFIXES)
+
+
 def _make_redact_config_value(filename: str):
     """Closure-based redactor so we can consult the filename in the callback."""
 
@@ -307,11 +371,40 @@ def _make_redact_config_value(filename: str):
     return _redact
 
 
+def _redact_sql_literal(m: re.Match[str]) -> str:
+    """Replace the quoted value while preserving the SQL function/column context."""
+    full = m.group(0)
+    value = m.group(2)
+    return full.replace(value, REDACTED, 1)
+
+
 def _redact_if_high_entropy(m: re.Match[str]) -> str:
     quote, value = m.group(1), m.group(2)
     if _shannon_entropy(value) >= HIGH_ENTROPY_THRESHOLD_BITS_PER_CHAR:
         return f"{quote}{REDACTED}{quote}"
     return m.group(0)
+
+
+_BASIC_AUTH_URL_RE: re.Pattern[str] = re.compile(
+    r"://[^@/\s]+:[^@/\s]+@",
+    re.IGNORECASE,
+)
+
+
+def _is_plain_url_or_path(value: str) -> bool:
+    """True iff *value* should be dropped as a URL/path false positive.
+
+    The original blanket filter dropped anything containing ``/`` or ``://``,
+    which also discarded genuine Basic-Auth URLs like
+    ``postgres://user:pw@host``. This version keeps that suppression for
+    plain URLs, paths, and URL substrings returned by ``detect-secrets``,
+    but carves out an exception: a value containing a
+    ``scheme://user:pw@`` authority segment is a real credential and is
+    NOT treated as a URL FP.
+    """
+    if _BASIC_AUTH_URL_RE.search(value):
+        return False
+    return "/" in value
 
 
 def _shannon_entropy(s: str) -> float:
@@ -350,13 +443,21 @@ def _detect_secrets_values(content: str) -> list[str]:
             for line in content.splitlines():
                 for secret in scan.scan_line(line):
                     value = getattr(secret, "secret_value", None)
-                    if not value or len(value) < HIGH_ENTROPY_MIN_LENGTH:
+                    if not value:
+                        continue
+                    # Basic-Auth credentials are short by nature
+                    # (``postgres://user:pw@host``). Skip the length/entropy
+                    # gates and the URL filter for this high-precision plugin.
+                    if getattr(secret, "type", "") == "Basic Auth Credentials":
+                        values.append(value)
+                        continue
+                    if len(value) < HIGH_ENTROPY_MIN_LENGTH:
                         continue
                     if _shannon_entropy(value) < HIGH_ENTROPY_THRESHOLD_BITS_PER_CHAR:
                         continue
-                    # URL/path fragments routinely have high entropy + length but
-                    # are not secrets; skip them to avoid mangling URLs in source.
-                    if "/" in value or "://" in value:
+                    # Plain URLs and filesystem paths are common high-entropy
+                    # FPs from the generic detect-secrets plugins; drop them.
+                    if _is_plain_url_or_path(value):
                         continue
                     values.append(value)
     except Exception:  # noqa: BLE001 — defensive: never let a lib bug break the scan

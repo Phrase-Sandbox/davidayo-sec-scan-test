@@ -1,0 +1,24 @@
+vulnerabilities:
+  # Deserialization: pickle.loads on raw request body.
+  - id: "py_deserial_01"
+    class: "deserialization"
+    file: "deserial.py"
+    line_start: 16
+    line_end: 18
+    mandatory: true
+
+  # Deserialization: yaml.load with unsafe Loader.
+  - id: "py_deserial_02"
+    class: "deserialization"
+    file: "deserial.py"
+    line_start: 23
+    line_end: 25
+    mandatory: true
+
+  # Deserialization: base64-decode then pickle.loads.
+  - id: "py_deserial_03"
+    class: "deserialization"
+    file: "deserial.py"
+    line_start: 30
+    line_end: 33
+    mandatory: true

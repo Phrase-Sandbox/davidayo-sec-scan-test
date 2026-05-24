@@ -1,0 +1,60 @@
+rules:
+  - id: python-subprocess-shell-true
+    patterns:
+      - pattern: subprocess.run(..., shell=True, ...)
+      - pattern: subprocess.call(..., shell=True, ...)
+      - pattern: subprocess.Popen(..., shell=True, ...)
+      - pattern: subprocess.check_call(..., shell=True, ...)
+      - pattern: subprocess.check_output(..., shell=True, ...)
+    message: >
+      subprocess called with shell=True. This passes the command through a
+      shell, allowing command injection if any part of the command string
+      is user-controlled. Use shell=False with a list argument.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      vuln_class: command_injection
+      owasp: A03:2021
+
+  - id: python-hashlib-md5
+    patterns:
+      - pattern: hashlib.md5(...)
+      - pattern: hashlib.new("md5", ...)
+    message: >
+      MD5 is a cryptographically broken hash function. Do not use for
+      password hashing, integrity checks, or other security-sensitive
+      purposes. Use SHA-256 or bcrypt/argon2 instead.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      vuln_class: weak_crypto
+      owasp: A02:2021
+
+  - id: python-hashlib-sha1
+    patterns:
+      - pattern: hashlib.sha1(...)
+      - pattern: hashlib.new("sha1", ...)
+    message: >
+      SHA-1 is a cryptographically broken hash function. Do not use for
+      security-sensitive purposes. Use SHA-256 or better.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      vuln_class: weak_crypto
+      owasp: A02:2021
+
+  - id: python-random-security
+    patterns:
+      - pattern: random.random()
+      - pattern: random.randint(...)
+      - pattern: random.choice(...)
+      - pattern: random.shuffle(...)
+    message: >
+      random module uses a PRNG that is not cryptographically secure.
+      For tokens, session keys, passwords, or other security-sensitive
+      values, use secrets.token_bytes() or secrets.token_hex() instead.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      vuln_class: insecure_random
+      owasp: A02:2021

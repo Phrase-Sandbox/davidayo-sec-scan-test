@@ -65,6 +65,35 @@ local_scan_auth_outcomes_total = Counter(
 )
 
 
+# ---------------------------------------------------------------------------
+# Multi-scanner Layer-1 metrics.
+# ---------------------------------------------------------------------------
+
+scanner_runs_total = Counter(
+    "scanner_runs_total",
+    "Total scanner tool invocations.",
+    ["tool", "outcome"],  # outcome: success | timeout | error | skipped
+)
+
+scanner_duration_seconds = Histogram(
+    "scanner_duration_seconds",
+    "Duration of individual scanner tool runs in seconds.",
+    ["tool"],
+)
+
+vuln_verifier_calls_total = Counter(
+    "vuln_verifier_calls_total",
+    "Total calls to the production-mode vulnerability verifier.",
+    ["outcome"],  # outcome: real | false_positive | unverified | error
+)
+
+consensus_findings_total = Counter(
+    "consensus_findings_total",
+    "Total aggregated candidates produced by the consensus step, by voter count.",
+    ["voter_count"],  # voter_count: "1", "2", "3", "4+"
+)
+
+
 def metrics_endpoint() -> Response:
     """Render the current metrics registry as Prometheus text format."""
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)

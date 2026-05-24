@@ -1,0 +1,40 @@
+vulnerabilities:
+  # IDOR: /documents/<id> fetches document without ownership check.
+  - id: "py_authz_idor_01"
+    class: "idor"
+    file: "app.py"
+    line_start: 37
+    line_end: 42
+    mandatory: true
+
+  # Auth bypass: /profiles/<id> PUT has no authentication at all.
+  - id: "py_authz_auth_02"
+    class: "auth_bypass"
+    file: "app.py"
+    line_start: 45
+    line_end: 51
+    mandatory: true
+
+  # Auth bypass: role read from user-controlled request body.
+  - id: "py_authz_auth_03"
+    class: "auth_bypass"
+    file: "app.py"
+    line_start: 54
+    line_end: 60
+    mandatory: true
+
+  # Auth bypass: DELETE endpoint missing any authentication.
+  - id: "py_authz_auth_04"
+    class: "auth_bypass"
+    file: "app.py"
+    line_start: 63
+    line_end: 69
+    mandatory: true
+
+  # IDOR: /users/<user_id>/invoices has no ownership check.
+  - id: "py_authz_idor_05"
+    class: "idor"
+    file: "app.py"
+    line_start: 79
+    line_end: 88
+    mandatory: true

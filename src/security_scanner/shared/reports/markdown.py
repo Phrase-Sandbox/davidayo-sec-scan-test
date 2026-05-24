@@ -106,6 +106,17 @@ def _gather_warnings(result: ScanResult) -> list[str]:
             "are not blocking."
         )
 
+    auto_triaged = [
+        f for f in result.findings
+        if f.verification_status == VerificationStatus.advisory_real
+    ]
+    if auto_triaged:
+        warnings.append(
+            f"ℹ️ **AUTO-TRIAGED** — {len(auto_triaged)} findings were "
+            "auto-triaged as potential issues with medium confidence. "
+            "These are not blocking — review at your discretion."
+        )
+
     if not result.findings:
         warnings.append(
             "⚠️ **NO FINDINGS DETECTED** — developer acknowledgement "
@@ -159,14 +170,36 @@ def _detailed_findings(findings: list[VulnerabilityFinding]) -> str:
             if f.affected_lines
             else f"`{f.affected_file}`"
         )
+        # "Detected by" row: only when consensus score >= 1 and multiple sources.
+        detected_by_line = ""
+        if f.consensus_score >= 1 and len(f.sources) > 1:
+            source_list = ", ".join(f.sources)
+            detected_by_line = (
+                f"- **Detected by**: {source_list} "
+                f"({f.consensus_score} voter{'s' if f.consensus_score != 1 else ''})\n"
+            )
+        # Advisory_real badge.
+        advisory_badge = (
+            "\n> **Potential issue (auto-triaged, not blocking)**"
+            if f.verification_status == VerificationStatus.advisory_real
+            else ""
+        )
+        # Context summary block when present.
+        context_block = ""
+        if f.context_summary:
+            context_block = (
+                f"\n**Cross-file context**\n\n"
+                f"```\n{f.context_summary}\n```\n"
+            )
         sections.append(
             f"### {f.vulnerability_id} — {f.severity.value} "
             f"(confidence: {f.confidence.value}, verification: "
-            f"{f.verification_status.value})\n"
+            f"{f.verification_status.value}){advisory_badge}\n"
             f"\n"
             f"- **Location**: {location}\n"
             f"- **OWASP reference**: {f.owasp_reference}\n"
             f"- **Patch file**: `{f.patch_file_path}`\n"
+            f"{detected_by_line}"
             f"\n"
             f"**Description**\n\n"
             f"{f.description}\n"
@@ -176,6 +209,7 @@ def _detailed_findings(findings: list[VulnerabilityFinding]) -> str:
             f"\n"
             f"**Suggested fix**\n\n"
             f"{f.suggested_fix}"
+            f"{context_block}"
         )
     return "\n\n---\n\n".join(sections)
 

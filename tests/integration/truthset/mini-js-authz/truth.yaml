@@ -1,0 +1,24 @@
+vulnerabilities:
+  # IDOR: GET /orders/:id without ownership check.
+  - id: "js_authz_idor_01"
+    class: "idor"
+    file: "routes.js"
+    line_start: 22
+    line_end: 27
+    mandatory: true
+
+  # Auth bypass: DELETE /orders/:id with no authentication.
+  - id: "js_authz_auth_01"
+    class: "auth_bypass"
+    file: "routes.js"
+    line_start: 30
+    line_end: 36
+    mandatory: true
+
+  # Privilege escalation: role update without admin verification.
+  - id: "js_authz_privesc_01"
+    class: "auth_bypass"
+    file: "routes.js"
+    line_start: 39
+    line_end: 47
+    mandatory: true

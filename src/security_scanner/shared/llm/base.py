@@ -40,3 +40,11 @@ class LLMClient(Protocol):
     def ask(self, system_prompt: str, user_message: str) -> str:
         """Send a one-off prompt; return the raw text reply (BR-009)."""
         ...
+
+    async def analyse_async(self, files: dict[str, str]) -> list[dict]:
+        """Async variant of ``analyse`` — delegates to a thread-pool worker."""
+        ...
+
+    async def ask_async(self, system: str, user: str) -> str:
+        """Async variant of ``ask`` — delegates to a thread-pool worker."""
+        ...

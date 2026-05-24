@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -130,6 +130,9 @@ def _mock_claude_returning(findings: list[dict]) -> MagicMock:
     # BR-009 verifier on the gate path issues .ask() calls — default to "yes"
     # so Critical findings are confirmed unless a test overrides.
     mock.ask.return_value = "VERDICT: yes"
+    # Pipeline calls analyse_async / ask_async — explicit AsyncMock wiring.
+    mock.analyse_async = AsyncMock(return_value=findings)
+    mock.ask_async = AsyncMock(return_value="VERDICT: yes")
     return mock
 
 
@@ -267,6 +270,8 @@ def test_claude_503_yields_advisory():
     files = {"src/handlers/users.py": "def f():\n    return 1\n"}
     claude = _mock_claude_returning([])
     claude.analyse.side_effect = ClaudeUnavailableError("retries exhausted")
+    # Pipeline calls analyse_async; mirror the side_effect there.
+    claude.analyse_async = AsyncMock(side_effect=ClaudeUnavailableError("retries exhausted"))
 
     pipeline = ScanPipeline(
         _mock_github(files),

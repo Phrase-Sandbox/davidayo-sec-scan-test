@@ -1,0 +1,16 @@
+vulnerabilities:
+  # SSRF: user-controlled URL passed to http.Get.
+  - id: "go_ssrf_01"
+    class: "ssrf"
+    file: "main.go"
+    line_start: 27
+    line_end: 33
+    mandatory: true
+
+  # SSRF: user-controlled callback_url passed to http.Post.
+  - id: "go_ssrf_02"
+    class: "ssrf"
+    file: "main.go"
+    line_start: 45
+    line_end: 51
+    mandatory: true

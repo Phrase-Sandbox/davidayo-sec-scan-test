@@ -1,0 +1,78 @@
+rules:
+  - id: python-sqli-string-format
+    patterns:
+      - pattern: cursor.execute(f"...{$X}...")
+      - pattern: cursor.execute("..." + $X + "...")
+      - pattern: cursor.execute("..." % $X)
+    message: >
+      SQL query constructed by string formatting with user-controlled input.
+      Use parameterised queries: cursor.execute("... WHERE id = %s", (value,))
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: sqli
+      owasp: A03:2021
+
+  - id: python-sqli-concat
+    pattern: |
+      $CURSOR.execute($QUERY + ...)
+    message: >
+      SQL query constructed by string concatenation. Use parameterised queries.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: sqli
+      owasp: A03:2021
+
+  - id: python-eval-input
+    pattern: eval($X)
+    message: >
+      eval() called with potentially untrusted input. This allows arbitrary
+      code execution. Replace with a safe alternative.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: code_injection
+      owasp: A03:2021
+
+  - id: python-os-system-input
+    patterns:
+      - pattern: os.system($X)
+      - pattern: os.popen($X)
+    message: >
+      os.system/popen called with potentially untrusted input. Use
+      subprocess with a list argument and shell=False instead.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: command_injection
+      owasp: A03:2021
+
+  - id: python-pickle-loads
+    patterns:
+      - pattern: pickle.loads($X)
+      - pattern: pickle.load($X)
+      - pattern: cPickle.loads($X)
+      - pattern: cPickle.load($X)
+    message: >
+      pickle.loads() deserializes arbitrary Python objects, allowing remote
+      code execution if the input is attacker-controlled.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: deserialization
+      owasp: A08:2021
+
+  - id: python-xml-parse-no-defusedxml
+    patterns:
+      - pattern: xml.etree.ElementTree.parse($X)
+      - pattern: xml.etree.ElementTree.fromstring($X)
+      - pattern: xml.etree.cElementTree.parse($X)
+    message: >
+      Standard XML parsing is vulnerable to XXE and billion-laughs attacks.
+      Use defusedxml.ElementTree instead.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      vuln_class: xxe
+      owasp: A05:2021
