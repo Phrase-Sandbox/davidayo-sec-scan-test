@@ -1,9 +1,9 @@
 rules:
   - id: python-sqli-string-format
     patterns:
-      - pattern: cursor.execute(f"...{$X}...")
-      - pattern: cursor.execute("..." + $X + "...")
-      - pattern: cursor.execute("..." % $X)
+      - pattern: $CUR.execute(f"...{$X}...")
+      - pattern: $CUR.execute("..." + $X + "...")
+      - pattern: $CUR.execute("..." % $X)
     message: >
       SQL query constructed by string formatting with user-controlled input.
       Use parameterised queries: cursor.execute("... WHERE id = %s", (value,))
