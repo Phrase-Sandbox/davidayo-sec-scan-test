@@ -39,8 +39,10 @@ def _claude(findings: list[dict] | None = None) -> MagicMock:
     # The verifier on the gate path calls .ask() — default to "yes" so any
     # Critical finding is verified unless a test overrides.
     mock.ask.return_value = "VERDICT: yes"
-    # Async wrappers — pipeline now calls analyse_async / ask_async.
+    # Async wrappers — pipeline now calls analyse_async_chunked / ask_async.
     mock.analyse_async = AsyncMock(return_value=findings or [])
+    # analyse_async_chunked returns (raw_findings, partial_files).
+    mock.analyse_async_chunked = AsyncMock(return_value=(findings or [], []))
     mock.ask_async = AsyncMock(return_value="VERDICT: yes")
     return mock
 
@@ -198,7 +200,7 @@ def test_no_files_returned_results_in_advisory():
 
     assert result.gate_decision == GateDecision.advisory
     assert result.findings == []
-    claude.analyse_async.assert_not_called()
+    claude.analyse_async_chunked.assert_not_called()
 
 
 def test_empty_diff_skips_scan_and_is_advisory():
@@ -216,7 +218,7 @@ def test_empty_diff_skips_scan_and_is_advisory():
     )
 
     assert result.gate_decision == GateDecision.advisory
-    claude.analyse_async.assert_not_called()
+    claude.analyse_async_chunked.assert_not_called()
 
 
 def test_diff_target_without_base_or_head_is_scan_failed():
@@ -289,8 +291,8 @@ def test_secret_value_never_sent_to_claude():
     )
 
     # If Claude was called at all, the user message must not contain the secret.
-    if claude.analyse_async.called:
-        sent_files = claude.analyse_async.call_args.args[0]
+    if claude.analyse_async_chunked.called:
+        sent_files = claude.analyse_async_chunked.call_args.args[0]
         assert all(fake_secret not in c for c in sent_files.values())
 
 
@@ -303,7 +305,7 @@ def test_claude_unavailable_on_gate_path_results_in_advisory_not_blocked():
     github = _gh(files)
     claude = _claude()
     claude.analyse.side_effect = ClaudeUnavailableError("retries exhausted")
-    claude.analyse_async.side_effect = ClaudeUnavailableError("retries exhausted")
+    claude.analyse_async_chunked.side_effect = ClaudeUnavailableError("retries exhausted")
 
     result = _run(
         ScanPipeline(github, claude, mode=ScanType.deployment_gate),
@@ -324,7 +326,7 @@ def test_claude_unavailable_on_skill_path_returns_advisory_partial_scan():
     github = _gh(files)
     claude = _claude()
     claude.analyse.side_effect = ClaudeUnavailableError("retries exhausted")
-    claude.analyse_async.side_effect = ClaudeUnavailableError("retries exhausted")
+    claude.analyse_async_chunked.side_effect = ClaudeUnavailableError("retries exhausted")
 
     result = _run(
         ScanPipeline(github, claude, mode=ScanType.on_demand),
@@ -346,7 +348,7 @@ def test_claude_timeout_sets_partial_scan_and_lists_unscanned_files():
     github = _gh(files)
     claude = _claude()
     claude.analyse.side_effect = ClaudeTimeoutError("30s timeout")
-    claude.analyse_async.side_effect = ClaudeTimeoutError("30s timeout")
+    claude.analyse_async_chunked.side_effect = ClaudeTimeoutError("30s timeout")
 
     result = _run(
         ScanPipeline(github, claude, mode=ScanType.deployment_gate),
@@ -378,7 +380,7 @@ def test_token_limit_exceeded_raises_token_limit_error():
             scan_target=ScanTarget.full_repo,
             triggered_by="alice@phrase.com",
         )
-    claude.analyse_async.assert_not_called()
+    claude.analyse_async_chunked.assert_not_called()
 
 
 # --- URL parsing -----------------------------------------------------------
@@ -538,10 +540,10 @@ def test_filter_runs_before_llm_input_not_after():
     )
 
     # LLM must NOT have received the minified JS file.
-    if claude.analyse_async.called:
-        sent_files = claude.analyse_async.call_args.args[0]
+    if claude.analyse_async_chunked.called:
+        sent_files = claude.analyse_async_chunked.call_args.args[0]
         assert "static/vendor.min.js" not in sent_files, (
-            "analyse_async must not receive vendor.min.js — it should be filtered out"
+            "analyse_async_chunked must not receive vendor.min.js — it should be filtered out"
         )
 
 

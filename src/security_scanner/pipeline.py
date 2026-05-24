@@ -218,14 +218,18 @@ class ScanPipeline:
         raw_findings: list[dict] = []
 
         if _enable_scanner:
-            # Run Claude and scanners concurrently.
-            llm_task = asyncio.create_task(self._claude.analyse_async(files))
+            # Run chunked Claude first-pass and Layer-1 scanners concurrently.
+            llm_task = asyncio.create_task(self._claude.analyse_async_chunked(files))
             scanner_task = asyncio.create_task(run_layer1(files, scan_id))
             try:
-                raw_findings, aggregated_candidates = await asyncio.gather(
+                (raw_findings, partial_files), aggregated_candidates = await asyncio.gather(
                     llm_task, scanner_task, return_exceptions=False
                 )
+                if partial_files:
+                    partial_scan = True
+                    unscanned.extend(partial_files)
             except ClaudeTimeoutError as exc:
+                # All chunks timed out — entire first-pass is partial.
                 log.warning("claude timeout — marking partial_scan", reason=str(exc))
                 partial_scan = True
                 unscanned = list(files.keys())
@@ -252,11 +256,15 @@ class ScanPipeline:
                     reason=f"Claude response could not be parsed: {exc}",
                 )
         else:
-            # Scanner disabled — fall back to Claude-only (original behaviour).
+            # Scanner disabled — fall back to Claude-only chunked (original behaviour).
             aggregated_candidates = []
             try:
-                raw_findings = await self._claude.analyse_async(files)
+                raw_findings, partial_files = await self._claude.analyse_async_chunked(files)
+                if partial_files:
+                    partial_scan = True
+                    unscanned.extend(partial_files)
             except ClaudeTimeoutError as exc:
+                # All chunks timed out.
                 log.warning("claude timeout — marking partial_scan", reason=str(exc))
                 partial_scan = True
                 unscanned = list(files.keys())

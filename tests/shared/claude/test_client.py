@@ -7,8 +7,9 @@ exception types the client handles (``APITimeoutError``, ``RateLimitError``,
 SDK's internal HTTP→exception mapping.
 """
 
+import asyncio
 import json
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import anthropic
 import pytest
@@ -307,3 +308,107 @@ def test_circuit_breaker_transitions_to_half_open_after_recovery_timeout():
     clock[0] += CB_RECOVERY_TIMEOUT_SECONDS + 1.0
     side_effect.fail = False
     assert client.analyse({"app.py": "x = 1"}) == []
+
+
+# --- analyse_async_chunked --------------------------------------------------
+
+
+def _async_run(coro):
+    return asyncio.run(coro)
+
+
+def _chunked_client():
+    """Return a ClaudeClient with a mocked ``analyse_async`` for chunking tests."""
+    mock_anthropic = MagicMock()
+    client, _, _ = _build_client(mock_anthropic)
+    return client
+
+
+def test_chunked_25_files_produces_3_calls_with_correct_chunk_sizes():
+    """25 files with chunk_size=10 → 3 chunks (10/10/5); findings concatenated."""
+    files = {f"f{i}.py": f"x = {i}" for i in range(25)}
+
+    call_args_list = []
+
+    async def fake_analyse_async(chunk):
+        call_args_list.append(list(chunk.keys()))
+        # Return one finding per file to make concatenation easy to verify.
+        return [{"vulnerability_id": f"F{k}", "file": k} for k in chunk]
+
+    client = _chunked_client()
+
+    with patch.object(client, "analyse_async", side_effect=fake_analyse_async):
+        raw_findings, partial_files = _async_run(
+            client.analyse_async_chunked(files, chunk_size=10)
+        )
+
+    # 3 chunks: 10, 10, 5.
+    assert len(call_args_list) == 3
+    assert len(call_args_list[0]) == 10
+    assert len(call_args_list[1]) == 10
+    assert len(call_args_list[2]) == 5
+
+    # No files overlap between chunks.
+    all_called = call_args_list[0] + call_args_list[1] + call_args_list[2]
+    assert len(all_called) == 25
+    assert len(set(all_called)) == 25
+
+    # All findings concatenated.
+    assert len(raw_findings) == 25
+    assert partial_files == []
+
+
+def test_chunked_one_timeout_does_not_fail_other_chunks():
+    """Middle chunk raises ClaudeTimeoutError; chunks 1 and 3 succeed.
+
+    Expected: findings from chunks 1+3 are returned; chunk 2's files are
+    in partial_files; no exception is raised.
+    """
+    files = {f"f{i}.py": f"x = {i}" for i in range(15)}  # 15 files, chunk_size=5 → 3 chunks
+
+    call_count = [0]
+
+    async def fake_analyse_async(chunk):
+        call_count[0] += 1
+        if call_count[0] == 2:
+            raise ClaudeTimeoutError("timeout on chunk 2")
+        return [{"vulnerability_id": f"F{k}"} for k in chunk]
+
+    client = _chunked_client()
+
+    with patch.object(client, "analyse_async", side_effect=fake_analyse_async):
+        raw_findings, partial_files = _async_run(
+            client.analyse_async_chunked(files, chunk_size=5)
+        )
+
+    # 10 findings from chunks 1 and 3 (5 each); chunk 2's 5 files are partial.
+    assert len(raw_findings) == 10
+    assert len(partial_files) == 5
+
+    # partial_files must be the files from chunk 2.
+    all_file_keys = list(files.keys())
+    expected_partial = set(all_file_keys[5:10])
+    assert set(partial_files) == expected_partial
+
+
+def test_chunked_single_chunk_fast_path_calls_analyse_async_once():
+    """When len(files) <= chunk_size, analyse_async is called exactly once."""
+    files = {f"f{i}.py": f"x = {i}" for i in range(5)}
+
+    call_count = [0]
+
+    async def fake_analyse_async(chunk):
+        call_count[0] += 1
+        return []
+
+    client = _chunked_client()
+
+    with patch.object(client, "analyse_async", side_effect=fake_analyse_async):
+        raw_findings, partial_files = _async_run(
+            client.analyse_async_chunked(files, chunk_size=12)
+        )
+
+    # Fast path: exactly one call, no chunking overhead.
+    assert call_count[0] == 1
+    assert raw_findings == []
+    assert partial_files == []

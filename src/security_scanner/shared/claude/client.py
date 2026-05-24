@@ -57,6 +57,11 @@ DEFAULT_MAX_TOKENS = int(os.getenv("CLAUDE_MAX_TOKENS") or 4096)
 # and a multi-file analysis exceeds 30 s. Unset (production / Phrase) keeps
 # the spec's 30 s — production behaviour is not affected.
 DEFAULT_TIMEOUT_SECONDS = float(os.getenv("CLAUDE_TIMEOUT_SECONDS") or 30.0)
+# Number of files to send to Claude in a single parallel chunk.  Splitting the
+# file dict into N chunks and running them concurrently via asyncio.gather()
+# reduces wall-clock time on large repos.  CLAUDE_CHUNK_SIZE=0 disables
+# chunking (falls back to a single call).  The docker-compose default is 12.
+CLAUDE_CHUNK_SIZE = int(os.environ.get("CLAUDE_CHUNK_SIZE", "12"))
 MAX_ATTEMPTS = 3
 BACKOFF_SECONDS: tuple[float, ...] = (1.0, 2.0, 4.0)
 
@@ -209,6 +214,73 @@ class ClaudeClient:
         event loop is not blocked while waiting for the API response.
         """
         return await asyncio.to_thread(self.analyse, files)
+
+    async def analyse_async_chunked(
+        self,
+        files: dict[str, str],
+        chunk_size: int = CLAUDE_CHUNK_SIZE,
+    ) -> tuple[list[dict], list[str]]:
+        """Split ``files`` into chunks and run ``analyse_async`` on each in parallel.
+
+        Returns a ``(raw_findings, partial_files)`` tuple where:
+        - ``raw_findings`` is the concatenated findings from all successful chunks.
+        - ``partial_files`` is the list of file names from chunks that timed out.
+          The caller should add these to ``unscanned_files`` and set
+          ``partial_scan=True``.
+
+        Single-chunk fast path: if ``len(files) <= chunk_size``, delegates
+        directly to ``analyse_async`` with no overhead.
+
+        If a chunk raises ``ClaudeTimeoutError``, its files are appended to
+        ``partial_files`` and processing continues.  Any other exception
+        propagates as-is (e.g. ``ClaudeUnavailableError`` or
+        ``ClaudeResponseError``).
+        """
+        effective_chunk_size = max(1, chunk_size) if chunk_size > 0 else len(files)
+
+        # Fast path: fits in a single chunk.
+        if len(files) <= effective_chunk_size:
+            return await self.analyse_async(files), []
+
+        # Split into chunks preserving insertion order.
+        items = list(files.items())
+        chunks: list[dict[str, str]] = []
+        for i in range(0, len(items), effective_chunk_size):
+            chunks.append(dict(items[i : i + effective_chunk_size]))
+
+        log.info(
+            "claude chunked analysis start",
+            total_files=len(files),
+            chunk_count=len(chunks),
+            chunk_size=effective_chunk_size,
+        )
+
+        tasks = [asyncio.create_task(self.analyse_async(chunk)) for chunk in chunks]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        raw_findings: list[dict] = []
+        partial_files: list[str] = []
+
+        for chunk, result in zip(chunks, results):
+            if isinstance(result, ClaudeTimeoutError):
+                log.warning(
+                    "claude chunk timeout — files marked partial",
+                    file_count=len(chunk),
+                    reason=str(result),
+                )
+                partial_files.extend(chunk.keys())
+            elif isinstance(result, Exception):
+                # Propagate non-timeout errors (unavailable, response parse, etc.)
+                raise result
+            else:
+                raw_findings.extend(result)
+
+        log.info(
+            "claude chunked analysis complete",
+            total_findings=len(raw_findings),
+            partial_file_count=len(partial_files),
+        )
+        return raw_findings, partial_files
 
     async def ask_async(self, system: str, user: str) -> str:
         """Async wrapper around ``ask`` for use in an event loop."""
