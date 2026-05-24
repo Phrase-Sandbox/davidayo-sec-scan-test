@@ -140,6 +140,13 @@ def _build_mock_client(truth_entries: list[dict[str, Any]]) -> MagicMock:
 
     client.analyse_async = _async_analyse
 
+    # analyse_async_chunked delegates to _async_analyse (returns tuple).
+    async def _async_analyse_chunked(files, chunk_size=12):
+        findings = await _async_analyse(files)
+        return findings, []
+
+    client.analyse_async_chunked = _async_analyse_chunked
+
     # ask (verifier) returns real/high for every candidate in the batch.
     def _ask(system: str, user: str) -> str:
         # Count candidates by scanning for CANDIDATE # headers.

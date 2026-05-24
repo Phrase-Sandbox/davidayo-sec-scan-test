@@ -61,10 +61,12 @@ def _fake_claude(findings: list[dict]) -> MagicMock:
     mock = MagicMock(spec=ClaudeClient)
     mock.analyse.return_value = findings
     mock.ask.return_value = "VERDICT: yes"
-    # Pipeline calls analyse_async / ask_async; spec= alone does not
+    # Pipeline calls analyse_async_chunked / ask_async; spec= alone does not
     # auto-create AsyncMocks for non-async-def methods on the real class,
     # so wire them explicitly.
     mock.analyse_async = AsyncMock(return_value=findings)
+    # analyse_async_chunked returns (raw_findings, partial_files).
+    mock.analyse_async_chunked = AsyncMock(return_value=(findings, []))
     mock.ask_async = AsyncMock(return_value="VERDICT: yes")
     return mock
 

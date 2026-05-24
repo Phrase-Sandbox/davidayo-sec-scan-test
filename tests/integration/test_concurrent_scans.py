@@ -27,6 +27,8 @@ def _make_mock_claude(scan_index: int) -> MagicMock:
     client = MagicMock()
     # analyse_async returns an empty list (we test isolation, not findings quality)
     client.analyse_async = AsyncMock(return_value=[])
+    # analyse_async_chunked returns (raw_findings, partial_files).
+    client.analyse_async_chunked = AsyncMock(return_value=([], []))
     # ask_async (used by verify steps) returns a well-formed response
     client.ask_async = AsyncMock(return_value="VERDICT: yes")
     # Sync versions too (for verify_secret_findings and verify_critical_findings)

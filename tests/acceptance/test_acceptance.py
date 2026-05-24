@@ -130,8 +130,10 @@ def _mock_claude_returning(findings: list[dict]) -> MagicMock:
     # BR-009 verifier on the gate path issues .ask() calls — default to "yes"
     # so Critical findings are confirmed unless a test overrides.
     mock.ask.return_value = "VERDICT: yes"
-    # Pipeline calls analyse_async / ask_async — explicit AsyncMock wiring.
+    # Pipeline calls analyse_async_chunked / ask_async — explicit AsyncMock wiring.
     mock.analyse_async = AsyncMock(return_value=findings)
+    # analyse_async_chunked returns (raw_findings, partial_files).
+    mock.analyse_async_chunked = AsyncMock(return_value=(findings, []))
     mock.ask_async = AsyncMock(return_value="VERDICT: yes")
     return mock
 
@@ -147,7 +149,14 @@ def _make_anthropic_sdk_mock(
     prompt. Returns the right body shape for each.
     """
     def respond(**kwargs):
-        system_prompt = kwargs.get("system", "")
+        system_raw = kwargs.get("system", "")
+        # Handle both bare string and list[dict] (Phase 4 cache_control form).
+        if isinstance(system_raw, list):
+            system_prompt = " ".join(
+                b.get("text", "") for b in system_raw if isinstance(b, dict)
+            )
+        else:
+            system_prompt = str(system_raw)
         block = MagicMock()
         if "SECOND-PASS verification" in system_prompt:
             block.text = verdict
@@ -270,8 +279,8 @@ def test_claude_503_yields_advisory():
     files = {"src/handlers/users.py": "def f():\n    return 1\n"}
     claude = _mock_claude_returning([])
     claude.analyse.side_effect = ClaudeUnavailableError("retries exhausted")
-    # Pipeline calls analyse_async; mirror the side_effect there.
-    claude.analyse_async = AsyncMock(side_effect=ClaudeUnavailableError("retries exhausted"))
+    # Pipeline calls analyse_async_chunked; mirror the side_effect there.
+    claude.analyse_async_chunked = AsyncMock(side_effect=ClaudeUnavailableError("retries exhausted"))
 
     pipeline = ScanPipeline(
         _mock_github(files),
@@ -401,12 +410,19 @@ def test_prompt_injection_does_not_suppress_findings():
     ), "injection in source comment must not suppress findings"
 
     # Inspect the first-pass call (the system prompt that's NOT a verifier prompt).
+    def _system_text(call) -> str:
+        """Extract system text from a call — handles both str and list[dict] forms."""
+        sys_arg = call.kwargs.get("system", "")
+        if isinstance(sys_arg, list):
+            return " ".join(b.get("text", "") for b in sys_arg if isinstance(b, dict))
+        return str(sys_arg)
+
     first_pass_call = next(
         call for call in sdk.messages.create.call_args_list
-        if "SECOND-PASS verification" not in call.kwargs.get("system", "")
+        if "SECOND-PASS verification" not in _system_text(call)
     )
     user_message = first_pass_call.kwargs["messages"][0]["content"]
-    system_prompt = first_pass_call.kwargs["system"]
+    system_prompt = _system_text(first_pass_call)
 
     # 2. The XML wrapper is present.
     assert '<source_code filename="src/handlers/exec.py">' in user_message
