@@ -60,6 +60,39 @@ class TestExcludeBuildOutput:
         assert result == {"my-dist/foo.py": "x = 1"}
 
 
+class TestExcludeVendorAndStaticDirs:
+    """Vendored/static directories anywhere in the path are rejected."""
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "sqli/static/css/materialize.css",
+            "web/vendor/jquery.js",
+            "app/assets/img/logo.svg",
+            "project/vendored/lib.py",
+            "src/third_party/utils.go",
+            "src/third-party/utils.go",
+        ],
+    )
+    def test_vendor_static_asset_dirs_rejected(self, path):
+        assert file_filter({path: "content"}) == {}
+
+    def test_static_as_filename_prefix_not_rejected(self):
+        """``static_config.py`` is a file name prefix, not a path segment."""
+        result = file_filter({"src/api/static_config.py": "x = 1"})
+        assert result == {"src/api/static_config.py": "x = 1"}
+
+    def test_static_hyphen_suffix_not_rejected(self):
+        """``app/static-config.py`` — hyphenated name, not a bare segment."""
+        result = file_filter({"app/static-config.py": "x = 1"})
+        assert result == {"app/static-config.py": "x = 1"}
+
+    def test_static_py_at_root_not_rejected(self):
+        """``static.py`` at repository root is a file, not a directory segment."""
+        result = file_filter({"static.py": "x = 1"})
+        assert result == {"static.py": "x = 1"}
+
+
 class TestExcludeAssetFiles:
     @pytest.mark.parametrize(
         "filename",

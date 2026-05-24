@@ -21,7 +21,10 @@ from pathlib import PurePosixPath
 _BINARY_CHECK_CHARS = 8192
 
 _EXCLUDED_DIR_NAMES: frozenset[str] = frozenset(
-    {"dist", "build", ".next", "__pycache__", "node_modules", ".venv", "venv"}
+    {
+        "dist", "build", ".next", "__pycache__", "node_modules", ".venv", "venv",
+        "static", "vendor", "vendored", "assets", "third_party", "third-party",
+    }
 )
 
 _EXCLUDED_FILE_NAMES: frozenset[str] = frozenset(
