@@ -64,6 +64,11 @@ services:
       - SCANNER_TIMEOUT_SECONDS=${SCANNER_TIMEOUT_SECONDS:-60}
       - VULN_VERIFIER_PARALLELISM=${VULN_VERIFIER_PARALLELISM:-2}
       - VULN_VERIFIER_KEEP_CONFIDENCES=${VULN_VERIFIER_KEEP_CONFIDENCES:-high}
+      # Semgrep writes settings/log/version-cache on startup; redirect all to /tmp so read_only: true doesn't block it
+      - SEMGREP_SETTINGS_FILE=/tmp/semgrep-settings.yml
+      - SEMGREP_LOG_FILE=/tmp/semgrep.log
+      - SEMGREP_VERSION_CACHE_PATH=/tmp/semgrep-version-cache
+      - XDG_CACHE_HOME=/tmp/xdg-cache
     read_only: true
     tmpfs:
       - /tmp

@@ -37,6 +37,8 @@ PY="${PYTHON:-python3}"
     --hidden-import=security_scanner.shared.reports.markdown \
     --hidden-import=security_scanner.shared.reports.html \
     --collect-submodules security_scanner \
+    --add-data "src/security_scanner/shared/context/high_risk_paths.yaml:security_scanner/shared/context" \
+    --add-data "src/security_scanner/shared/reports/assets/phrase-logo.png:security_scanner/shared/reports/assets" \
     src/security_scanner/skill/local_cli.py
 
 echo "Built: dist/phrase-sec-scan*"
