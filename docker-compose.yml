@@ -47,6 +47,10 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-test-key-placeholder}
       - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-6}
       - CLAUDE_TIMEOUT_SECONDS=${CLAUDE_TIMEOUT_SECONDS:-180}
+      # Provider switch: default anthropic; set to "google" to use Gemini server-side.
+      - SCANNER_LLM_PROVIDER=${SCANNER_LLM_PROVIDER:-anthropic}
+      - SCANNER_LLM_MODEL=${SCANNER_LLM_MODEL:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - GITHUB_APP_ID=${GITHUB_APP_ID:-12345}
       - GITHUB_APP_PRIVATE_KEY=${GITHUB_APP_PRIVATE_KEY:-placeholder}
       - GITHUB_OAUTH_CLIENT_ID=${GITHUB_OAUTH_CLIENT_ID:-placeholder}
