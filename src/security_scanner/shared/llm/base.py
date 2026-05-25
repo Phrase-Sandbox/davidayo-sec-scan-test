@@ -48,3 +48,16 @@ class LLMClient(Protocol):
     async def ask_async(self, system: str, user: str) -> str:
         """Async variant of ``ask`` — delegates to a thread-pool worker."""
         ...
+
+    async def analyse_async_chunked(
+        self,
+        files: dict[str, str],
+        chunk_size: int = 0,
+    ) -> tuple[list[dict], list[str]]:
+        """Chunked parallel async analysis.
+
+        Returns ``(raw_findings, partial_files)`` where ``partial_files`` are
+        files from timed-out chunks. Callers add those to ``unscanned_files``
+        and set ``partial_scan=True``.
+        """
+        ...
