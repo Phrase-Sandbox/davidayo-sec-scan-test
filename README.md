@@ -200,6 +200,87 @@ suggested fix. The exit code tells you:
 
 ---
 
+## Provider selection
+
+The scanner supports two LLM backends: **Anthropic Claude** (the default,
+spec-mandated, ZDR/DPA-confirmed) and **Google Gemini** (optional, sim-only,
+pending Security/Legal sign-off — see Appendix D-15).
+
+### Local-BYO mode (`--local`)
+
+When you scan locally (no server), you supply your own API key and optionally
+choose the provider and model:
+
+```bash
+# Default: uses ANTHROPIC_API_KEY from your environment
+phrase-sec-scan --local .
+
+# Explicit provider + model (env-based key)
+phrase-sec-scan --local --provider claude --model claude-sonnet-4-6 .
+phrase-sec-scan --local --provider gemini --model gemini-2.5-pro .
+
+# Store your key once so you don't need the env var every time
+phrase-sec-scan login --provider claude --api-key sk-ant-...
+phrase-sec-scan login --provider gemini --api-key AIza-...
+
+# After login you can just run
+phrase-sec-scan --local .
+```
+
+**Resolution order** (highest wins):
+
+| Source | Provider | Model | Key |
+|--------|----------|-------|-----|
+| CLI flag | `--provider` | `--model` | — |
+| Env var | `SCANNER_LLM_PROVIDER` | `SCANNER_LLM_MODEL` | `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY` |
+| Config file (`~/.phrase-sec-scan/config.yaml`) | `provider:` | `model:` | `anthropic_api_key:` / `google_api_key:` |
+| Built-in default | `claude` | provider default | — |
+
+The config file is never required — env vars always work. Env vars take
+precedence over the stored key, so per-shell overrides (`ANTHROPIC_API_KEY=sk-ant-... phrase-sec-scan --local .`) work without changing your config.
+
+To install the Gemini SDK (not bundled by default):
+
+```bash
+pip install phrase-sec-scan[providers]
+```
+
+### Remote/org scan (default CLI mode + server)
+
+When the CLI POSTs to the deployed scanner (the default, no `--local` flag),
+the server picks the provider using its own environment variables. **The CLI
+never forwards your personal API key to the server.** The server has its own
+org-level credentials configured by the operator.
+
+Server-side provider selection:
+
+```bash
+# In .env.local (or the server's environment)
+SCANNER_LLM_PROVIDER=anthropic   # or: google
+SCANNER_LLM_MODEL=claude-sonnet-4-6   # optional override
+GOOGLE_API_KEY=AIza-...          # only if provider=google
+```
+
+Both `/agent/scan` (the CI gate path) and `/scan/local` (the on-demand
+advisory path) use the same factory — a single `SCANNER_LLM_PROVIDER` env
+var switches both endpoints consistently.
+
+### Credential separation
+
+| Mode | Who owns credentials | Where keys live |
+|------|----------------------|-----------------|
+| `--local` | Developer (BYO) | Developer's env / `~/.phrase-sec-scan/config.yaml` |
+| Remote (default) | Organisation / operator | Server's `.env.local` / secrets manager |
+
+The CLI client **never** forwards API keys to the server. The server **never**
+reads the developer's local config. This separation is enforced by design —
+there is no flag or config that bridges the two.
+
+For CI/CD integration, see the `master-scanner-pipeline` sibling repo which
+provides a reusable GitHub Actions workflow that calls this scanner's API.
+
+---
+
 ## Stopping everything
 
 ```bash
