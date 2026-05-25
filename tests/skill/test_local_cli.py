@@ -1,8 +1,8 @@
 """Tests for the local pre-push skill mode (LocalFilesClient + phrase-sec-scan).
 
 The real ``ScanPipeline`` runs end-to-end (strip, filter, validate,
-post-filter, gate decision, patch generation). Only ``ClaudeClient`` is
-mocked so no network call is made — same approach as
+post-filter, gate decision, patch generation). Only ``build_local_llm_client``
+is mocked so no network call is made — same approach as
 ``tests/acceptance/test_acceptance.py``.
 """
 
@@ -174,7 +174,7 @@ def test_cli_writes_report_and_patch_for_sqli(tmp_path, monkeypatch):
     (tmp_path / "app" / "db.py").write_text(_SQLI)
 
     fake = _fake_claude([_finding("app/db.py")])
-    monkeypatch.setattr(local_cli, "ClaudeClient", lambda **_: fake)
+    monkeypatch.setattr(local_cli, "build_local_llm_client", lambda **_: fake)
 
     rc = local_cli.main(["--local", str(tmp_path)])
 
@@ -197,8 +197,8 @@ def test_cli_flags_hardcoded_secret_as_secret_001(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key-not-used-mock")
     (tmp_path / "config.py").write_text(_SECRET)
 
-    fake = _fake_claude([])  # Claude finds nothing; secret strip is pre-Claude
-    monkeypatch.setattr(local_cli, "ClaudeClient", lambda **_: fake)
+    fake = _fake_claude([])  # LLM finds nothing; secret strip is pre-LLM
+    monkeypatch.setattr(local_cli, "build_local_llm_client", lambda **_: fake)
 
     rc = local_cli.main(["--local", str(tmp_path)])
 
@@ -220,7 +220,7 @@ def test_cli_local_mode_writes_both_md_and_html(tmp_path, monkeypatch):
     (tmp_path / "app" / "db.py").write_text(_SQLI)
 
     fake = _fake_claude([_finding("app/db.py")])
-    monkeypatch.setattr(local_cli, "ClaudeClient", lambda **_: fake)
+    monkeypatch.setattr(local_cli, "build_local_llm_client", lambda **_: fake)
 
     local_cli.main(["--local", str(tmp_path)])
 
@@ -394,7 +394,7 @@ def test_cli_no_gitignore_flag_disables_gitignore_filter(tmp_path, monkeypatch):
     (tmp_path / "kept.py").write_text("print('kept')\n")
 
     fake = _fake_claude([])
-    monkeypatch.setattr(local_cli, "ClaudeClient", lambda **_: fake)
+    monkeypatch.setattr(local_cli, "build_local_llm_client", lambda **_: fake)
 
     # Spy what files the pipeline receives. The pipeline calls
     # client.get_repo_files() — wrap LocalFilesClient to capture its output.
@@ -412,3 +412,134 @@ def test_cli_no_gitignore_flag_disables_gitignore_filter(tmp_path, monkeypatch):
 
     assert "ignored.py" in captured
     assert "kept.py" in captured
+
+
+# --- Phase A2: BYO provider / model / key resolution -------------------------
+
+
+def test_resolve_provider_config_flag_beats_env_beats_config_beats_default(monkeypatch):
+    """CLI flag > env var > config > default."""
+    import argparse
+
+    from security_scanner.skill.local_cli import _resolve_provider_config
+
+    # Flag wins over everything.
+    monkeypatch.setenv("SCANNER_LLM_PROVIDER", "gemini")
+    args = argparse.Namespace(provider="claude", model=None, api_key=None)
+    config = {"provider": "gemini"}
+    resolved = _resolve_provider_config(args, config)
+    assert resolved["provider"] == "claude"
+
+    # Env beats config + default when no flag.
+    args2 = argparse.Namespace(provider=None, model=None, api_key=None)
+    resolved2 = _resolve_provider_config(args2, config)
+    assert resolved2["provider"] == "gemini"
+
+    # Config beats default when no flag / env.
+    monkeypatch.delenv("SCANNER_LLM_PROVIDER", raising=False)
+    config3 = {"provider": "gemini"}
+    resolved3 = _resolve_provider_config(args2, config3)
+    assert resolved3["provider"] == "gemini"
+
+    # Default when nothing is set.
+    resolved4 = _resolve_provider_config(args2, {})
+    assert resolved4["provider"] == "claude"
+
+
+def test_resolve_provider_config_model_precedence(monkeypatch):
+    import argparse
+
+    from security_scanner.skill.local_cli import _resolve_provider_config
+
+    monkeypatch.setenv("SCANNER_LLM_MODEL", "env-model")
+    args = argparse.Namespace(provider=None, model="flag-model", api_key=None)
+    resolved = _resolve_provider_config(args, {"model": "config-model"})
+    assert resolved["model"] == "flag-model"
+
+    args2 = argparse.Namespace(provider=None, model=None, api_key=None)
+    resolved2 = _resolve_provider_config(args2, {"model": "config-model"})
+    assert resolved2["model"] == "env-model"
+
+    monkeypatch.delenv("SCANNER_LLM_MODEL", raising=False)
+    resolved3 = _resolve_provider_config(args2, {"model": "config-model"})
+    assert resolved3["model"] == "config-model"
+
+    resolved4 = _resolve_provider_config(args2, {})
+    assert resolved4["model"] is None
+
+
+def test_resolve_provider_config_api_key_for_gemini(monkeypatch):
+    import argparse
+
+    from security_scanner.skill.local_cli import _resolve_provider_config
+
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    args = argparse.Namespace(provider="gemini", model=None, api_key="flag-key")
+    resolved = _resolve_provider_config(args, {})
+    assert resolved["api_key"] == "flag-key"
+
+    args2 = argparse.Namespace(provider="gemini", model=None, api_key=None)
+    monkeypatch.setenv("GOOGLE_API_KEY", "env-google-key")
+    resolved2 = _resolve_provider_config(args2, {})
+    assert resolved2["api_key"] == "env-google-key"
+
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    resolved3 = _resolve_provider_config(args2, {"google_api_key": "config-google-key"})
+    assert resolved3["api_key"] == "config-google-key"
+
+
+def test_cli_missing_key_exits_2(tmp_path, monkeypatch, capsys):
+    """Missing API key → exit 2 with a helpful message."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    rc = local_cli.main(["--local", str(tmp_path)])
+    assert rc == 2
+    captured = capsys.readouterr()
+    assert "ANTHROPIC_API_KEY" in captured.err
+
+
+def test_cli_missing_gemini_key_exits_2(tmp_path, monkeypatch, capsys):
+    """Missing GOOGLE_API_KEY for gemini → exit 2 with a Gemini-specific message."""
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    rc = local_cli.main(["--local", "--provider", "gemini", str(tmp_path)])
+    assert rc == 2
+    captured = capsys.readouterr()
+    assert "GOOGLE_API_KEY" in captured.err
+
+
+def test_login_writes_anthropic_key_to_config(tmp_path, monkeypatch):
+    """login --api-key writes anthropic_api_key to config.yaml without browser flow."""
+    fake_config = tmp_path / ".phrase-sec-scan" / "config.yaml"
+    monkeypatch.setattr(local_cli, "_CONFIG_DIR", tmp_path / ".phrase-sec-scan")
+    monkeypatch.setattr(local_cli, "_CONFIG_FILE", fake_config)
+
+    rc = local_cli.main(["login", "--provider", "claude", "--api-key", "sk-ant-TEST"])
+    assert rc == 0
+    assert fake_config.exists()
+    contents = fake_config.read_text()
+    assert "anthropic_api_key" in contents
+    assert "sk-ant-TEST" in contents
+
+
+def test_login_writes_gemini_key_to_config(tmp_path, monkeypatch):
+    """login --provider gemini --api-key writes google_api_key to config.yaml."""
+    fake_config = tmp_path / ".phrase-sec-scan" / "config.yaml"
+    monkeypatch.setattr(local_cli, "_CONFIG_DIR", tmp_path / ".phrase-sec-scan")
+    monkeypatch.setattr(local_cli, "_CONFIG_FILE", fake_config)
+
+    rc = local_cli.main(["login", "--provider", "gemini", "--api-key", "AIza-TEST"])
+    assert rc == 0
+    contents = fake_config.read_text()
+    assert "google_api_key" in contents
+    assert "AIza-TEST" in contents
+
+
+def test_cli_provider_flag_claude_uses_anthropic_key(tmp_path, monkeypatch):
+    """--provider claude with ANTHROPIC_API_KEY set uses it."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    fake = _fake_claude([])
+    monkeypatch.setattr(local_cli, "build_local_llm_client", lambda **kw: fake)
+
+    rc = local_cli.main(["--local", "--provider", "claude", str(tmp_path)])
+    assert rc == 0  # no findings → exit 0

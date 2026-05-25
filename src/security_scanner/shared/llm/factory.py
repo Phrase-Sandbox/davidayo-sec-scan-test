@@ -81,3 +81,52 @@ def build_llm_client(settings: Settings) -> LLMClient:
         f"Unknown SCANNER_LLM_PROVIDER={provider!r} "
         "(expected: anthropic | google)"
     )
+
+
+def build_local_llm_client(
+    provider: str,
+    api_key: str,
+    model: str | None = None,
+) -> LLMClient:
+    """Build an LLM client from explicit args (CLI BYO path).
+
+    Unlike ``build_llm_client`` this helper does **not** read env vars or
+    ``Settings`` — the caller has already resolved provider/model/key from
+    the CLI flag → env → config → default resolution chain.
+
+    Raises
+    ------
+    LLMConfigError
+        Unknown provider or missing API key.
+    """
+    provider = provider.strip().lower()
+
+    if provider in ("anthropic", "claude"):
+        if not api_key:
+            raise LLMConfigError(
+                "ANTHROPIC_API_KEY is required for --local mode with Claude. "
+                "Set the env var, pass --api-key, or add it to your config."
+            )
+        from security_scanner.shared.claude.client import ClaudeClient
+
+        if model:
+            return ClaudeClient(api_key=api_key, model=model)
+        return ClaudeClient(api_key=api_key)
+
+    if provider in ("google", "gemini"):
+        if not api_key:
+            raise LLMConfigError(
+                "GOOGLE_API_KEY is required for --local mode with Gemini. "
+                "Set the env var, pass --api-key, or add it to your config."
+            )
+        log.warning("llm_provider_override", provider=provider, notice=_DATA_GOVERNANCE_WARNING)
+        from security_scanner.shared.llm.gemini_client import (
+            DEFAULT_MODEL as GEMINI_DEFAULT,
+        )
+        from security_scanner.shared.llm.gemini_client import GeminiClient
+
+        return GeminiClient(api_key=api_key, model=model or GEMINI_DEFAULT)
+
+    raise LLMConfigError(
+        f"Unknown provider={provider!r} — expected: claude | gemini"
+    )

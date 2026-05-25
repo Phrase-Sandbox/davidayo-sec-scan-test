@@ -40,8 +40,8 @@ from urllib.error import URLError
 import certifi
 
 # Module-level imports for `--local` mode. Kept at module scope so test code
-# can monkeypatch ``local_cli.ClaudeClient`` etc. without chasing lazy imports.
-from security_scanner.shared.claude.client import ClaudeClient
+# can monkeypatch ``local_cli.build_local_llm_client`` without chasing lazy imports.
+from security_scanner.shared.llm.factory import build_local_llm_client
 from security_scanner.shared.models.enums import ScanTarget, ScanType, Severity
 from security_scanner.shared.reports.html import build_html_report
 from security_scanner.shared.reports.markdown import build_markdown_report
@@ -375,27 +375,125 @@ def _scan_remote(
     return 1 if (payload["critical"] or payload["high"]) else 0
 
 
-# --- Local-mode scan (original behaviour) ------------------------------------
+# --- Local-mode scan (BYO provider/model/key) ---------------------------------
+
+# Provider names the CLI accepts on --provider / SCANNER_LLM_PROVIDER / config.
+_SUPPORTED_PROVIDERS = ("claude", "gemini")
 
 
-def _scan_local(*, root: Path, directory: str, respect_gitignore: bool = True) -> int:
+def _resolve_provider_config(args: argparse.Namespace, config: dict[str, str]) -> dict:
+    """Resolve provider, model, and api_key from CLI → env → config → default.
+
+    Resolution order (highest precedence first):
+    - CLI flag (``--provider``, ``--model``, ``--api-key``)
+    - Env var (``SCANNER_LLM_PROVIDER``, ``SCANNER_LLM_MODEL``,
+               ``ANTHROPIC_API_KEY`` / ``GOOGLE_API_KEY``)
+    - Config file field
+    - Built-in default (``claude``)
+
+    Returns a dict with keys ``provider``, ``model``, ``api_key``.
+    Raises ``SystemExit(2)`` (via print + return sentinel) for missing key;
+    callers should propagate the return code.
+    """
+    # Provider
+    provider: str = (
+        getattr(args, "provider", None)
+        or os.getenv("SCANNER_LLM_PROVIDER")
+        or config.get("provider")
+        or "claude"
+    ).strip().lower()
+
+    # Normalise aliases
+    if provider == "anthropic":
+        provider = "claude"
+    if provider == "google":
+        provider = "gemini"
+
+    # Model (optional)
+    model: str | None = (
+        getattr(args, "model", None)
+        or os.getenv("SCANNER_LLM_MODEL")
+        or config.get("model")
+        or None
+    )
+
+    # API key for the chosen provider
+    if provider == "gemini":
+        api_key = (
+            getattr(args, "api_key", None)
+            or os.getenv("GOOGLE_API_KEY")
+            or config.get("google_api_key")
+            or ""
+        )
+    else:
+        # Default: claude
+        api_key = (
+            getattr(args, "api_key", None)
+            or os.getenv("ANTHROPIC_API_KEY")
+            or config.get("anthropic_api_key")
+            or ""
+        )
+
+    return {"provider": provider, "model": model, "api_key": api_key}
+
+
+def _scan_local(
+    *,
+    root: Path,
+    directory: str,
+    respect_gitignore: bool = True,
+    args: argparse.Namespace | None = None,
+) -> int:
     import asyncio  # noqa: PLC0415
 
     from security_scanner.pipeline import ScanPipeline, TokenLimitError  # noqa: PLC0415
 
-    api_key = os.getenv("ANTHROPIC_API_KEY", "")
-    if not api_key:
+    if args is None:
+        # Compat shim for callers that don't pass args (tests, etc.)
+        import argparse as _ap  # noqa: PLC0415
+        args = _ap.Namespace(provider=None, model=None, api_key=None)
+
+    config = _load_config()
+    resolved = _resolve_provider_config(args, config)
+    provider = resolved["provider"]
+
+    if not resolved["api_key"]:
+        if provider == "gemini":
+            print(
+                "ERROR: GOOGLE_API_KEY is required for --local --provider gemini. "
+                "Set the env var or run `phrase-sec-scan login --provider gemini --api-key <key>`.",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                "ERROR: ANTHROPIC_API_KEY is required for --local mode. "
+                "Drop the flag to use the remote scanner instead, or set the env var.",
+                file=sys.stderr,
+            )
+        return 2
+
+    try:
+        llm_client = build_local_llm_client(
+            provider=provider,
+            api_key=resolved["api_key"],
+            model=resolved["model"],
+        )
+    except ImportError:
+        # google-genai not installed
         print(
-            "ERROR: ANTHROPIC_API_KEY is required for --local mode. "
-            "Drop the flag to use the remote scanner instead.",
+            "ERROR: the 'google-genai' package is not installed. "
+            "Install it with:  pip install phrase-sec-scan[providers]",
             file=sys.stderr,
         )
+        return 2
+    except Exception as exc:  # noqa: BLE001
+        print(f"ERROR: could not build LLM client: {exc}", file=sys.stderr)
         return 2
 
     scan_target = ScanTarget.directory if directory else ScanTarget.full_repo
     pipeline = ScanPipeline(
         LocalFilesClient(root, respect_gitignore=respect_gitignore),
-        ClaudeClient(api_key=api_key),
+        llm_client,
         mode=ScanType.on_demand,
     )
 
@@ -480,8 +578,18 @@ def _build_scan_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--local", action="store_true",
-        help="Run the scan pipeline on this machine (needs ANTHROPIC_API_KEY) "
+        help="Run the scan pipeline on this machine (BYO API key) "
              "instead of POSTing to the deployed scanner.",
+    )
+    p.add_argument(
+        "--provider", choices=list(_SUPPORTED_PROVIDERS), default=None,
+        help="LLM provider for --local mode: claude (default) or gemini. "
+             "Falls back to SCANNER_LLM_PROVIDER env → config → claude.",
+    )
+    p.add_argument(
+        "--model", default=None,
+        help="Model override for --local mode (e.g. claude-sonnet-4-6). "
+             "Falls back to SCANNER_LLM_MODEL env → config → provider default.",
     )
     p.add_argument(
         "--no-gitignore", action="store_true",
@@ -496,6 +604,17 @@ def _build_login_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="phrase-sec-scan login")
     p.add_argument("--scanner-url", default=os.getenv("SCANNER_URL"))
     p.add_argument("--manual", action="store_true")
+    p.add_argument(
+        "--provider", choices=list(_SUPPORTED_PROVIDERS), default=None,
+        help="LLM provider for --local mode. Written to config.yaml so you "
+             "don't need to pass --provider on every scan.",
+    )
+    p.add_argument(
+        "--api-key", default=None,
+        help="API key for the chosen LLM provider. Written to config.yaml "
+             "(mode 0600). Env vars (ANTHROPIC_API_KEY / GOOGLE_API_KEY) "
+             "take precedence over the stored value at scan time.",
+    )
     return p
 
 
@@ -514,14 +633,44 @@ def main(argv: list[str] | None = None) -> int:
         cmd, rest = raw[0], raw[1:]
         if cmd == "login":
             args = _build_login_parser().parse_args(rest)
+            # If --provider/--api-key given without --scanner-url, write the
+            # LLM credentials to the config file and exit (BYO local mode setup).
+            if args.api_key and not args.scanner_url:
+                cfg = _load_config()
+                provider = (args.provider or "claude").lower()
+                if provider in ("google", "gemini"):
+                    cfg["provider"] = "gemini"
+                    cfg["google_api_key"] = args.api_key
+                else:
+                    cfg["provider"] = "claude"
+                    cfg["anthropic_api_key"] = args.api_key
+                _save_config(cfg)
+                print(
+                    f"Saved {provider} API key to {_CONFIG_FILE}. "
+                    "Run `phrase-sec-scan --local <path>` to scan locally."
+                )
+                return 0
             url = args.scanner_url or _load_config().get("scanner_url")
             if not url:
                 print(
                     "ERROR: --scanner-url is required on first login "
-                    "(or set $SCANNER_URL).",
+                    "(or set $SCANNER_URL). "
+                    "For local-only setup: phrase-sec-scan login "
+                    "--provider claude --api-key sk-ant-...",
                     file=sys.stderr,
                 )
                 return 2
+            # Optionally write LLM config at the same time as auth login.
+            if args.api_key:
+                cfg = _load_config()
+                provider = (args.provider or "claude").lower()
+                if provider in ("google", "gemini"):
+                    cfg["provider"] = "gemini"
+                    cfg["google_api_key"] = args.api_key
+                else:
+                    cfg["provider"] = "claude"
+                    cfg["anthropic_api_key"] = args.api_key
+                _save_config(cfg)
             return _login(url, manual=args.manual)
         if cmd == "logout":
             args = _build_logout_parser().parse_args(rest)
@@ -539,7 +688,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.local:
         return _scan_local(
-            root=root, directory=args.directory, respect_gitignore=respect_gitignore
+            root=root, directory=args.directory, respect_gitignore=respect_gitignore,
+            args=args,
         )
 
     scanner_url, token = _resolve_endpoint()
