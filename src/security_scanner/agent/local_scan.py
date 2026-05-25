@@ -44,8 +44,8 @@ from pydantic import BaseModel, Field
 from security_scanner.agent.test_endpoint import _MockGitHubClient
 from security_scanner.observability.metrics import local_scan_auth_outcomes_total
 from security_scanner.pipeline import ScanPipeline, TokenLimitError
-from security_scanner.shared.claude.client import ClaudeClient
 from security_scanner.shared.config import Settings, get_settings
+from security_scanner.shared.llm.factory import build_llm_client
 from security_scanner.shared.logging_util import get_logger
 from security_scanner.shared.models.enums import ScanTarget, ScanType, Severity
 from security_scanner.shared.models.finding import VulnerabilityFinding
@@ -246,8 +246,8 @@ def get_local_pipeline_factory(
 
     def build(files: dict[str, str]) -> ScanPipeline:
         github_client = _MockGitHubClient(files)
-        claude_client = ClaudeClient(api_key=settings.ANTHROPIC_API_KEY)
-        return ScanPipeline(github_client, claude_client, mode=ScanType.on_demand)
+        llm_client = build_llm_client(settings)
+        return ScanPipeline(github_client, llm_client, mode=ScanType.on_demand)
 
     return build
 

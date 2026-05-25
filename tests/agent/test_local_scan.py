@@ -209,6 +209,27 @@ def test_max_concurrent_scans_env_var_override(monkeypatch):
     assert _read_max_concurrent_scans() == 4
 
 
+def test_get_local_pipeline_factory_uses_build_llm_client(monkeypatch):
+    """A1 regression guard: factory calls build_llm_client, not ClaudeClient."""
+    from unittest.mock import MagicMock, patch
+
+    fake_llm = MagicMock()
+    with patch(
+        "security_scanner.agent.local_scan.build_llm_client",
+        return_value=fake_llm,
+    ) as mock_factory:
+        from security_scanner.agent.local_scan import get_local_pipeline_factory
+        from security_scanner.shared.config import Settings
+
+        settings = Settings()
+        pipeline_factory = get_local_pipeline_factory(settings)
+        # get_local_pipeline_factory returns a closure; build_llm_client is only
+        # invoked when that closure runs against an actual file set.
+        assert callable(pipeline_factory)
+        pipeline_factory({"a.py": "print(1)"})
+        mock_factory.assert_called_once_with(settings)
+
+
 def test_returns_429_when_semaphore_is_drained(client, monkeypatch):
     """Saturate the semaphore and verify a fresh request gets 429+Retry-After."""
     import security_scanner.agent.local_scan as ls_mod
