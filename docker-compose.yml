@@ -63,6 +63,9 @@ services:
       - ADMIN_LOCAL_BYPASS=${ADMIN_LOCAL_BYPASS:-true}
       - USE_TOKEN_REGISTRY=${USE_TOKEN_REGISTRY:-true}
       - RUN_MIGRATIONS_ON_STARTUP=${RUN_MIGRATIONS_ON_STARTUP:-true}
+      # Fernet key for encrypting API keys at rest (user + org settings).
+      # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      - SCANNER_ENCRYPTION_KEY=${SCANNER_ENCRYPTION_KEY}
       # v1 multi-scanner + v2/v3 context packager + verifier
       - ENABLE_MULTI_SCANNER=${ENABLE_MULTI_SCANNER:-true}
       - SCANNER_CONCURRENCY=${SCANNER_CONCURRENCY:-4}
@@ -120,6 +123,7 @@ services:
       - ADMIN_LOCAL_BYPASS=${ADMIN_LOCAL_BYPASS:-true}
       - USE_TOKEN_REGISTRY=${USE_TOKEN_REGISTRY:-true}
       - RUN_MIGRATIONS_ON_STARTUP=${RUN_MIGRATIONS_ON_STARTUP:-true}
+      - SCANNER_ENCRYPTION_KEY=${SCANNER_ENCRYPTION_KEY}
     profiles:
       - test
 
