@@ -396,14 +396,6 @@ async def test_org_settings_test_slack_success_with_db_webhook(client, session_f
     assert posted_to == ["https://hooks.slack.com/services/T000/B000/webhookabc"]
 
 
-def test_org_settings_template_contains_dg_warning(client, session_factory, _crypto):
-    """The data-governance warning <div> must be present in the org-settings page."""
-    r = client.get("/admin/org-settings", headers=_admin_headers())
-    assert r.status_code == 200
-    assert "dg-warning" in r.text
-    assert "Data governance" in r.text or "data governance" in r.text.lower()
-
-
 # --- Usage analytics (/admin/usage) -----------------------------------------
 
 

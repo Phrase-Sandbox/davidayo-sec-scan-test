@@ -62,16 +62,6 @@
       </label>
     </fieldset>
 
-    <!-- Data-governance warning — shown when Google is selected -->
-    <div id="dg-warning" style="display:none; background: #fff3cd; border: 1px solid #ffc107;
-         border-radius: 6px; padding: 0.75rem 1rem; margin: 0 0 1rem; font-size: 0.88rem;">
-      <strong>⚠️ Data governance notice:</strong>
-      Zero-Data-Retention (ZDR) and DPA assurances are confirmed for
-      <strong>Anthropic only</strong>. Selecting Google as the CI default sends
-      source code to Google without those guarantees. Ensure Security and Legal
-      approval is in place before enabling.
-    </div>
-
     <div style="margin-bottom: 1rem;">
       <label style="display: block; font-weight: 600; margin-bottom: 0.4rem;" for="anthropic_model">
         Anthropic model <span class="muted" style="font-weight: normal;">(blank = provider default)</span>
@@ -177,16 +167,4 @@
   </form>
   {% endif %}
 </div>
-
-<script>
-  function updateDgWarning() {
-    var v = document.querySelector('input[name="default_provider"]:checked');
-    var warn = document.getElementById('dg-warning');
-    if (warn) warn.style.display = (v && v.value === 'google') ? 'block' : 'none';
-  }
-  document.querySelectorAll('input[name="default_provider"]').forEach(function(r) {
-    r.addEventListener('change', updateDgWarning);
-  });
-  updateDgWarning();
-</script>
 {% endblock %}
