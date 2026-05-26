@@ -1,0 +1,88 @@
+vulnerabilities:
+  # Finding #1 — SECRET-001: hardcoded database password
+  - id: "mv9_secret_01"
+    class: "secret"
+    file: "vuln_comprehensive.py"
+    line_start: 22
+    line_end: 22
+    mandatory: true
+
+  # Finding #2 — SECRET-001: hardcoded API/service key
+  - id: "mv9_secret_02"
+    class: "secret"
+    file: "vuln_comprehensive.py"
+    line_start: 26
+    line_end: 26
+    mandatory: true
+
+  # Finding #3 — SQLi via f-string interpolation
+  - id: "mv9_sqli_01"
+    class: "sqli"
+    file: "vuln_comprehensive.py"
+    line_start: 31
+    line_end: 34
+    mandatory: true
+
+  # Finding #4 — SQLi via % format string
+  - id: "mv9_sqli_02"
+    class: "sqli"
+    file: "vuln_comprehensive.py"
+    line_start: 39
+    line_end: 42
+    mandatory: true
+
+  # Finding #5 — Command injection via os.system
+  - id: "mv9_cmdi_01"
+    class: "command_injection"
+    file: "vuln_comprehensive.py"
+    line_start: 46
+    line_end: 47
+    mandatory: true
+
+  # Finding #6 — Command injection via subprocess shell=True
+  - id: "mv9_cmdi_02"
+    class: "command_injection"
+    file: "vuln_comprehensive.py"
+    line_start: 52
+    line_end: 55
+    mandatory: true
+
+  # Finding #7 — Weak crypto: MD5 password hashing
+  - id: "mv9_crypto_01"
+    class: "weak_crypto"
+    file: "vuln_comprehensive.py"
+    line_start: 61
+    line_end: 62
+    mandatory: true
+
+  # Finding #8 — Insecure random for session tokens
+  - id: "mv9_random_01"
+    class: "insecure_random"
+    file: "vuln_comprehensive.py"
+    line_start: 67
+    line_end: 68
+    mandatory: true
+
+  # Finding #9 — Insecure deserialization via pickle.loads
+  - id: "mv9_deserial_01"
+    class: "deserialization"
+    file: "vuln_comprehensive.py"
+    line_start: 73
+    line_end: 74
+    mandatory: true
+
+  # Finding #10 (bonus) — XXE via xml.etree.ElementTree
+  - id: "mv9_xxe_01"
+    class: "xxe"
+    file: "vuln_comprehensive.py"
+    line_start: 79
+    line_end: 80
+    mandatory: false
+
+  # Finding #11 (bonus) — yaml.load without SafeLoader
+  - id: "mv9_deserial_02"
+    class: "deserialization"
+    file: "vuln_comprehensive.py"
+    line_start: 85
+    line_end: 87
+    mandatory: false
