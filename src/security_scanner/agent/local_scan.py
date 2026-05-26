@@ -33,7 +33,6 @@ import asyncio
 import hmac
 import os
 import re
-from collections.abc import Callable
 from html import escape
 from dataclasses import dataclass
 from typing import Annotated, Literal
@@ -41,17 +40,12 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from security_scanner.agent.slack_alert import send_llm_unavailable_alert
 from security_scanner.agent.test_endpoint import _MockGitHubClient
 from security_scanner.observability.metrics import local_scan_auth_outcomes_total
 from security_scanner.pipeline import ScanPipeline, TokenLimitError
 from security_scanner.shared.config import Settings, get_settings
 from security_scanner.shared.llm.base import LLMConfigError
-from security_scanner.shared.llm.factory import (
-    build_llm_client,
-    build_local_llm_client,
-    build_org_llm_client_for,
-)
+from security_scanner.shared.llm.factory import build_user_llm_client
 from security_scanner.shared.logging_util import get_logger
 from security_scanner.shared.models.enums import GateDecision, ScanTarget, ScanType, Severity
 from security_scanner.shared.models.finding import VulnerabilityFinding
@@ -60,7 +54,14 @@ from security_scanner.shared.reports.markdown import build_markdown_report
 from security_scanner.tokens import audit as token_audit
 from security_scanner.tokens import registry as token_registry
 from security_scanner.tokens.db import get_session_factory
-from security_scanner.tokens.models import AuditEventType
+from security_scanner.tokens.models import (
+    AuditEventType,
+    LLMUsageMonthly,
+    ScanRecord,
+    ScanStatus,
+    ScanUsage,
+    UserLLMSettings,
+)
 
 log = get_logger(__name__)
 
@@ -143,6 +144,13 @@ def _detail_for_outcome(outcome: str) -> str:
         "unknown_token": "Token not recognised. Issue or rotate one at /portal/.",
         "revoked": "Token has been revoked. Issue a new one at /portal/.",
         "bad_signature": _REGISTRY_AUTH_FAILURE,
+        "expired": (
+            "Your scanner token has expired (30-day TTL). "
+            "Visit /portal/ to re-issue a new one."
+        ),
+        "deactivated": (
+            "Your account has been deactivated. Contact your administrator."
+        ),
     }.get(outcome, _REGISTRY_AUTH_FAILURE)
 
 
@@ -219,55 +227,19 @@ async def verify_local_scan_token(request: Request) -> AuthenticatedLocalCaller:
 # --- Request / response models -----------------------------------------------
 
 
-class LLMOverride(BaseModel):
-    """Per-request LLM credentials supplied by the caller (BYO key).
-
-    The CLI's ``--local`` mode populates this so the scanner uses the
-    developer's personal LLM API key for this single scan instead of its
-    org credentials. The key is held only in memory for the request
-    lifecycle, never logged, cached, or persisted. ``api_key`` is treated
-    as a secret value — the logging filter in ``shared.logging_util``
-    redacts any field literally named ``api_key``.
-    """
-
-    provider: Literal["anthropic", "claude", "google", "gemini"]
-    api_key: str = Field(..., min_length=1)
-    model: str | None = None  # provider default if unset
-
-
-class ProviderOverride(BaseModel):
-    """Per-request *routing* override — picks which org-configured provider
-    runs this scan, without shipping a personal API key.
-
-    Used by CLI default mode (`phrase-sec-scan --provider gemini .`) and CI
-    workflows that want to flip provider per-job. The server uses its own
-    `ANTHROPIC_API_KEY` or `GOOGLE_API_KEY` — whichever matches
-    ``provider`` — so the org bills LLM costs, not the caller. If the
-    matching server-side key is not configured the request is rejected
-    422-style at routing time so the caller knows up-front.
-
-    NOTE: ``llm_override`` (BYO key) takes precedence if both are sent.
-    """
-
-    provider: Literal["anthropic", "claude", "google", "gemini"]
-    model: str | None = None
-
-
 class LocalScanRequest(BaseModel):
-    """Body of ``POST /scan/local`` — the dev's uploaded working tree."""
+    """Body of ``POST /scan/local`` — the dev's uploaded working tree.
+
+    The LLM provider/model/key are resolved from the authenticated user's
+    stored settings in ``user_llm_settings``.  The caller does NOT send a
+    key — the server reads it from the DB, decrypts it, and uses it for
+    this scan only.  If no settings are saved, the request is rejected 412.
+    """
 
     files: dict[str, str] = Field(..., description="{relative_path: file_content}")
     triggered_by: str = "local-dev"
     directory: str = ""
     repo_url: str = "https://github.com/local/workspace"
-    # Optional. When None (default), the scanner uses its env-configured
-    # org credentials — the master-pipeline CI path. When set, this scan's
-    # LLM call uses the caller's key instead.
-    llm_override: LLMOverride | None = None
-    # Optional. Picks which org-configured provider runs this scan (uses
-    # the server's own ANTHROPIC_API_KEY / GOOGLE_API_KEY). Ignored when
-    # ``llm_override`` is set — BYO key wins.
-    provider_override: ProviderOverride | None = None
 
 
 class LocalScanResponse(BaseModel):
@@ -284,75 +256,142 @@ class LocalScanResponse(BaseModel):
     findings: list[VulnerabilityFinding]
 
 
-LocalPipelineFactory = Callable[
-    [dict[str, str], "LLMOverride | None", "ProviderOverride | None"], ScanPipeline
-]
-
-
-def get_local_pipeline_factory(
-    settings: Annotated[Settings, Depends(get_settings)],
-) -> LocalPipelineFactory:
-    """On-demand pipeline over uploaded files (no GitHub, no BR-009 gate).
-
-    Resolution order (highest precedence wins):
-    1. ``llm_override`` (BYO key) → ``build_local_llm_client`` with the
-       caller-supplied key. CLI ``--local`` path.
-    2. ``provider_override`` (no key) → ``build_org_llm_client_for`` using
-       the matching server-side org key. CLI default `--provider X`, CI.
-    3. Neither → ``build_llm_client(settings)`` reading env defaults. The
-       legacy single-provider path.
-    """
-
-    def build(
-        files: dict[str, str],
-        llm_override: LLMOverride | None,
-        provider_override: ProviderOverride | None = None,
-    ) -> ScanPipeline:
-        github_client = _MockGitHubClient(files)
-        if llm_override is not None:
-            llm_client = build_local_llm_client(
-                provider=llm_override.provider,
-                api_key=llm_override.api_key,
-                model=llm_override.model,
-            )
-        elif provider_override is not None:
-            llm_client = build_org_llm_client_for(
-                provider=provider_override.provider,
-                model=provider_override.model,
-                settings=settings,
-            )
-        else:
-            llm_client = build_llm_client(settings)
-        return ScanPipeline(github_client, llm_client, mode=ScanType.on_demand)
-
-    return build
-
-
 _CallerDep = Annotated[AuthenticatedLocalCaller, Depends(verify_local_scan_token)]
-_FactoryDep = Annotated[LocalPipelineFactory, Depends(get_local_pipeline_factory)]
 
 
-async def _record_scan_ok_audit(
-    *,
-    caller: AuthenticatedLocalCaller,
-    file_count: int,
-    findings_count: int,
-    severity_counts: dict[str, int],
-) -> None:
-    """Insert a ``scan_ok`` row into ``audit_events``. No-op in legacy mode."""
-    if caller.user_email is None:
-        # Legacy mode — no identity, no DB-backed audit. The structured log
-        # line below is the only audit signal in that mode.
-        return
+async def _load_user_llm_settings(user_email: str) -> UserLLMSettings:
+    """Load the user's stored LLM settings from the DB.
+
+    Raises
+    ------
+    HTTPException 412
+        No settings row found — user must visit /portal/settings first.
+    """
+    from sqlalchemy import select  # local import — keeps module-level imports tight
     factory = get_session_factory()
     async with factory() as session:
+        stmt = select(UserLLMSettings).where(UserLLMSettings.user_email == user_email)
+        row = (await session.execute(stmt)).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_412_PRECONDITION_FAILED,
+            detail=(
+                "No LLM provider configured for your account. "
+                "Visit /portal/settings to choose a provider and save your API key."
+            ),
+        )
+    return row
+
+
+async def _persist_scan_data(
+    *,
+    result,
+    user_email: str,
+    token_id: str | None,
+    file_count: int,
+    severity_counts: dict[str, int],
+    provider: str,
+    model: str,
+    scan_id,
+    started_at,
+    markdown_report: str,
+    html_report: str,
+) -> None:
+    """Write scan_records + scan_usage, bump llm_usage_monthly, audit scan_ok.
+
+    All four writes happen in a single transaction so the portal always
+    shows a consistent state.  No-op in legacy mode (no user_email).
+    """
+    if not user_email:
+        return
+
+    from datetime import UTC, datetime  # noqa: PLC0415 — local to keep module clean
+    from sqlalchemy.dialects.postgresql import insert as pg_insert  # noqa: PLC0415
+
+    factory = get_session_factory()
+    now = datetime.now(UTC)
+    year_month = now.strftime("%Y-%m")
+
+    usage = result.llm_usage  # LLMUsage | None
+
+    async with factory() as session:
+        # --- scan_records ----------------------------------------------------
+        record = ScanRecord(
+            scan_id=scan_id,
+            user_email=user_email,
+            started_at=started_at,
+            finished_at=now,
+            repo_url=result.repo_url,
+            scan_target=result.scan_target.value if result.scan_target else None,
+            status=ScanStatus.ok if result.gate_decision.value not in ("scan_failed",) else ScanStatus.failed,
+            findings_count=result.findings_count,
+            critical=severity_counts.get("critical", 0),
+            high=severity_counts.get("high", 0),
+            medium=severity_counts.get("medium", 0),
+            low=severity_counts.get("low", 0),
+            markdown_report=markdown_report,
+            html_report=html_report,
+            provider=provider,
+            model=model,
+        )
+        session.add(record)
+
+        # --- scan_usage ------------------------------------------------------
+        if usage is not None:
+            scan_usage_row = ScanUsage(
+                scan_id=scan_id,
+                provider=provider,
+                model=model,
+                n_llm_calls=usage.n_calls,
+                input_tokens=usage.input_tokens,
+                output_tokens=usage.output_tokens,
+                cache_creation_input_tokens=usage.cache_creation_input_tokens,
+                cache_read_input_tokens=usage.cache_read_input_tokens,
+                response_ids=usage.response_ids_csv or None,
+            )
+            session.add(scan_usage_row)
+
+            # --- llm_usage_monthly (upsert) ----------------------------------
+            # SQLAlchemy Core upsert for "ON CONFLICT DO UPDATE".
+            # Falls back to a simple select+update+insert on SQLite (tests).
+            from sqlalchemy import select as sa_select  # noqa: PLC0415
+            stmt = sa_select(LLMUsageMonthly).where(
+                LLMUsageMonthly.user_email == user_email,
+                LLMUsageMonthly.year_month == year_month,
+                LLMUsageMonthly.provider == provider,
+                LLMUsageMonthly.model == model,
+            )
+            monthly = (await session.execute(stmt)).scalar_one_or_none()
+            if monthly is None:
+                monthly = LLMUsageMonthly(
+                    user_email=user_email,
+                    year_month=year_month,
+                    provider=provider,
+                    model=model,
+                    input_tokens=usage.input_tokens,
+                    output_tokens=usage.output_tokens,
+                    cache_creation_input_tokens=usage.cache_creation_input_tokens,
+                    cache_read_input_tokens=usage.cache_read_input_tokens,
+                    scan_count=1,
+                    last_updated=now,
+                )
+                session.add(monthly)
+            else:
+                monthly.input_tokens += usage.input_tokens
+                monthly.output_tokens += usage.output_tokens
+                monthly.cache_creation_input_tokens += usage.cache_creation_input_tokens
+                monthly.cache_read_input_tokens += usage.cache_read_input_tokens
+                monthly.scan_count += 1
+                monthly.last_updated = now
+
+        # --- audit scan_ok ---------------------------------------------------
         await token_audit.record(
             session,
             event_type=AuditEventType.scan_ok,
-            user_email=caller.user_email,
-            token_id=caller.token_id,
+            user_email=user_email,
+            token_id=token_id,
             file_count=file_count,
-            findings_count=findings_count,
+            findings_count=result.findings_count,
             **severity_counts,
         )
         await session.commit()
@@ -409,8 +448,31 @@ async def _check_concurrency_slot() -> None:
 async def scan_local(
     body: LocalScanRequest,
     caller: _CallerDep,
-    factory: _FactoryDep,
 ) -> LocalScanResponse:
+    """Handle a CLI advisory scan.
+
+    Auth flows through ``verify_local_scan_token`` (registry mode).  The
+    user's stored LLM settings are loaded from the DB, the key is decrypted,
+    and the pipeline runs entirely under the user's own credentials — the org
+    key is never involved here.  Results are persisted to ``scan_records`` +
+    ``scan_usage`` + ``llm_usage_monthly`` so the user can review them in
+    ``/portal/scans``.
+    """
+    from datetime import UTC, datetime  # noqa: PLC0415 — local import keeps top-level clean
+    from security_scanner.tokens import crypto  # noqa: PLC0415
+
+    # Registry mode is required — legacy tokens carry no user_email and
+    # therefore cannot resolve per-user LLM settings.  In practice this
+    # branch is unreachable once USE_TOKEN_REGISTRY=true is the permanent
+    # default, but guard explicitly so a misconfigured deploy fails loudly.
+    if caller.user_email is None:
+        raise HTTPException(
+            status_code=status.HTTP_412_PRECONDITION_FAILED,
+            detail=(
+                "No user identity resolved from token. "
+                "Issue a personal token at /portal/ and retry."
+            ),
+        )
 
     if not _REPO_URL_RE.match(body.repo_url):
         raise HTTPException(
@@ -423,36 +485,40 @@ async def scan_local(
             detail="No files supplied to scan.",
         )
 
-    # §12: log the count only — never the paths or content. token_id +
-    # user_email are populated in registry mode so the line is attributable;
-    # in legacy mode both are None and the line falls back to triggered_by.
-    # llm_override_used surfaces "did this caller send their own LLM key?"
-    # for cost attribution; the key itself is NEVER logged.
+    # Load the user's stored provider/model/key.  Raises 412 with a portal
+    # pointer if the user has not yet visited /portal/settings.
+    settings_row = await _load_user_llm_settings(caller.user_email)
+    api_key = crypto.decrypt(settings_row.encrypted_api_key)
+    provider_name = settings_row.provider.value   # "anthropic" | "google"
+    model_name = settings_row.model or None
+
+    # §12: log the count only — never paths or content.
     log.info(
         "local advisory scan",
         file_count=len(body.files),
         triggered_by=body.triggered_by,
         token_id=caller.token_id,
         user_email=caller.user_email,
-        llm_override_used=body.llm_override is not None,
-        llm_override_provider=(body.llm_override.provider if body.llm_override else None),
-        provider_override=(
-            body.provider_override.provider if body.provider_override else None
-        ),
+        provider=provider_name,
+        model=model_name,
     )
 
     try:
-        pipeline = factory(body.files, body.llm_override, body.provider_override)
+        llm_client = build_user_llm_client(provider_name, api_key, model_name)
     except LLMConfigError as exc:
-        # provider_override pointed at a provider whose server-side key
-        # is not configured (e.g. provider=gemini but GOOGLE_API_KEY unset).
-        # Surface as 422 so the caller knows up-front instead of failing
-        # mid-scan with an upstream error.
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),
         ) from exc
-    # Hold a semaphore slot for the duration of the pipeline call. The
+
+    pipeline = ScanPipeline(
+        _MockGitHubClient(body.files),
+        llm_client,
+        mode=ScanType.on_demand,
+    )
+    started_at = datetime.now(UTC)
+
+    # Hold a semaphore slot for the duration of the pipeline call.  The
     # locked() pre-check above ensures we don't *wait* for a slot if all
     # are taken; this `async with` is only entered when capacity exists.
     async with _scan_semaphore:
@@ -487,8 +553,8 @@ async def scan_local(
 
         # Surface mid-scan parse failures (transient LLM truncation) as
         # 502 Bad Gateway rather than silently returning HTTP 200 + 0 findings.
-        # Callers (CLI, CI) need to distinguish "clean repo" from "scanner
-        # error mid-parse" — a 200/0 silently masks a quality loss.
+        # Callers (CLI) need to distinguish "clean repo" from "scanner error
+        # mid-parse" — a 200/0 silently masks a quality loss.
         if result.gate_decision == GateDecision.scan_failed:
             reason = result.warnings[0] if result.warnings else "scanner upstream error"
             raise HTTPException(
@@ -500,12 +566,8 @@ async def scan_local(
                 },
             )
 
-        # Detect "LLM totally unavailable" — the pipeline tags the result
-        # with this exact warning prefix only when ALL LLM calls failed
-        # (every chunk exhausted retries). We trust the warning as the
-        # definitive signal rather than comparing file counts (the pipeline
-        # filters files before counting LLM-eligible inputs, so a count
-        # comparison against body.files would miss).
+        # BYO-key channel: ALWAYS loud-fail on LLM unavailability.
+        # The user's personal key is exhausted or broken; they need to know.
         llm_unavailable = any(
             w.startswith("LLM upstream unavailable") for w in result.warnings
         )
@@ -514,36 +576,19 @@ async def scan_local(
                 (w for w in result.warnings if w.startswith("LLM upstream unavailable")),
                 "LLM upstream unavailable",
             )
-            if body.llm_override is not None:
-                # BYO-key mode: fail loud so the user sees the actual problem
-                # (their personal LLM key is out of quota or otherwise broken).
-                is_quota = any(
-                    kw in reason.lower()
-                    for kw in ("quota", "resource_exhausted", "exceeded", "billing")
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail={
-                        "error": "llm_quota_exhausted" if is_quota else "llm_upstream_unavailable",
-                        "provider": body.llm_override.provider,
-                        "message": reason,
-                        "scan_id": str(result.scan_id),
-                    },
-                )
-            # Default mode (org credentials): keep advisory fallback per
-            # BR-006 fail-open, but alert #security so the org key gets
-            # topped up / rotated promptly.
-            try:
-                await send_llm_unavailable_alert(
-                    scan_id=str(result.scan_id),
-                    reason=reason,
-                    provider=type(pipeline._claude).__name__ if hasattr(pipeline, "_claude") else "unknown",
-                    triggered_by=body.triggered_by,
-                    repo_url=body.repo_url,
-                )
-            except Exception as exc:  # noqa: BLE001
-                # Never let a Slack failure break the scan (BR-006 spirit).
-                log.warning("slack llm-unavailable alert raised", error=type(exc).__name__)
+            is_quota = any(
+                kw in reason.lower()
+                for kw in ("quota", "resource_exhausted", "exceeded", "billing")
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail={
+                    "error": "llm_quota_exhausted" if is_quota else "llm_upstream_unavailable",
+                    "provider": provider_name,
+                    "message": reason,
+                    "scan_id": str(result.scan_id),
+                },
+            )
 
         def _count(sev: Severity) -> int:
             return sum(1 for f in result.findings if f.severity == sev)
@@ -555,18 +600,29 @@ async def scan_local(
             "low": _count(Severity.Low),
         }
 
-        # Audit the successful scan (registry mode only — no-op in legacy mode).
-        # Done AFTER the pipeline so we record real outcomes, not just intent.
-        await _record_scan_ok_audit(
-            caller=caller,
+        markdown_report = build_markdown_report(result)
+        html_report = build_html_report(result, files=body.files)
+
+        # Persist scan_records + scan_usage + bump llm_usage_monthly + audit
+        # in one transaction.  No-op in legacy mode (no user_email), but that
+        # branch is already guarded above.
+        await _persist_scan_data(
+            result=result,
+            user_email=caller.user_email,
+            token_id=caller.token_id,
             file_count=len(body.files),
-            findings_count=result.findings_count,
             severity_counts=severity_counts,
+            provider=provider_name,
+            model=model_name or "",
+            scan_id=result.scan_id,
+            started_at=started_at,
+            markdown_report=markdown_report,
+            html_report=html_report,
         )
 
         return LocalScanResponse(
-            markdown=build_markdown_report(result),
-            html=build_html_report(result, files=body.files),
+            markdown=markdown_report,
+            html=html_report,
             findings_count=result.findings_count,
             **severity_counts,
             findings=result.findings,

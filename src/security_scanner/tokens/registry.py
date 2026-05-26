@@ -24,7 +24,7 @@ import hmac
 import re
 import secrets
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from sqlalchemy import select
@@ -35,7 +35,14 @@ from security_scanner.tokens.models import (
     AuditEventType,
     IssuedVia,
     LocalScanToken,
+    User,
+    UserRole,
 )
+
+# Tokens expire after this many days. Renewing requires re-authenticating
+# through the Okta-walled portal, ensuring dormant ex-employee credentials
+# age out automatically.
+_TOKEN_TTL_DAYS = 30
 
 # --- Token format ------------------------------------------------------------
 
@@ -75,7 +82,15 @@ def parse_token(provided: str) -> tuple[str, str] | None:
 
 # --- Verify outcome ----------------------------------------------------------
 
-VerifyOutcome = Literal["ok", "bad_format", "unknown_token", "revoked", "bad_signature"]
+VerifyOutcome = Literal[
+    "ok",
+    "bad_format",
+    "unknown_token",
+    "revoked",
+    "bad_signature",
+    "expired",
+    "deactivated",
+]
 
 
 @dataclass(frozen=True)
@@ -127,8 +142,32 @@ async def verify(session: AsyncSession, provided: str) -> VerifyResult:
             user_email=row.user_email,
         )
 
+    # --- 30-day TTL check ---
+    now = datetime.now(UTC)
+    # SQLite returns naive datetimes; Postgres returns tz-aware.  Normalise to
+    # aware before comparing so the check works in both environments.
+    expires_at = row.expires_at
+    if expires_at is not None and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    if expires_at is not None and now > expires_at:
+        return VerifyResult(
+            outcome="expired",
+            token_id=token_id,
+            user_email=row.user_email,
+        )
+
+    # --- User is_active check (admin deactivation) ---
+    user_stmt = select(User).where(User.email == row.user_email)
+    user_row = (await session.execute(user_stmt)).scalar_one_or_none()
+    if user_row is not None and not user_row.is_active:
+        return VerifyResult(
+            outcome="deactivated",
+            token_id=token_id,
+            user_email=row.user_email,
+        )
+
     # Update last_used_at on a successful verify. Caller commits.
-    row.last_used_at = datetime.now(UTC)
+    row.last_used_at = now
 
     return VerifyResult(
         outcome="ok",
@@ -198,6 +237,7 @@ async def issue_or_rotate_for_user(
         issued_at=now,
         issued_via=issued_via,
         issued_by=issued_by,
+        expires_at=now + timedelta(days=_TOKEN_TTL_DAYS),
     )
     session.add(new_row)
 
@@ -359,3 +399,42 @@ async def list_all(
         like = f"%{user_email_contains}%"
         stmt = stmt.where(LocalScanToken.user_email.ilike(like))
     return list((await session.execute(stmt)).scalars().all())
+
+
+# --- User upsert (called on every successful portal visit) -------------------
+
+
+async def upsert_user(
+    session: AsyncSession,
+    *,
+    email: str,
+    is_admin: bool = False,
+    okta_groups: list[str] | None = None,
+) -> User:
+    """Create or update the user record from Okta claims.
+
+    Called on every authenticated portal page load so the ``users`` table
+    stays current without a separate sync job.  ``is_active`` is never set
+    to False here — only admin deactivation sets it; this just ensures the
+    row exists and last_login_at is current.
+    """
+    now = datetime.now(UTC)
+    stmt = select(User).where(User.email == email)
+    user = (await session.execute(stmt)).scalar_one_or_none()
+    if user is None:
+        user = User(
+            email=email,
+            role=UserRole.admin if is_admin else UserRole.user,
+            is_active=True,
+            created_at=now,
+            last_login_at=now,
+            okta_groups=okta_groups,
+        )
+        session.add(user)
+    else:
+        user.last_login_at = now
+        if is_admin and user.role != UserRole.admin:
+            user.role = UserRole.admin
+        if okta_groups is not None:
+            user.okta_groups = okta_groups
+    return user

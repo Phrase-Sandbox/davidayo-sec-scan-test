@@ -27,9 +27,11 @@ from security_scanner.agent.slack_alert import (
 from security_scanner.pipeline import ScanPipeline, TokenLimitError
 from security_scanner.shared.config import Settings, get_settings
 from security_scanner.shared.github.client import GitHubClient
-from security_scanner.agent.local_scan import ProviderOverride
 from security_scanner.shared.llm.base import LLMConfigError
-from security_scanner.shared.llm.factory import build_llm_client, build_org_llm_client_for
+from security_scanner.shared.llm.factory import (
+    build_llm_client,
+    build_org_llm_client_from_settings,
+)
 from security_scanner.shared.logging_util import get_logger
 from security_scanner.shared.models.enums import (
     GateDecision,
@@ -56,28 +58,58 @@ class ScanRequest(BaseModel):
     base: str | None = None
     head: str | None = None
     directory: str = ""
-    # Optional. Picks which org-configured provider runs this scan (uses
-    # the server's own ANTHROPIC_API_KEY / GOOGLE_API_KEY). None falls
-    # back to the SCANNER_LLM_PROVIDER env default.
-    provider_override: ProviderOverride | None = None
+    # Optional per-run CI override: "anthropic" | "google".
+    # Selects which org-configured key to use for this scan.
+    # None → uses org_settings.default_provider (or env bootstrap fallback).
+    provider_choice: str | None = None
 
 
 _SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 
-def get_pipeline(settings: _SettingsDep) -> ScanPipeline:
-    """Build a gate-mode ``ScanPipeline`` from environment-driven config.
+async def _load_active_org_settings():
+    """Return the latest ``OrgSettings`` row, or ``None`` if none exist yet.
 
-    Each request gets its own pipeline instance for simplicity — the underlying
-    HTTPX/Anthropic clients pool connections internally, so re-creation is
-    cheap and avoids any cross-request state. Tests override this via
-    ``app.dependency_overrides[get_pipeline]`` to inject a mock.
+    ``None`` means we are in the bootstrap window (fresh install, no admin has
+    saved keys via /admin/org-settings yet).  In that case the caller falls
+    back to env-var credentials.
+    """
+    from sqlalchemy import select  # noqa: PLC0415
+    from security_scanner.tokens.db import get_session_factory  # noqa: PLC0415
+    from security_scanner.tokens.models import OrgSettings  # noqa: PLC0415
+
+    factory = get_session_factory()
+    async with factory() as session:
+        stmt = select(OrgSettings).order_by(OrgSettings.id.desc()).limit(1)
+        return (await session.execute(stmt)).scalar_one_or_none()
+
+
+async def get_pipeline(settings: _SettingsDep) -> ScanPipeline:
+    """Build a gate-mode ``ScanPipeline`` from org settings (with env fallback).
+
+    Production path: reads ``org_settings`` MAX(id) from DB, decrypts the
+    configured provider's key, and builds a ``ScanPipeline`` using the org's
+    credentials.
+
+    Bootstrap fallback: when ``org_settings`` has no rows yet (first install
+    window before an admin has saved keys via ``/admin/org-settings``), falls
+    back to the ``ANTHROPIC_API_KEY`` / ``GOOGLE_API_KEY`` env vars exactly as
+    before.  Once ``org_settings`` is populated, this fallback is never
+    reached again.
+
+    Tests override this via ``app.dependency_overrides[get_pipeline]`` to
+    inject a mock pipeline — that override pattern is unaffected by this change.
     """
     github_client = GitHubClient(
         app_id=settings.GITHUB_APP_ID,
         private_key=settings.GITHUB_APP_PRIVATE_KEY,
     )
-    llm_client = build_llm_client(settings)
+    org_row = await _load_active_org_settings()
+    if org_row is not None:
+        llm_client = build_org_llm_client_from_settings(org_row, settings=settings)
+    else:
+        # Bootstrap: no org_settings row yet — fall back to env vars.
+        llm_client = build_llm_client(settings)
     return ScanPipeline(github_client, llm_client, mode=ScanType.deployment_gate)
 
 
@@ -101,15 +133,22 @@ async def scan(
             ),
         )
 
-    # When provider_override is sent, rebuild the pipeline with the requested
-    # org-side provider for this single request. The injected `pipeline` is
-    # otherwise reused — preserving test override patterns.
-    if body.provider_override is not None:
+    # When provider_choice is sent, reload org_settings and rebuild the pipeline
+    # for this scan only using the requested provider.  The injected `pipeline`
+    # is otherwise reused — preserving test override patterns.
+    if body.provider_choice is not None:
+        org_row = await _load_active_org_settings()
+        if org_row is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "provider_choice is set but no org settings are configured. "
+                    "Visit /admin/org-settings to save API keys first."
+                ),
+            )
         try:
-            llm_client = build_org_llm_client_for(
-                provider=body.provider_override.provider,
-                model=body.provider_override.model,
-                settings=settings,
+            llm_client = build_org_llm_client_from_settings(
+                org_row, body.provider_choice, settings=settings
             )
         except LLMConfigError as exc:
             raise HTTPException(

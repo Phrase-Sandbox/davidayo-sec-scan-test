@@ -1,11 +1,13 @@
-"""Tests for the local-advisory jurisdiction — POST /scan/local (D-12).
+"""Tests for POST /scan/local — two-channel architecture (D-12).
 
 Proves the jurisdiction boundary: distinct token, no gate_decision, never
-enforces. Mirrors the test_endpoint test style.
+enforces. Tests the registry-mode (user_email-based) path where the server
+loads the user's stored LLM settings from the DB instead of reading an
+inline API key from the request body.
 """
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -14,8 +16,11 @@ from fastapi.testclient import TestClient
 
 from security_scanner.agent.api import get_pipeline
 from security_scanner.agent.api import router as agent_router
-from security_scanner.agent.local_scan import get_local_pipeline_factory
-from security_scanner.agent.local_scan import router as local_router
+from security_scanner.agent.local_scan import (
+    AuthenticatedLocalCaller,
+    router as local_router,
+    verify_local_scan_token,
+)
 from security_scanner.pipeline import ScanPipeline
 from security_scanner.shared.models.enums import (
     Confidence,
@@ -30,6 +35,8 @@ from security_scanner.shared.models.scan_result import ScanResult
 
 _LOCAL_TOKEN = "local-advisory-token"  # noqa: S105 — test fixture
 _CI_TOKEN = "ci-gate-token"  # noqa: S105 — test fixture
+_USER_EMAIL = "dev@phrase.com"
+_TOKEN_ID = "tok_abc123"
 
 
 @pytest.fixture(autouse=True)
@@ -41,6 +48,11 @@ def _env(monkeypatch):
     monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", "-----BEGIN PRIVATE KEY-----")
     monkeypatch.setenv("GITHUB_OAUTH_CLIENT_ID", "Iv1.test")
     monkeypatch.setenv("GITHUB_OAUTH_CLIENT_SECRET", "secret")
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 
 def _finding(severity: Severity) -> VulnerabilityFinding:
@@ -86,27 +98,83 @@ def _result(findings, *, gate_decision=GateDecision.advisory, warnings=None) -> 
     )
 
 
+def _mock_user_llm_settings(provider: str = "anthropic", model: str = "claude-sonnet-4-6"):
+    """Build a minimal mock UserLLMSettings ORM row."""
+    from security_scanner.tokens.models import LLMProvider
+
+    row = MagicMock()
+    row.provider = LLMProvider.anthropic if provider == "anthropic" else LLMProvider.google
+    row.model = model
+    row.encrypted_api_key = b"fake-encrypted-key"
+    return row
+
+
+def _patch_scan_deps(mock_pipeline, monkeypatch, *, provider="anthropic"):
+    """Patch the four collaborators scan_local() calls internally.
+
+    Allows tests to control what the pipeline returns without touching the DB,
+    Fernet crypto, or ``build_user_llm_client``.
+    """
+    monkeypatch.setattr(
+        "security_scanner.agent.local_scan._load_user_llm_settings",
+        AsyncMock(return_value=_mock_user_llm_settings(provider)),
+    )
+    monkeypatch.setattr(
+        "security_scanner.tokens.crypto.decrypt",
+        lambda _: "sk-ant-decrypted",
+    )
+    monkeypatch.setattr(
+        "security_scanner.agent.local_scan.build_user_llm_client",
+        lambda *_a, **_kw: MagicMock(),
+    )
+    monkeypatch.setattr(
+        "security_scanner.agent.local_scan.ScanPipeline",
+        lambda *_a, **_kw: mock_pipeline,
+    )
+    monkeypatch.setattr(
+        "security_scanner.agent.local_scan._persist_scan_data",
+        AsyncMock(),
+    )
+
+
 @pytest.fixture
 def mock_pipeline() -> AsyncMock:
-    return AsyncMock(spec=ScanPipeline)
+    pipeline = AsyncMock(spec=ScanPipeline)
+    pipeline._github = MagicMock()
+    pipeline._mode = ScanType.on_demand
+    return pipeline
 
 
 @pytest.fixture
 def client(mock_pipeline):
+    """FastAPI test client with auth + pipeline + persistence mocked out.
+
+    Auth dep is overridden to return a registry-mode caller with a real
+    user_email so individual tests focus on behaviour after auth succeeds.
+    Tests that need to exercise the auth layer create their own bare app.
+    """
     app = FastAPI()
     app.include_router(local_router)
     app.include_router(agent_router)
 
-    def factory_provider():
-        return lambda files, llm_override, provider_override=None: mock_pipeline  # noqa: ARG005
+    def mock_auth():
+        return AuthenticatedLocalCaller(
+            token=_LOCAL_TOKEN,
+            token_id=_TOKEN_ID,
+            user_email=_USER_EMAIL,
+        )
 
-    app.dependency_overrides[get_local_pipeline_factory] = factory_provider
+    app.dependency_overrides[verify_local_scan_token] = mock_auth
     app.dependency_overrides[get_pipeline] = lambda: mock_pipeline
     return TestClient(app)
 
 
-def _post(client, token, **body):
-    payload = {"files": {"app/db.py": "q = 'SELECT '+u"}, **body}
+def _post(client, *, token: str | None = _LOCAL_TOKEN, **body):
+    payload = {
+        "files": {"app/db.py": "q = 'SELECT '+u"},
+        "repo_url": "https://github.com/local/workspace",
+        **body,
+    }
     return client.post(
         "/scan/local",
         json=payload,
@@ -114,138 +182,72 @@ def _post(client, token, **body):
     )
 
 
-def test_local_scan_returns_report_and_NO_gate_decision(client, mock_pipeline):
+# ---------------------------------------------------------------------------
+# Happy-path
+# ---------------------------------------------------------------------------
+
+
+def test_local_scan_returns_report_and_NO_gate_decision(client, mock_pipeline, monkeypatch):
+    """Response model has no gate_decision — structurally cannot enforce."""
+    _patch_scan_deps(mock_pipeline, monkeypatch)
     mock_pipeline.run.return_value = _result([_finding(Severity.High)])
-    r = _post(client, _LOCAL_TOKEN)
-    assert r.status_code == 200
+    r = _post(client)
+    assert r.status_code == 200, r.text
     body = r.json()
-    assert "gate_decision" not in body  # structurally cannot enforce
+    assert "gate_decision" not in body
     assert body["markdown"].startswith("# Security Scan Report")
     assert body["high"] == 1 and body["findings_count"] == 1
 
 
-def test_severity_counts(client, mock_pipeline):
+def test_severity_counts(client, mock_pipeline, monkeypatch):
+    _patch_scan_deps(mock_pipeline, monkeypatch)
     mock_pipeline.run.return_value = _result(
         [_finding(Severity.Critical), _finding(Severity.High), _finding(Severity.Low)]
     )
-    body = _post(client, _LOCAL_TOKEN).json()
+    body = _post(client).json()
     assert (body["critical"], body["high"], body["low"]) == (1, 1, 1)
 
 
-def test_ci_token_cannot_reach_local_jurisdiction(client):
-    # The CI gate token must NOT be accepted here (jurisdiction boundary).
-    assert _post(client, _CI_TOKEN).status_code == 401
+# ---------------------------------------------------------------------------
+# LLM settings — 412 when not configured
+# ---------------------------------------------------------------------------
 
 
-def test_missing_token_rejected(client):
-    assert _post(client, None).status_code == 401
-
-
-def test_local_endpoint_disabled_when_token_unset(client, monkeypatch):
-    monkeypatch.delenv("LOCAL_SCAN_TOKEN", raising=False)
-    assert _post(client, _LOCAL_TOKEN).status_code == 401
-
-
-def test_empty_files_rejected(client, mock_pipeline):
-    mock_pipeline.run.return_value = _result([])
-    r = client.post(
-        "/scan/local",
-        json={"files": {}},
-        headers={"Authorization": f"Bearer {_LOCAL_TOKEN}"},
-    )
-    assert r.status_code == 422
-
-
-def _result_llm_unavailable(reason="quota exceeded for model gemini-2.5-flash") -> ScanResult:
-    """A pipeline result mirroring the 'LLM totally unavailable' path —
-    every file unscanned, structured warning, advisory gate decision."""
-    return ScanResult(
-        scan_id=uuid4(),
-        repo_url="https://github.com/local/workspace",
-        scan_target=ScanTarget.full_repo,
-        scan_type=ScanType.on_demand,
-        triggered_by="local-dev",
-        timestamp=datetime(2026, 5, 26, tzinfo=UTC),
-        findings_count=0,
-        gate_decision=GateDecision.advisory,
-        partial_scan=True,
-        unscanned_files=["app/db.py"],
-        findings=[],
-        warnings=[f"LLM upstream unavailable: {reason}"],
-        patches={},
-    )
-
-
-def test_byo_key_llm_quota_exhausted_returns_502_quota_error(client, mock_pipeline, monkeypatch):
-    """--local + LLM totally unavailable + quota in reason → HTTP 502 + quota error code."""
-    mock_pipeline.run.return_value = _result_llm_unavailable(
-        "Gemini unavailable after 2 attempts: RESOURCE_EXHAUSTED quota exceeded"
-    )
-    # Slack helper must NOT fire on the BYO-key path.
-    slack_called = {"n": 0}
-
-    async def fake_slack(*_a, **_kw):
-        slack_called["n"] += 1
+def test_no_llm_settings_returns_412(client, monkeypatch):
+    """User hasn't saved LLM settings yet → 412 with a portal pointer."""
+    from fastapi import HTTPException
 
     monkeypatch.setattr(
-        "security_scanner.agent.local_scan.send_llm_unavailable_alert",
-        fake_slack,
+        "security_scanner.agent.local_scan._load_user_llm_settings",
+        AsyncMock(
+            side_effect=HTTPException(
+                status_code=412,
+                detail=(
+                    "No LLM provider configured for your account. "
+                    "Visit /portal/settings to choose a provider and save your API key."
+                ),
+            )
+        ),
     )
-
-    r = client.post(
-        "/scan/local",
-        json={
-            "files": {"app/db.py": "x = 1"},
-            "llm_override": {
-                "provider": "gemini",
-                "api_key": "AIza-fake",
-                "model": "gemini-2.5-flash",
-            },
-        },
-        headers={"Authorization": f"Bearer {_LOCAL_TOKEN}"},
-    )
-    assert r.status_code == 502, r.text
-    detail = r.json()["detail"]
-    assert detail["error"] == "llm_quota_exhausted"
-    assert detail["provider"] == "gemini"
-    assert "RESOURCE_EXHAUSTED" in detail["message"]
-    assert slack_called["n"] == 0  # BYO-key path must not Slack-notify
+    r = _post(client)
+    assert r.status_code == 412
+    assert "/portal/settings" in r.json()["detail"]
 
 
-def test_default_mode_llm_unavailable_keeps_advisory_and_sends_slack(client, mock_pipeline, monkeypatch):
-    """Default mode (no llm_override): keep advisory result, send Slack alert
-    to security so the org key gets topped up."""
-    mock_pipeline.run.return_value = _result_llm_unavailable(
-        "Claude unavailable after 3 attempts: rate limited (429); waited 8.0s"
-    )
-    captured: dict[str, object] = {}
-
-    async def fake_slack(**kw):
-        captured.update(kw)
-
-    monkeypatch.setattr(
-        "security_scanner.agent.local_scan.send_llm_unavailable_alert",
-        fake_slack,
-    )
-
-    r = _post(client, _LOCAL_TOKEN)  # default mode: no llm_override in body
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["findings_count"] == 0  # advisory partial — no findings
-    # Slack was notified with the upstream reason.
-    assert captured.get("scan_id")
-    assert "rate limited" in str(captured.get("reason"))
-    assert captured.get("triggered_by") == "local-dev"
+# ---------------------------------------------------------------------------
+# Error paths
+# ---------------------------------------------------------------------------
 
 
-def test_scan_failed_returns_502_with_detail(client, mock_pipeline):
-    """Mid-scan LLM parse failure → HTTP 502, NOT a silent 200/0-findings."""
+def test_scan_failed_returns_502_with_detail(client, mock_pipeline, monkeypatch):
+    """Mid-scan LLM parse failure → 502, NOT a silent 200/0-findings."""
+    _patch_scan_deps(mock_pipeline, monkeypatch)
     mock_pipeline.run.return_value = _result(
         [],
         gate_decision=GateDecision.scan_failed,
         warnings=["Claude response could not be parsed: Unterminated string"],
     )
-    r = _post(client, _LOCAL_TOKEN)
+    r = _post(client)
     assert r.status_code == 502
     detail = r.json()["detail"]
     assert detail["error"] == "scanner_upstream_error"
@@ -253,8 +255,56 @@ def test_scan_failed_returns_502_with_detail(client, mock_pipeline):
     assert "scan_id" in detail
 
 
+def test_llm_quota_exhausted_returns_502(client, mock_pipeline, monkeypatch):
+    """BYO-key LLM quota exhausted → 502 + quota error code. No Slack alert."""
+    _patch_scan_deps(mock_pipeline, monkeypatch)
+    mock_pipeline.run.return_value = _result(
+        [],
+        gate_decision=GateDecision.advisory,
+        warnings=["LLM upstream unavailable: RESOURCE_EXHAUSTED quota exceeded"],
+    )
+    r = _post(client)
+    assert r.status_code == 502
+    detail = r.json()["detail"]
+    assert detail["error"] == "llm_quota_exhausted"
+    assert detail["provider"] == "anthropic"
+    assert "RESOURCE_EXHAUSTED" in detail["message"]
+
+
+def test_llm_unavailable_non_quota_returns_502(client, mock_pipeline, monkeypatch):
+    """BYO-key non-quota LLM failure → 502 + generic unavailable code."""
+    _patch_scan_deps(mock_pipeline, monkeypatch)
+    mock_pipeline.run.return_value = _result(
+        [],
+        gate_decision=GateDecision.advisory,
+        warnings=["LLM upstream unavailable: connection refused"],
+    )
+    r = _post(client)
+    assert r.status_code == 502
+    detail = r.json()["detail"]
+    assert detail["error"] == "llm_upstream_unavailable"
+
+
+def test_empty_files_rejected(client, monkeypatch):
+    monkeypatch.setattr(
+        "security_scanner.agent.local_scan._load_user_llm_settings",
+        AsyncMock(return_value=_mock_user_llm_settings()),
+    )
+    r = client.post(
+        "/scan/local",
+        json={"files": {}, "repo_url": "https://github.com/local/workspace"},
+        headers={"Authorization": f"Bearer {_LOCAL_TOKEN}"},
+    )
+    assert r.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# CI / agent-scan gate tests
+# ---------------------------------------------------------------------------
+
+
 def test_agent_scan_failed_returns_502(client, mock_pipeline):
-    """Same surfacing on the gate endpoint — CI sees an explicit failure."""
+    """Same error surfacing on the CI gate endpoint."""
     mock_pipeline.run.return_value = _result(
         [],
         gate_decision=GateDecision.scan_failed,
@@ -274,28 +324,63 @@ def test_agent_scan_failed_returns_502(client, mock_pipeline):
     assert detail["error"] == "scanner_upstream_error"
 
 
-def test_agent_scan_provider_override_missing_key_returns_422(client, mock_pipeline, monkeypatch):
-    """/agent/scan with provider_override=gemini and no GOOGLE_API_KEY → 422 up-front."""
-    # Force GOOGLE_API_KEY absent for this test.
-    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+# ---------------------------------------------------------------------------
+# Auth boundary — separate bare apps (no auth override)
+# ---------------------------------------------------------------------------
 
-    r = client.post(
-        "/agent/scan",
-        json={
-            "repo_url": "https://github.com/local/x",
-            "scan_target": "full_repo",
-            "triggered_by": "ci",
-            "provider_override": {"provider": "gemini"},
-        },
+
+def _bare_local_app():
+    app = FastAPI()
+    app.include_router(local_router)
+    return TestClient(app)
+
+
+def _bare_agent_app():
+    app = FastAPI()
+    app.include_router(agent_router)
+    return TestClient(app)
+
+
+def test_ci_token_cannot_reach_local_jurisdiction(monkeypatch):
+    """CI gate token must NOT be accepted at /scan/local (jurisdiction boundary)."""
+    monkeypatch.setenv("USE_TOKEN_REGISTRY", "false")
+    tc = _bare_local_app()
+    r = tc.post(
+        "/scan/local",
+        json={"files": {"a.py": "x"}, "repo_url": "https://github.com/local/workspace"},
         headers={"Authorization": f"Bearer {_CI_TOKEN}"},
     )
-    assert r.status_code == 422, r.text
-    assert "GOOGLE_API_KEY" in r.json()["detail"]
+    assert r.status_code == 401
 
 
-def test_local_token_cannot_reach_ci_gate(client):
-    # The reverse boundary: the local-advisory token must NOT pass the CI gate.
-    r = client.post(
+def test_missing_token_rejected(monkeypatch):
+    """No Authorization header → 401."""
+    monkeypatch.setenv("USE_TOKEN_REGISTRY", "false")
+    tc = _bare_local_app()
+    r = tc.post(
+        "/scan/local",
+        json={"files": {"a.py": "x"}, "repo_url": "https://github.com/local/workspace"},
+    )
+    assert r.status_code == 401
+
+
+def test_local_endpoint_disabled_when_token_unset(monkeypatch):
+    """LOCAL_SCAN_TOKEN unset → every call 401s (endpoint effectively disabled)."""
+    monkeypatch.setenv("USE_TOKEN_REGISTRY", "false")
+    monkeypatch.delenv("LOCAL_SCAN_TOKEN", raising=False)
+    tc = _bare_local_app()
+    r = tc.post(
+        "/scan/local",
+        json={"files": {"a.py": "x"}, "repo_url": "https://github.com/local/workspace"},
+        headers={"Authorization": f"Bearer {_LOCAL_TOKEN}"},
+    )
+    assert r.status_code == 401
+
+
+def test_local_token_cannot_reach_ci_gate():
+    """Local-advisory token must NOT pass the CI gate."""
+    tc = _bare_agent_app()
+    r = tc.post(
         "/agent/scan",
         json={
             "repo_url": "https://github.com/local/x",
@@ -307,13 +392,13 @@ def test_local_token_cannot_reach_ci_gate(client):
     assert r.status_code == 401
 
 
-# --- Backpressure: payload cap, concurrency cap ---------------------------
+# ---------------------------------------------------------------------------
+# Backpressure
+# ---------------------------------------------------------------------------
 
 
 def test_content_length_over_cap_returns_413(client):
-    """Fast-path reject before we read the body."""
-    # Send a real (small) body but lie about Content-Length so we don't
-    # actually have to transfer 100+ MB through the test client.
+    """Fast-path reject before the body is read into memory."""
     r = client.post(
         "/scan/local",
         content=b'{"files": {"x": "y"}, "triggered_by": "t", "repo_url": "https://github.com/x/y"}',
@@ -327,16 +412,16 @@ def test_content_length_over_cap_returns_413(client):
 
 
 def test_max_concurrent_scans_env_var_override(monkeypatch):
-    """The cap is tunable for higher Anthropic tiers via env var."""
+    """The concurrency cap is tunable via MAX_CONCURRENT_SCANS."""
     from security_scanner.agent.local_scan import _read_max_concurrent_scans
 
     monkeypatch.setenv("MAX_CONCURRENT_SCANS", "12")
     assert _read_max_concurrent_scans() == 12
 
-    monkeypatch.setenv("MAX_CONCURRENT_SCANS", "200")  # clamped down to 64
+    monkeypatch.setenv("MAX_CONCURRENT_SCANS", "200")  # clamped to 64
     assert _read_max_concurrent_scans() == 64
 
-    monkeypatch.setenv("MAX_CONCURRENT_SCANS", "-3")  # clamped up to 1
+    monkeypatch.setenv("MAX_CONCURRENT_SCANS", "-3")  # clamped to 1
     assert _read_max_concurrent_scans() == 1
 
     monkeypatch.setenv("MAX_CONCURRENT_SCANS", "not-a-number")  # falls back
@@ -346,273 +431,11 @@ def test_max_concurrent_scans_env_var_override(monkeypatch):
     assert _read_max_concurrent_scans() == 4
 
 
-def test_get_local_pipeline_factory_no_override_uses_org_creds(monkeypatch):
-    """Factory with llm_override=None → uses settings via build_llm_client."""
-    from unittest.mock import MagicMock, patch
-
-    fake_llm = MagicMock()
-    with (
-        patch(
-            "security_scanner.agent.local_scan.build_llm_client",
-            return_value=fake_llm,
-        ) as mock_org_factory,
-        patch(
-            "security_scanner.agent.local_scan.build_local_llm_client",
-        ) as mock_byo_factory,
-    ):
-        from security_scanner.agent.local_scan import get_local_pipeline_factory
-        from security_scanner.shared.config import Settings
-
-        settings = Settings()
-        pipeline_factory = get_local_pipeline_factory(settings)
-        assert callable(pipeline_factory)
-        pipeline_factory({"a.py": "print(1)"}, None)
-        mock_org_factory.assert_called_once_with(settings)
-        mock_byo_factory.assert_not_called()
-
-
-def test_get_local_pipeline_factory_with_override_uses_caller_key(monkeypatch):
-    """Factory with llm_override set → uses build_local_llm_client w/ caller key."""
-    from unittest.mock import MagicMock, patch
-
-    from security_scanner.agent.local_scan import LLMOverride
-
-    fake_llm = MagicMock()
-    with (
-        patch(
-            "security_scanner.agent.local_scan.build_local_llm_client",
-            return_value=fake_llm,
-        ) as mock_byo_factory,
-        patch(
-            "security_scanner.agent.local_scan.build_llm_client",
-        ) as mock_org_factory,
-    ):
-        from security_scanner.agent.local_scan import get_local_pipeline_factory
-        from security_scanner.shared.config import Settings
-
-        settings = Settings()
-        pipeline_factory = get_local_pipeline_factory(settings)
-        override = LLMOverride(
-            provider="anthropic",
-            api_key="sk-ant-caller-key-xxx",
-            model="claude-sonnet-4-6",
-        )
-        pipeline_factory({"a.py": "print(1)"}, override)
-        mock_byo_factory.assert_called_once_with(
-            provider="anthropic",
-            api_key="sk-ant-caller-key-xxx",
-            model="claude-sonnet-4-6",
-        )
-        mock_org_factory.assert_not_called()
-
-
-def test_llm_override_missing_api_key_returns_422(client):
-    """Pydantic validation rejects an override without an api_key."""
-    r = client.post(
-        "/scan/local",
-        json={
-            "files": {"a.py": "print(1)"},
-            "triggered_by": "tester",
-            "repo_url": "https://github.com/x/y",
-            "llm_override": {"provider": "anthropic"},  # missing api_key
-        },
-        headers={"Authorization": f"Bearer {_LOCAL_TOKEN}"},
-    )
-    assert r.status_code == 422
-    assert "api_key" in r.text.lower()
-
-
-def test_llm_override_empty_api_key_returns_422(client):
-    """Pydantic validation rejects an empty api_key (min_length=1)."""
-    r = client.post(
-        "/scan/local",
-        json={
-            "files": {"a.py": "print(1)"},
-            "triggered_by": "tester",
-            "repo_url": "https://github.com/x/y",
-            "llm_override": {"provider": "google", "api_key": ""},
-        },
-        headers={"Authorization": f"Bearer {_LOCAL_TOKEN}"},
-    )
-    assert r.status_code == 422
-
-
-def test_provider_override_flows_through_to_factory(client, mock_pipeline):
-    """provider_override (no api_key) reaches the factory so the server uses
-    its own org key for the requested provider."""
-    captured: dict = {}
-
-    def real_factory_provider():
-        def build(files, llm_override, provider_override=None):
-            captured["llm_override"] = llm_override
-            captured["provider_override"] = provider_override
-            return mock_pipeline
-        return build
-
-    mock_pipeline.run.return_value = _result([])
-    from security_scanner.agent.local_scan import get_local_pipeline_factory
-
-    client.app.dependency_overrides[get_local_pipeline_factory] = real_factory_provider
-    try:
-        r = client.post(
-            "/scan/local",
-            json={
-                "files": {"a.py": "print(1)"},
-                "triggered_by": "tester",
-                "repo_url": "https://github.com/x/y",
-                "provider_override": {"provider": "gemini", "model": "gemini-flash-latest"},
-            },
-            headers={"Authorization": f"Bearer {_LOCAL_TOKEN}"},
-        )
-        assert r.status_code == 200, r.text
-        assert captured["llm_override"] is None  # not BYO
-        assert captured["provider_override"] is not None
-        assert captured["provider_override"].provider == "gemini"
-        assert captured["provider_override"].model == "gemini-flash-latest"
-    finally:
-        client.app.dependency_overrides[get_local_pipeline_factory] = lambda: (
-            lambda files, llm_override, provider_override=None: mock_pipeline  # noqa: ARG005
-        )
-
-
-def test_provider_override_missing_server_key_returns_422(client, mock_pipeline, monkeypatch):
-    """If provider_override=gemini but the server has no GOOGLE_API_KEY,
-    the request is rejected 422 BEFORE running the pipeline — caller knows
-    up-front instead of mid-scan."""
-    # Real factory with a fake settings object lacking GOOGLE_API_KEY.
-    from security_scanner.agent.local_scan import (
-        get_local_pipeline_factory,
-    )
-    from security_scanner.shared.config import get_settings
-
-    real_settings = get_settings()
-    # Patch GOOGLE_API_KEY to None on a copy of settings for this test.
-    class _FakeSettings:
-        ANTHROPIC_API_KEY = real_settings.ANTHROPIC_API_KEY
-        GOOGLE_API_KEY = None
-
-    def factory_provider():
-        from security_scanner.agent.local_scan import get_local_pipeline_factory
-        return get_local_pipeline_factory(_FakeSettings())
-
-    client.app.dependency_overrides[get_local_pipeline_factory] = factory_provider
-    try:
-        r = client.post(
-            "/scan/local",
-            json={
-                "files": {"a.py": "print(1)"},
-                "triggered_by": "tester",
-                "repo_url": "https://github.com/x/y",
-                "provider_override": {"provider": "gemini"},
-            },
-            headers={"Authorization": f"Bearer {_LOCAL_TOKEN}"},
-        )
-        assert r.status_code == 422, r.text
-        assert "GOOGLE_API_KEY" in r.json()["detail"]
-    finally:
-        client.app.dependency_overrides[get_local_pipeline_factory] = lambda: (
-            lambda files, llm_override, provider_override=None: mock_pipeline  # noqa: ARG005
-        )
-
-
-def test_llm_override_wins_over_provider_override(client, mock_pipeline):
-    """When both are sent, llm_override (BYO key) takes precedence — server
-    must NOT silently use its org key when the caller explicitly provided
-    their own."""
-    captured: dict = {}
-
-    def real_factory_provider():
-        def build(files, llm_override, provider_override=None):
-            captured["llm_override"] = llm_override
-            captured["provider_override"] = provider_override
-            return mock_pipeline
-        return build
-
-    mock_pipeline.run.return_value = _result([])
-    from security_scanner.agent.local_scan import get_local_pipeline_factory
-
-    client.app.dependency_overrides[get_local_pipeline_factory] = real_factory_provider
-    try:
-        r = client.post(
-            "/scan/local",
-            json={
-                "files": {"a.py": "print(1)"},
-                "triggered_by": "tester",
-                "repo_url": "https://github.com/x/y",
-                "llm_override": {
-                    "provider": "claude",
-                    "api_key": "sk-ant-byo",
-                    "model": None,
-                },
-                "provider_override": {"provider": "gemini"},
-            },
-            headers={"Authorization": f"Bearer {_LOCAL_TOKEN}"},
-        )
-        assert r.status_code == 200, r.text
-        # Both flow to the factory; the factory itself enforces precedence.
-        # End-to-end behaviour: BYO key is used (verified by factory logic
-        # in build_org_llm_client_for tests).
-        assert captured["llm_override"] is not None
-        assert captured["llm_override"].api_key == "sk-ant-byo"
-    finally:
-        client.app.dependency_overrides[get_local_pipeline_factory] = lambda: (
-            lambda files, llm_override, provider_override=None: mock_pipeline  # noqa: ARG005
-        )
-
-
-def test_llm_override_flows_through_to_factory(client, mock_pipeline):
-    """End-to-end: llm_override in request body reaches the factory closure."""
-    from unittest.mock import patch
-
-    captured: dict = {}
-
-    def real_factory_provider():
-        def build(files, llm_override, provider_override=None):
-            captured["llm_override"] = llm_override
-            captured["provider_override"] = provider_override
-            return mock_pipeline
-        return build
-
-    mock_pipeline.run.return_value = _result([])
-    from security_scanner.agent.local_scan import get_local_pipeline_factory
-
-    client.app.dependency_overrides[get_local_pipeline_factory] = real_factory_provider
-    try:
-        r = client.post(
-            "/scan/local",
-            json={
-                "files": {"a.py": "print(1)"},
-                "triggered_by": "tester",
-                "repo_url": "https://github.com/x/y",
-                "llm_override": {
-                    "provider": "google",
-                    "api_key": "AIza-fake-key-for-test",
-                    "model": "gemini-2.5-flash",
-                },
-            },
-            headers={"Authorization": f"Bearer {_LOCAL_TOKEN}"},
-        )
-        assert r.status_code == 200, r.text
-        assert captured["llm_override"] is not None
-        assert captured["llm_override"].provider == "google"
-        assert captured["llm_override"].api_key == "AIza-fake-key-for-test"
-        assert captured["llm_override"].model == "gemini-2.5-flash"
-    finally:
-        # Restore the default mock factory for subsequent tests
-        client.app.dependency_overrides[get_local_pipeline_factory] = lambda: (
-            lambda files, llm_override, provider_override=None: mock_pipeline  # noqa: ARG005
-        )
-
-
-def test_returns_429_when_semaphore_is_drained(client, monkeypatch):
-    """Saturate the semaphore and verify a fresh request gets 429+Retry-After."""
+def test_returns_429_when_semaphore_is_drained(client):
+    """Saturate the semaphore → 429 with Retry-After."""
     import security_scanner.agent.local_scan as ls_mod
 
-    # Drain all slots manually to simulate other in-flight scans.
-    drained = []
     for _ in range(ls_mod._MAX_CONCURRENT_SCANS):
-        # ``locked()`` becomes True only once ``_value <= 0``. We push
-        # the value to 0 by acquiring without awaiting (cheap in tests).
         ls_mod._scan_semaphore._value -= 1
     try:
         r = client.post(
@@ -625,7 +448,6 @@ def test_returns_429_when_semaphore_is_drained(client, monkeypatch):
             headers={"Authorization": f"Bearer {_LOCAL_TOKEN}"},
         )
     finally:
-        # Restore the semaphore so subsequent tests aren't broken.
         for _ in range(ls_mod._MAX_CONCURRENT_SCANS):
             ls_mod._scan_semaphore._value += 1
     assert r.status_code == 429

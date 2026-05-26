@@ -25,7 +25,6 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from security_scanner.agent.api import get_pipeline
 from security_scanner.agent.api import router as agent_router
-from security_scanner.agent.local_scan import get_local_pipeline_factory
 from security_scanner.agent.local_scan import router as local_router
 from security_scanner.pipeline import ScanPipeline
 from security_scanner.shared.models.enums import (
@@ -140,9 +139,7 @@ def client(mock_pipeline):
     app = FastAPI()
     app.include_router(local_router)
     app.include_router(agent_router)
-    app.dependency_overrides[get_local_pipeline_factory] = lambda: (
-        lambda _files, _llm_override, _provider_override=None: mock_pipeline
-    )
+    # Only override the CI pipeline dep — the local-scan auth dep runs real.
     app.dependency_overrides[get_pipeline] = lambda: mock_pipeline
     return TestClient(app)
 
@@ -150,7 +147,10 @@ def client(mock_pipeline):
 def _post(client, token):
     return client.post(
         "/scan/local",
-        json={"files": {"app/db.py": "q = 'SELECT '+u"}},
+        json={
+            "files": {"app/db.py": "q = 'SELECT '+u"},
+            "repo_url": "https://github.com/local/workspace",
+        },
         headers={"Authorization": f"Bearer {token}"} if token else {},
     )
 
@@ -168,20 +168,50 @@ async def _seed_token(factory, *, user_email: str) -> str:
 
 
 async def test_registry_ok_returns_200_and_audits_scan_ok(
-    session_factory, client, mock_pipeline
+    session_factory, client, mock_pipeline, monkeypatch
 ):
+    """Registry token → 200 + scan_ok audit row + last_used_at bumped."""
+    from unittest.mock import AsyncMock as _AsyncMock, MagicMock as _MagicMock
+    from security_scanner.tokens.models import LLMProvider
+
+    # Patch the three internal deps scan_local() now calls instead of factory.
+    settings_row = _MagicMock()
+    settings_row.provider = LLMProvider.anthropic
+    settings_row.model = "claude-sonnet-4-6"
+    settings_row.encrypted_api_key = b"fake-encrypted"
+
+    monkeypatch.setattr(
+        "security_scanner.agent.local_scan._load_user_llm_settings",
+        _AsyncMock(return_value=settings_row),
+    )
+    monkeypatch.setattr(
+        "security_scanner.tokens.crypto.decrypt",
+        lambda _: "sk-ant-fake",
+    )
+    monkeypatch.setattr(
+        "security_scanner.agent.local_scan.build_user_llm_client",
+        lambda *_a, **_kw: _MagicMock(),
+    )
+    monkeypatch.setattr(
+        "security_scanner.agent.local_scan.ScanPipeline",
+        lambda *_a, **_kw: mock_pipeline,
+    )
+    # Let _persist_scan_data run so the scan_ok audit row is written.
+    # It uses get_session_factory() from the module — already patched to the
+    # in-memory factory by the session_factory fixture.
+
     mock_pipeline.run.return_value = _result([_finding(Severity.High)])
     token = await _seed_token(session_factory, user_email="alice@phrase.com")
 
     r = _post(client, token)
-    assert r.status_code == 200
+    assert r.status_code == 200, r.text
 
     # No gate_decision on local jurisdiction.
     body = r.json()
     assert "gate_decision" not in body
     assert body["findings_count"] == 1
 
-    # An audit row was written for the successful scan.
+    # A scan_ok audit row must have been written with alice's email.
     async with session_factory() as session:
         rows = (
             (
