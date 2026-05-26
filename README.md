@@ -1,371 +1,260 @@
 # phrase-sec-scan
 
-A security scanner you run on your own laptop. The `phrase-sec-scan` CLI
-sends your code to a scanner service (also running on your laptop), and the
-scanner returns a Markdown report with any security issues it found. Your
-code never leaves machines you control.
+A security scanner for Phrase engineers. The `phrase-sec-scan` CLI sends
+your code to the Phrase scanner service, which runs a multi-layer analysis
+(Semgrep, Bandit, ESLint, gosec + LLM deep-dive) and returns a full
+security report. Your code is scanned server-side; findings are displayed
+locally.
 
-This README is written for someone who has **never used GitHub or the
-terminal before**. Copy-paste the commands one at a time.
+Two channels, one pipeline:
+
+| Channel | Who | Auth | LLM key |
+|---------|-----|------|---------|
+| **CLI** | Developer laptop | 30-day portal token | Your BYO key (portal settings) |
+| **CI** | GitHub Actions | Org CI token | Org key (admin-managed) |
 
 ---
 
 ## What you need before you start
 
-You'll need a Mac (Apple Silicon or Intel) or a Linux/Windows computer.
-Install these one-time tools:
+- A Phrase Okta account (for portal login).
+- A Mac (Apple Silicon or Intel) or a Linux/Windows computer.
+- An Anthropic or Google API key to save in the portal (so the scanner can
+  run LLM analysis on your behalf).
 
-**macOS** — open the "Terminal" app and paste:
+Install one-time tools (macOS):
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 brew install git docker gh cloudflared python@3.12
 ```
 
-After `brew install docker` you also need to open the Docker Desktop app
-once (Applications → Docker) and let it finish starting up. The whale icon
-in the menu bar should be steady (not animated).
-
-You also need:
-
-- **An Anthropic API key.** Go to
-  [console.anthropic.com](https://console.anthropic.com/), sign up, open
-  "API Keys" in the sidebar, click "Create Key", and copy the value (starts
-  with `sk-ant-`). Keep this window open — you'll paste it in Step 2.
+Open the Docker Desktop app once after installing — let the whale icon in
+the menu bar go steady before continuing.
 
 ---
 
-## Step 1 — Get the code onto your computer
+## Setting up the scanner (ops — one-time per deployment)
 
-```bash
-gh auth login
-```
-
-Pick "GitHub.com" → "HTTPS" → "Login with a web browser" and follow the
-prompts. When it's done, run:
+### 1 — Clone and configure
 
 ```bash
 gh repo clone Phrase-Sandbox/davidayo-sec-scan-test
 cd davidayo-sec-scan-test
-```
-
-You are now inside the project folder. Every command from here runs from
-this folder unless we say otherwise.
-
----
-
-## Step 2 — Start the scanner
-
-```bash
 cp .env.local.example .env.local
 ```
 
-Open `.env.local` in any text editor (TextEdit, VS Code, nano — anything).
-Find the line that says:
+Open `.env.local` and set:
 
 ```
-ANTHROPIC_API_KEY=sk-ant-replace-with-real-key
+# Fernet key for encrypting API keys at rest (REQUIRED).
+# Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+SCANNER_ENCRYPTION_KEY=<your-fernet-key>
+
+# GitHub App credentials (required for CI /agent/scan endpoint).
+GITHUB_APP_ID=...
+GITHUB_APP_PRIVATE_KEY=...
+GITHUB_OAUTH_CLIENT_ID=...
+GITHUB_OAUTH_CLIENT_SECRET=...
+
+# CI gate token — set any non-empty string for local dev.
+# Production: rotate via /admin/ci-token, then set this in GitHub Actions.
+PHRASE_SCAN_TOKEN=local-test-token
 ```
 
-Replace `sk-ant-replace-with-real-key` with the key you copied from
-console.anthropic.com. Save the file.
+The `ANTHROPIC_API_KEY` env var is only used as a bootstrap fallback when
+no org settings have been saved yet via `/admin/org-settings`. Set it for
+local dev; production uses DB-stored org keys.
 
-Now start the scanner:
+### 2 — Start the scanner
 
 ```bash
 docker compose --env-file .env.local up -d --build security-scanner
+curl http://localhost:8000/healthz   # should return {"status":"ok"}
 ```
 
-The first run downloads and builds an image — that can take a few minutes.
-When it finishes, check that the scanner is alive:
-
-```bash
-curl http://localhost:8000/healthz
-```
-
-You should see `{"status":"ok"}`. If you get a connection error, wait 10
-seconds and try again — the scanner is still starting.
-
----
-
-## Step 3 — Make the scanner reachable over the internet
-
-The scanner is running on your laptop. To talk to it from anywhere (or to
-let the browser-based portal work), expose it through a free Cloudflare
-tunnel. **Open a new terminal window** (leave the first one alone), `cd`
-into the same project folder you cloned in Step 1, and run:
+### 3 — Expose over the internet (local dev)
 
 ```bash
 cloudflared tunnel --url http://localhost:8000
 ```
 
-A few seconds later Cloudflare prints a line like:
+Copy the `https://random-fluffy-words.trycloudflare.com` URL — this is
+your `<TUNNEL_URL>`.
 
-```
-Your quick tunnel has been created! Visit it at:
-https://random-fluffy-words.trycloudflare.com
-```
+### 4 — Configure org LLM keys (admin)
 
-Copy that URL. You will use it as `<TUNNEL_URL>` in the rest of this guide.
+Open `<TUNNEL_URL>/admin/org-settings` in a browser (Okta required).
+Enter your Anthropic and/or Google API keys and pick a default provider.
+These keys are encrypted at rest (Fernet) and loaded on every CI scan.
+Changes take effect on the next scan — no restart needed.
 
-> The URL changes every time you restart `cloudflared` on the free plan.
-> That's normal. Just paste the new one when it changes.
+### 5 — Generate the CI token (admin)
 
-Keep this terminal window open. If you close it, the tunnel dies.
-
----
-
-## Step 4 — Get your personal access token
-
-In a web browser, open:
-
-```
-<TUNNEL_URL>/portal/
-```
-
-(replace `<TUNNEL_URL>` with the URL from Step 3).
-
-Click **"Issue token"**. The page shows a long string that starts with
-`phs_local_tok-...`. **Copy it now — it's only shown once.**
+Open `<TUNNEL_URL>/admin/ci-token` → click **Generate CI token**.
+Copy the `phs_ci_…` value and save it as the `SCANNER_API_TOKEN` secret
+in the `master-scanner-pipeline` GitHub Actions workflow.
 
 ---
 
-## Step 5 — Install the CLI on your laptop
+## Developer onboarding (per-engineer — one-time)
 
-Pick the right file for your computer:
-
-| Your computer | File to download |
-| --- | --- |
-| Mac with M1/M2/M3 chip (Apple Silicon) | `phrase-sec-scan-darwin-arm64` |
-| Linux | `phrase-sec-scan-linux-x86_64` |
-| Windows | `phrase-sec-scan-windows-x86_64.exe` |
-| Mac with Intel chip | *not pre-built — see "Intel Mac: build from source" below* |
-
-For Mac (Apple Silicon), run:
+### 1 — Install the CLI
 
 ```bash
-gh release download v0.5.0 \
+gh release download latest \
   -R Phrase-Sandbox/davidayo-sec-scan-test \
   -p 'phrase-sec-scan-darwin-arm64' \
   -O /usr/local/bin/phrase-sec-scan
 chmod +x /usr/local/bin/phrase-sec-scan
+# Mac only: clear Gatekeeper
+xattr -d com.apple.quarantine /usr/local/bin/phrase-sec-scan 2>/dev/null || true
 ```
 
-(Swap the file name in the `-p` flag if you're on a different machine.)
-
-**Mac only — one-time:** Apple blocks unsigned downloads. Clear the warning:
+### 2 — Log in (one-time)
 
 ```bash
-xattr -d com.apple.quarantine /usr/local/bin/phrase-sec-scan
+phrase-sec-scan login --scanner-url <TUNNEL_URL>
 ```
 
-If it says `No such xattr: com.apple.quarantine` — that's fine, it means
-nothing to clear.
+This opens `<TUNNEL_URL>/portal/cli/login` in your browser. Sign in with
+Okta. The portal issues a 30-day personal token and writes it to
+`~/.phrase-sec-scan/config.yaml` automatically. **No API key is stored
+on disk.**
 
-### Intel Mac (x86_64) — build from source
+### 3 — Save your LLM API key (once, via portal)
 
-The pre-built Intel Mac binary is not currently in the v0.5.0 release
-(`macos-13` runner scheduling on Phrase-Sandbox is slow). Build it locally
-instead — takes about 2 minutes:
+Open `<TUNNEL_URL>/portal/settings` in a browser. Choose your provider
+(Anthropic Claude or Google Gemini), pick a model, and enter your API key.
+It is encrypted with Fernet before storage and used only to run your scans.
 
-```bash
-cd ~/davidayo-sec-scan-test
-python3.12 -m venv .venv
-.venv/bin/pip install -e '.[dev]'
-PYTHON=.venv/bin/python3.12 ./build.sh
-sudo mv dist/phrase-sec-scan /usr/local/bin/phrase-sec-scan
-```
+No key saved → the CLI exits 2 with a link to this page.
 
-You can also use this same flow on Apple Silicon if you want to run from
-HEAD instead of the latest tagged release.
-
----
-
-## Step 6 — Connect the CLI to your scanner
+### 4 — Scan your project
 
 ```bash
-phrase-sec-scan login --scanner-url <TUNNEL_URL> --manual
-```
-
-It prompts for a token. Paste the one you copied in Step 4 and press
-Enter. You should see `Saved config to ~/.phrase-sec-scan/config.yaml`.
-
----
-
-## Step 7 — Scan some code
-
-Go into any project folder and run:
-
-```bash
-cd ~/some-project-of-yours
+cd ~/your-project
 phrase-sec-scan .
 ```
 
-The CLI uploads the working tree to your scanner, the scanner runs, and a
-report is written next to your code:
+The CLI sends your files to the scanner, which authenticates your token,
+loads your LLM settings from the portal, runs the pipeline, and writes
+`security-scan-report.md` next to your code.
 
-```
-security-scan-report.md
-```
+**Exit codes:**
 
-Open it in any editor — it lists every issue found, with severity and a
-suggested fix. The exit code tells you:
-
-- `0` — no Critical or High findings (clean).
-- `1` — at least one Critical or High finding.
-- `2` — config or auth error (usually means run `login` again).
-- `3` — scanner failed mid-scan (transient upstream LLM error). Retry; if it persists, file a bug.
+| Code | Meaning |
+|------|---------|
+| `0` | No Critical or High findings. |
+| `1` | At least one Critical or High finding — see the report. |
+| `2` | Config or auth error. Re-run `phrase-sec-scan login`. |
+| `3` | Scanner error (transient). Retry; if it persists, file a bug. |
 
 ---
 
-## Provider selection
+## Scan history and usage
 
-The scanner supports two LLM backends: **Anthropic Claude** (the default,
-ZDR/DPA-confirmed) and **Google Gemini** (alternative provider, approved
-for production).
+Every CLI scan is saved to the portal. Open `<TUNNEL_URL>/portal/scans`
+to browse your history and view full reports.
 
-Both modes POST your files to the deployed scanner and get the same
-full-coverage report back. They differ only in **whose LLM API key** the
-scanner uses for the LLM call.
+Open `<TUNNEL_URL>/portal/usage` to see a monthly breakdown of your
+LLM token consumption, estimated cost, and provider response IDs you can
+cross-reference with your Anthropic or Google billing console.
 
-### Default mode — org-paid scan
+---
 
-```bash
-phrase-sec-scan .
+## Token lifecycle
 
-# Pick which org provider runs this scan (server uses its OWN key):
-phrase-sec-scan --provider gemini --model gemini-flash-latest .
-phrase-sec-scan --provider claude .
+| Event | What happens |
+|-------|-------------|
+| **Issue** | One `phs_local_…` token per user, generated in the portal. |
+| **Rotate** | Old token invalidated immediately; new token shown once. |
+| **Revoke** | Old token invalidated immediately; no new token. |
+| **Expiry** | After 30 days, next scan returns 401 with a re-issue link. |
+| **Deactivation** | Admin sets `is_active=false`; next scan returns 401. |
+
+Tokens are stored as `SHA-256(full_token)` — the plaintext is shown
+exactly once in the portal and never persisted.
+
+---
+
+## CI pipeline
+
+The CI channel uses a separate endpoint (`/agent/scan`) with the org's
+Anthropic/Google keys. Dev repos consume the scanner via the reusable
+workflow in `master-scanner-pipeline`:
+
+```yaml
+jobs:
+  security:
+    uses: Phrase-Sandbox/master-scanner-pipeline/.github/workflows/scanner.yml@v2
+    # Optional: override the org default LLM provider for this run.
+    # with:
+    #   provider: gemini
 ```
 
-The CLI uploads your files; the server runs the scan using its
-org-configured LLM credentials. The org pays for the LLM tokens. **Your
-personal API key never crosses the wire.** This is the right mode for
-normal day-to-day use and what the CI pipeline does.
+The `gate_decision` field in the response (`"block"` or `"advisory"`)
+drives the CI pass/fail decision. No client-side severity thresholding.
 
-When you add `--provider X` (without `--local`), the CLI tells the
-scanner *"use your own org key for provider X for this scan"* — useful
-when the scanner has both `ANTHROPIC_API_KEY` and `GOOGLE_API_KEY`
-configured and you want to flip per-request. Without `--provider`, the
-scanner uses its `SCANNER_LLM_PROVIDER` env default.
+---
 
-### `--local` mode — BYO key
+## Admin operations
 
-```bash
-# Uses ANTHROPIC_API_KEY from your environment
-phrase-sec-scan --local .
-
-# Pass the key explicitly
-phrase-sec-scan --local --provider claude --api-key sk-ant-... .
-phrase-sec-scan --local --provider gemini --model gemini-2.5-flash --api-key AIza-... .
-
-# Or store the key once so you don't pass it every time
-phrase-sec-scan login --provider claude --api-key sk-ant-...
-phrase-sec-scan --local .
-```
-
-The CLI uploads your files **AND** your personal LLM API key. The server uses
-your key for that single scan's LLM call instead of its org credentials —
-the LLM tokens are billed to your account, not the org's. Useful when:
-- You want to try a different provider or model than the org default.
-- You want the org's LLM quota free for production CI runs.
-- You're on a free-tier key exploring the scanner.
-
-The forwarded key lives only in memory during the request. The scanner
-never logs, caches, or persists it (the `api_key` field name is in
-the global logging redact list as a structural safety net).
-
-### Key resolution (`--local` mode only)
-
-When `--local` is set, the CLI looks for your LLM API key in this order
-(highest wins):
-
-| Source | Provider | Model | Key |
-|--------|----------|-------|-----|
-| CLI flag | `--provider` | `--model` | `--api-key` |
-| Env var | `SCANNER_LLM_PROVIDER` | `SCANNER_LLM_MODEL` | `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY` |
-| Config file (`~/.phrase-sec-scan/config.yaml`) | `provider:` | `model:` | `anthropic_api_key:` / `google_api_key:` |
-| Built-in default | `claude` | provider default | — |
-
-If no key resolves from any source, `--local` exits with code 2 and a
-message pointing you at `phrase-sec-scan login --provider X --api-key Y`.
-
-### Server-side provider (default mode)
-
-The org operator can configure **both** Claude and Gemini keys on the
-scanner and pick a default in `.env.local`:
-
-```bash
-ANTHROPIC_API_KEY=sk-ant-...
-GOOGLE_API_KEY=AIza-...
-SCANNER_LLM_PROVIDER=anthropic   # default when caller sends no override
-SCANNER_LLM_MODEL=claude-sonnet-4-6   # optional default
-```
-
-Callers then choose per-request:
-- No flags → `SCANNER_LLM_PROVIDER` default is used.
-- `--provider gemini` (default mode) → scanner uses its own
-  `GOOGLE_API_KEY` for this scan.
-- `--local --provider gemini --api-key AIza...` → scanner uses the
-  caller's BYO key for this scan.
-
-If a caller asks for a provider whose server-side key isn't configured
-(e.g. `--provider gemini` but `GOOGLE_API_KEY` is unset), the request
-is rejected with HTTP 422 up-front so they know before the scan starts.
-
-### Want fully-offline scanning?
-
-The CLI no longer runs the pipeline in-process — both modes need the
-remote scanner. If you need to scan without any network egress, run the
-scanner Docker image on your own laptop and point the CLI at
-`http://localhost:8000` via `phrase-sec-scan login --scanner-url ...`.
-
-For CI/CD integration, see the `master-scanner-pipeline` sibling repo which
-provides a reusable GitHub Actions workflow that calls this scanner's API.
+| Task | URL |
+|------|-----|
+| Token registry | `/admin/tokens` |
+| User management (deactivate/reactivate) | `/admin/users` |
+| Org LLM keys + default provider | `/admin/org-settings` |
+| Rotate CI token | `/admin/ci-token` |
+| Audit log | `/admin/audit` |
 
 ---
 
 ## Stopping everything
 
 ```bash
-phrase-sec-scan logout
+docker compose down   # stops scanner + postgres (data preserved)
+# Ctrl-C in the cloudflared terminal
 ```
 
-Then go to the `cloudflared` terminal and press `Ctrl-C`. Then back in the
-first terminal:
+To wipe the database (destructive — removes all tokens, audit log, settings):
 
 ```bash
-docker compose down
+docker compose down -v   # ⚠️ deletes postgres-data volume
 ```
-
-Everything is stopped. Run Step 2 + Step 3 + Step 6 next time to start
-again.
 
 ---
 
-## Troubleshooting
+## Building the CLI from source
 
-| Symptom | What to try |
-| --- | --- |
-| `curl http://localhost:8000/healthz` returns 503 | Open Docker Desktop and make sure it's running. Then `docker compose --env-file .env.local up -d --build security-scanner` again. |
-| `Cannot connect to the Docker daemon` | Docker Desktop isn't running. Open the Docker app, wait for the whale icon to go steady, then retry. |
-| `Error: address already in use` on port 8000 | Something else is using 8000. Either stop it, or edit `docker-compose.yml` and change `8000:8000` to e.g. `8080:8000`, then use `http://localhost:8080`. |
-| `unauthorized: invalid API key` in the scanner logs | Your `ANTHROPIC_API_KEY` in `.env.local` is wrong or expired. Get a new key from `console.anthropic.com` and re-run Step 2. |
-| `phrase-sec-scan: command not found` | Your shell can't find the binary. Run `which phrase-sec-scan`. If empty, redo Step 5 and make sure the download path is `/usr/local/bin/phrase-sec-scan`. |
-| Cloudflare URL stops working after you restart your laptop | Free Cloudflare tunnels are temporary — re-run Step 3 to get a new URL, then `phrase-sec-scan login` again with the new URL. |
+```bash
+python3.12 -m venv .venv
+.venv/bin/pip install -e '.[dev]'
+PYTHON=.venv/bin/python3.12 ./build.sh
+sudo mv dist/phrase-sec-scan /usr/local/bin/phrase-sec-scan
+```
 
 ---
 
 ## Releasing a new CLI binary
 
-When you change the CLI code and want to ship a new version:
-
 ```bash
-git tag v0.5.1
-git push origin v0.5.1
+git tag v0.6.0
+git push origin v0.6.0
 ```
 
-GitHub Actions (the `release-cli` workflow) builds the binary on Linux,
-macOS Intel, macOS Apple Silicon, and Windows, and attaches each one to a
-new GitHub Release automatically. Check the "Actions" tab in the GitHub
-website to watch it run.
+GitHub Actions builds Linux, macOS arm64, macOS x86_64, and Windows
+binaries and attaches them to a new Release automatically.
+
+---
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| `curl http://localhost:8000/healthz` → 503 | `docker compose --env-file .env.local up -d --build` |
+| `401 Token expired` from CLI | Open `<TUNNEL_URL>/portal/` → Rotate token → `phrase-sec-scan login` |
+| `401 Account deactivated` | Contact your security administrator. |
+| `412 No LLM provider configured` | Open `<TUNNEL_URL>/portal/settings` and save your key. |
+| `422` on CI scan | No org key for the requested provider. Open `/admin/org-settings`. |
+| Cloudflare URL changed | Re-run `cloudflared tunnel ...`, then `phrase-sec-scan login --scanner-url <new-url>`. |
+| `SCANNER_ENCRYPTION_KEY` error on startup | Generate a key and add it to `.env.local` (see Step 1). |
