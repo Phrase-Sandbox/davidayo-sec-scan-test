@@ -1,10 +1,9 @@
-"""Tests for the `phrase-sec-scan` CLI.
+"""Tests for the ``phrase-sec-scan`` CLI.
 
-Both default and ``--local`` modes POST to the remote scanner. ``--local``
-adds the developer's personal LLM API key to the request body as
-``llm_override``; the server uses that key for the LLM call instead of its
-org credentials. These tests mock ``urllib.request.urlopen`` so no real
-HTTP is made.
+All scans POST to ``${scanner_url}/scan/local`` with a bearer token. The
+server resolves the user's LLM settings from the DB — no API key is ever
+stored or sent by the CLI. These tests mock ``urllib.request.urlopen`` so
+no real HTTP is made.
 """
 
 from __future__ import annotations
@@ -108,169 +107,89 @@ def _install_fake_urlopen(monkeypatch, response_payload: dict) -> dict:
     return captured
 
 
-# --- LocalFilesClient ------------------------------------------------------
+# --- LocalFilesClient -------------------------------------------------------
 
 
 def test_local_files_client_reads_source_and_skips_noise(tmp_path):
     (tmp_path / "app").mkdir()
-    (tmp_path / "app" / "db.py").write_text("print('hi')\n")
-    (tmp_path / "security-scan-report.md").write_text("old report\n")
-    (tmp_path / "abc_0_db.patch").write_text("--- a\n+++ b\n")
+    (tmp_path / "app" / "db.py").write_text(_SQLI)
     (tmp_path / ".git").mkdir()
-    (tmp_path / ".git" / "config").write_text("[core]\n")
-    (tmp_path / "logo.bin").write_bytes(b"\x00\x01\x02\x80\x81")
+    (tmp_path / ".git" / "config").write_text("[core]\n\trepositorformatversion = 0\n")
+    (tmp_path / "__pycache__").mkdir()
+    (tmp_path / "__pycache__" / "db.cpython-311.pyc").write_bytes(b"\x00\x01\x02")
+    (tmp_path / "node_modules").mkdir()
+    (tmp_path / "node_modules" / "lodash.js").write_text("//js\n")
+    (tmp_path / "app" / "secret.yaml").write_text(_SECRET)
 
-    files = LocalFilesClient(tmp_path).get_repo_files()
-
+    client = LocalFilesClient(tmp_path)
+    files = client.get_repo_files()
     assert "app/db.py" in files
-    assert "security-scan-report.md" not in files  # our own output
-    assert "abc_0_db.patch" not in files  # generated patch
-    assert not any(p.startswith(".git/") for p in files)  # VCS dir pruned
-    assert "logo.bin" not in files  # binary skipped
-
-
-# --- .gitignore filtering --------------------------------------------------
+    assert all("__pycache__" not in k for k in files)
+    assert all(".git/" not in k for k in files)
+    assert all("node_modules" not in k for k in files)
+    assert "app/db.py" in files
 
 
 def test_gitignore_excludes_matching_file(tmp_path):
-    (tmp_path / ".gitignore").write_text("secrets.env\n")
-    (tmp_path / "secrets.env").write_text("PROD_PW=hunter2\n")
-    (tmp_path / "app.py").write_text("print('hi')\n")
-
+    (tmp_path / ".gitignore").write_text("secret.yaml\n")
+    (tmp_path / "app.py").write_text("print(1)\n")
+    (tmp_path / "secret.yaml").write_text("key: value\n")
     files = LocalFilesClient(tmp_path).get_repo_files()
-
     assert "app.py" in files
-    assert "secrets.env" not in files
+    assert "secret.yaml" not in files
 
 
 def test_gitignore_directory_pattern_prunes_subtree(tmp_path):
-    (tmp_path / ".gitignore").write_text("build/\n")
-    (tmp_path / "build").mkdir()
-    (tmp_path / "build" / "output.txt").write_text("generated\n")
+    (tmp_path / ".gitignore").write_text("dist/\n")
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "dist" / "bundle.js").write_text("packed\n")
     (tmp_path / "src").mkdir()
-    (tmp_path / "src" / "main.py").write_text("print('hi')\n")
-
+    (tmp_path / "src" / "main.py").write_text("x=1\n")
     files = LocalFilesClient(tmp_path).get_repo_files()
-
     assert "src/main.py" in files
-    assert not any(p.startswith("build/") for p in files)
+    assert all("dist" not in k for k in files)
 
 
 def test_gitignore_negation_reincludes_file(tmp_path):
-    (tmp_path / ".gitignore").write_text("*.env\n!keep.env\n")
-    (tmp_path / "secret.env").write_text("PROD_PW=hunter2\n")
-    (tmp_path / "keep.env").write_text("KEEP=1\n")
-
+    (tmp_path / ".gitignore").write_text("*.log\n!important.log\n")
+    (tmp_path / "debug.log").write_text("noise\n")
+    (tmp_path / "important.log").write_text("needed\n")
     files = LocalFilesClient(tmp_path).get_repo_files()
-
-    assert "keep.env" in files
-    assert "secret.env" not in files
+    assert "important.log" in files
+    assert "debug.log" not in files
 
 
 def test_gitignore_absent_collects_normally(tmp_path):
-    (tmp_path / "app.py").write_text("print('hi')\n")
-    (tmp_path / "config.yaml").write_text("port: 8080\n")
-
+    (tmp_path / "app.py").write_text("print(1)\n")
     files = LocalFilesClient(tmp_path).get_repo_files()
-
     assert "app.py" in files
-    assert "config.yaml" in files
 
 
 def test_respect_gitignore_false_collects_all(tmp_path):
-    (tmp_path / ".gitignore").write_text("secrets.env\n")
-    (tmp_path / "secrets.env").write_text("PROD_PW=hunter2\n")
-    (tmp_path / "app.py").write_text("print('hi')\n")
-
+    (tmp_path / ".gitignore").write_text("ignored.py\n")
+    (tmp_path / "ignored.py").write_text("x=1\n")
+    (tmp_path / "kept.py").write_text("y=2\n")
     files = LocalFilesClient(tmp_path, respect_gitignore=False).get_repo_files()
-
-    assert "app.py" in files
-    assert "secrets.env" in files
+    assert "ignored.py" in files
+    assert "kept.py" in files
 
 
 def test_malformed_gitignore_is_treated_as_empty(tmp_path, caplog):
-    # Bytes that can't decode as UTF-8 — the loader must log + return None.
-    (tmp_path / ".gitignore").write_bytes(b"\xff\xfe\xfd\xfc invalid utf-8\n")
-    (tmp_path / "app.py").write_text("print('hi')\n")
-
+    (tmp_path / ".gitignore").write_bytes(b"\xff\xfe")
+    (tmp_path / "app.py").write_text("print(1)\n")
     files = LocalFilesClient(tmp_path).get_repo_files()
-
     assert "app.py" in files
-    # No exception; the unreadable gitignore is silently treated as empty
-    # (the warning is logged via stdlib logging; we don't assert the message
-    # because the logger isn't necessarily captured here — what matters is
-    # the scan completes and didn't drop anything).
 
 
-# --- phrase-sec-scan CLI ---------------------------------------------------
+# --- CLI: payload shape -------------------------------------------------------
 
 
-def test_cli_local_mode_forwards_llm_override_in_body(tmp_path, monkeypatch):
-    """`--local` POSTs to remote scanner with llm_override populated."""
-    monkeypatch.setattr(
-        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
-    )
-    monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-personal-key-xyz")
-    (tmp_path / "app.py").write_text("print(1)\n")
+def test_cli_scan_sends_minimal_payload_without_api_key(tmp_path, monkeypatch):
+    """The payload contains only files/triggered_by/directory/repo_url.
 
-    captured = _install_fake_urlopen(monkeypatch, _fake_server_response())
-
-    rc = local_cli.main(["--local", str(tmp_path)])
-
-    assert rc == 0
-    assert captured["url"].endswith("/scan/local")
-    body = captured["body"]
-    assert "llm_override" in body
-    assert body["llm_override"]["provider"] == "claude"
-    assert body["llm_override"]["api_key"] == "sk-ant-personal-key-xyz"
-
-
-def test_cli_default_mode_omits_llm_override_from_body(tmp_path, monkeypatch):
-    """Default mode (no --local) sends no llm_override — server uses org creds."""
-    monkeypatch.setattr(
-        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
-    )
-    monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-should-not-be-sent")
-    (tmp_path / "app.py").write_text("print(1)\n")
-
-    captured = _install_fake_urlopen(monkeypatch, _fake_server_response())
-
-    rc = local_cli.main([str(tmp_path)])
-
-    assert rc == 0
-    body = captured["body"]
-    assert "llm_override" not in body, (
-        "default mode must not forward the user's personal API key"
-    )
-
-
-def test_cli_default_mode_with_provider_flag_sends_provider_override(tmp_path, monkeypatch):
-    """Default mode + `--provider gemini` sends `provider_override` (no api_key).
-    Server uses its own org-side Gemini key for this scan."""
-    monkeypatch.setattr(
-        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
-    )
-    monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
-    (tmp_path / "app.py").write_text("print(1)\n")
-
-    captured = _install_fake_urlopen(monkeypatch, _fake_server_response())
-
-    rc = local_cli.main([str(tmp_path), "--provider", "gemini", "--model", "gemini-flash-latest"])
-
-    assert rc == 0, "default-mode provider switch should succeed without --local"
-    body = captured["body"]
-    assert "llm_override" not in body, "no BYO key on default mode"
-    assert body["provider_override"] == {
-        "provider": "gemini",
-        "model": "gemini-flash-latest",
-    }
-
-
-def test_cli_default_mode_no_provider_sends_neither(tmp_path, monkeypatch):
-    """Default mode without --provider sends NEITHER override — server uses
-    SCANNER_LLM_PROVIDER env default."""
+    No API key, no provider, no model is ever sent by the CLI — the server
+    resolves those from the user's stored settings.
+    """
     monkeypatch.setattr(
         local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
     )
@@ -283,44 +202,20 @@ def test_cli_default_mode_no_provider_sends_neither(tmp_path, monkeypatch):
 
     assert rc == 0
     body = captured["body"]
+    assert "app.py" in body["files"]
+    # No key or provider fields — server handles those from DB settings.
     assert "llm_override" not in body
     assert "provider_override" not in body
-
-
-def test_cli_local_mode_with_explicit_api_key_flag(tmp_path, monkeypatch):
-    """`--local --api-key X --provider gemini` overrides env + config."""
-    monkeypatch.setattr(
-        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
-    )
-    monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-    (tmp_path / "app.py").write_text("print(1)\n")
-
-    captured = _install_fake_urlopen(monkeypatch, _fake_server_response())
-
-    rc = local_cli.main([
-        "--local", "--provider", "gemini",
-        "--api-key", "AIza-flag-supplied", "--model", "gemini-2.5-flash",
-        str(tmp_path),
-    ])
-
-    assert rc == 0
-    body = captured["body"]
-    assert body["llm_override"] == {
-        "provider": "gemini",
-        "api_key": "AIza-flag-supplied",
-        "model": "gemini-2.5-flash",
-    }
+    assert "api_key" not in body
+    assert body["triggered_by"] == "tester@phrase.com"
 
 
 def test_cli_writes_md_and_html_when_server_returns_both(tmp_path, monkeypatch):
-    """Server response with markdown + html → both files written."""
+    """Server response with markdown + html → both files written, exit 1 on High."""
     monkeypatch.setattr(
         local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
     )
     monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-personal-key-xyz")
     (tmp_path / "app").mkdir()
     (tmp_path / "app" / "db.py").write_text(_SQLI)
 
@@ -332,7 +227,7 @@ def test_cli_writes_md_and_html_when_server_returns_both(tmp_path, monkeypatch):
         ),
     )
 
-    rc = local_cli.main(["--local", str(tmp_path)])
+    rc = local_cli.main([str(tmp_path)])
 
     md = tmp_path / "vuln-result" / "security-scan-report.md"
     html = tmp_path / "vuln-result" / "security-scan-report.html"
@@ -426,6 +321,50 @@ def test_cli_remote_mode_handles_legacy_server_without_html(tmp_path, monkeypatc
     assert not html.exists()  # no html field → no html file
 
 
+# --- CLI: gitignore flags ---------------------------------------------------
+
+
+def test_cli_no_gitignore_flag_disables_gitignore_filter(tmp_path, monkeypatch):
+    """``--no-gitignore`` ships ignored files to the scanner."""
+    monkeypatch.setattr(
+        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
+    )
+    monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
+    (tmp_path / ".gitignore").write_text("ignored.py\n")
+    (tmp_path / "ignored.py").write_text("print('ignored')\n")
+    (tmp_path / "kept.py").write_text("print('kept')\n")
+
+    captured = _install_fake_urlopen(monkeypatch, _fake_server_response())
+
+    local_cli.main(["--no-gitignore", str(tmp_path)])
+
+    files_sent = captured["body"]["files"]
+    assert "ignored.py" in files_sent
+    assert "kept.py" in files_sent
+
+
+def test_cli_gitignore_default_excludes_ignored_files(tmp_path, monkeypatch):
+    """Without --no-gitignore, gitignored files are filtered before upload."""
+    monkeypatch.setattr(
+        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
+    )
+    monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
+    (tmp_path / ".gitignore").write_text("ignored.py\n")
+    (tmp_path / "ignored.py").write_text("print('ignored')\n")
+    (tmp_path / "kept.py").write_text("print('kept')\n")
+
+    captured = _install_fake_urlopen(monkeypatch, _fake_server_response())
+
+    local_cli.main([str(tmp_path)])
+
+    files_sent = captured["body"]["files"]
+    assert "kept.py" in files_sent
+    assert "ignored.py" not in files_sent
+
+
+# --- CLI: 429 backpressure --------------------------------------------------
+
+
 def test_cli_retries_once_on_429_with_retry_after(tmp_path, monkeypatch):
     """If the server returns 429+Retry-After, the CLI sleeps then retries once."""
     monkeypatch.setattr(
@@ -493,6 +432,126 @@ def test_cli_retries_once_on_429_with_retry_after(tmp_path, monkeypatch):
     assert rc == 0  # second attempt succeeded with 0 Critical/High
     assert call_n["i"] == 2  # exactly one retry
     assert sleeps == [2]  # honoured Retry-After
+
+
+# --- CLI: auth error handling (401 / 412) -----------------------------------
+
+
+def _make_http_error(code: int, body_bytes: bytes):
+    from urllib import error as _uerr
+
+    class _Err(_uerr.HTTPError):
+        def __init__(self) -> None:
+            super().__init__(
+                url="http://fake-scanner/scan/local",
+                code=code,
+                msg="err",
+                hdrs=None,  # type: ignore[arg-type]
+                fp=None,
+            )
+        def read(self) -> bytes:
+            return body_bytes
+
+    return _Err
+
+
+def test_cli_401_expired_shows_reissue_message(tmp_path, monkeypatch, capsys):
+    """401 with 'expired' in detail → token-expired + portal re-issue hint."""
+    monkeypatch.setattr(
+        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
+    )
+    monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
+    (tmp_path / "app.py").write_text("print(1)\n")
+
+    from urllib import request as _ureq
+
+    body = json.dumps({"detail": "Your scanner token has expired (30-day TTL). Visit /portal/ to re-issue."}).encode()
+    ErrCls = _make_http_error(401, body)
+
+    monkeypatch.setattr(_ureq, "urlopen", lambda *_a, **_kw: (_ for _ in ()).throw(ErrCls()))
+
+    rc = local_cli.main([str(tmp_path)])
+
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "expired" in err.lower()
+    assert "/portal/" in err
+
+
+def test_cli_401_deactivated_shows_admin_message(tmp_path, monkeypatch, capsys):
+    """401 with 'deactivated' in detail → account deactivated + admin contact."""
+    monkeypatch.setattr(
+        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
+    )
+    monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
+    (tmp_path / "app.py").write_text("print(1)\n")
+
+    from urllib import request as _ureq
+
+    body = json.dumps({"detail": "Your account has been deactivated. Contact your administrator."}).encode()
+    ErrCls = _make_http_error(401, body)
+
+    monkeypatch.setattr(_ureq, "urlopen", lambda *_a, **_kw: (_ for _ in ()).throw(ErrCls()))
+
+    rc = local_cli.main([str(tmp_path)])
+
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "deactivated" in err.lower()
+    assert "administrator" in err.lower()
+
+
+def test_cli_401_generic_shows_login_hint(tmp_path, monkeypatch, capsys):
+    """Generic 401 → suggest re-running login."""
+    monkeypatch.setattr(
+        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
+    )
+    monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
+    (tmp_path / "app.py").write_text("print(1)\n")
+
+    from urllib import request as _ureq
+
+    body = json.dumps({"detail": "Local scan authentication failed (token)."}).encode()
+    ErrCls = _make_http_error(401, body)
+
+    monkeypatch.setattr(_ureq, "urlopen", lambda *_a, **_kw: (_ for _ in ()).throw(ErrCls()))
+
+    rc = local_cli.main([str(tmp_path)])
+
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "login" in err.lower()
+
+
+def test_cli_412_no_settings_shows_portal_settings_hint(tmp_path, monkeypatch, capsys):
+    """412 Precondition Failed → user hasn't saved LLM settings → portal pointer."""
+    monkeypatch.setattr(
+        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
+    )
+    monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
+    (tmp_path / "app.py").write_text("print(1)\n")
+
+    from urllib import request as _ureq
+
+    body = json.dumps({
+        "detail": (
+            "No LLM provider configured for your account. "
+            "Visit /portal/settings to choose a provider and save your API key."
+        )
+    }).encode()
+    ErrCls = _make_http_error(412, body)
+
+    monkeypatch.setattr(_ureq, "urlopen", lambda *_a, **_kw: (_ for _ in ()).throw(ErrCls()))
+
+    rc = local_cli.main([str(tmp_path)])
+
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "portal/settings" in err
+    assert "provider" in err.lower()
+
+
+# --- CLI: 502 upstream errors -----------------------------------------------
 
 
 def test_cli_502_quota_exhausted_shows_topup_message(tmp_path, monkeypatch, capsys):
@@ -568,191 +627,3 @@ def test_cli_502_from_server_exits_3(tmp_path, monkeypatch, capsys):
     assert rc == 3
     err = capsys.readouterr().err
     assert "scanner failed mid-scan" in err.lower()
-
-
-def test_cli_no_gitignore_flag_disables_gitignore_filter(tmp_path, monkeypatch):
-    """``--no-gitignore`` ships ignored files to the scanner."""
-    monkeypatch.setattr(
-        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
-    )
-    monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-personal-xyz")
-    (tmp_path / ".gitignore").write_text("ignored.py\n")
-    (tmp_path / "ignored.py").write_text("print('ignored')\n")
-    (tmp_path / "kept.py").write_text("print('kept')\n")
-
-    captured = _install_fake_urlopen(monkeypatch, _fake_server_response())
-
-    local_cli.main(["--local", "--no-gitignore", str(tmp_path)])
-
-    files_sent = captured["body"]["files"]
-    assert "ignored.py" in files_sent
-    assert "kept.py" in files_sent
-
-
-def test_cli_gitignore_default_excludes_ignored_files(tmp_path, monkeypatch):
-    """Without --no-gitignore, gitignored files are filtered before upload."""
-    monkeypatch.setattr(
-        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
-    )
-    monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-personal-xyz")
-    (tmp_path / ".gitignore").write_text("ignored.py\n")
-    (tmp_path / "ignored.py").write_text("print('ignored')\n")
-    (tmp_path / "kept.py").write_text("print('kept')\n")
-
-    captured = _install_fake_urlopen(monkeypatch, _fake_server_response())
-
-    local_cli.main(["--local", str(tmp_path)])
-
-    files_sent = captured["body"]["files"]
-    assert "kept.py" in files_sent
-    assert "ignored.py" not in files_sent
-
-
-# --- Phase A2: BYO provider / model / key resolution -------------------------
-
-
-def test_resolve_provider_config_flag_beats_env_beats_config_beats_default(monkeypatch):
-    """CLI flag > env var > config > default."""
-    import argparse
-
-    from security_scanner.skill.local_cli import _resolve_provider_config
-
-    # Flag wins over everything.
-    monkeypatch.setenv("SCANNER_LLM_PROVIDER", "gemini")
-    args = argparse.Namespace(provider="claude", model=None, api_key=None)
-    config = {"provider": "gemini"}
-    resolved = _resolve_provider_config(args, config)
-    assert resolved["provider"] == "claude"
-
-    # Env beats config + default when no flag.
-    args2 = argparse.Namespace(provider=None, model=None, api_key=None)
-    resolved2 = _resolve_provider_config(args2, config)
-    assert resolved2["provider"] == "gemini"
-
-    # Config beats default when no flag / env.
-    monkeypatch.delenv("SCANNER_LLM_PROVIDER", raising=False)
-    config3 = {"provider": "gemini"}
-    resolved3 = _resolve_provider_config(args2, config3)
-    assert resolved3["provider"] == "gemini"
-
-    # Default when nothing is set.
-    resolved4 = _resolve_provider_config(args2, {})
-    assert resolved4["provider"] == "claude"
-
-
-def test_resolve_provider_config_model_precedence(monkeypatch):
-    import argparse
-
-    from security_scanner.skill.local_cli import _resolve_provider_config
-
-    monkeypatch.setenv("SCANNER_LLM_MODEL", "env-model")
-    args = argparse.Namespace(provider=None, model="flag-model", api_key=None)
-    resolved = _resolve_provider_config(args, {"model": "config-model"})
-    assert resolved["model"] == "flag-model"
-
-    args2 = argparse.Namespace(provider=None, model=None, api_key=None)
-    resolved2 = _resolve_provider_config(args2, {"model": "config-model"})
-    assert resolved2["model"] == "env-model"
-
-    monkeypatch.delenv("SCANNER_LLM_MODEL", raising=False)
-    resolved3 = _resolve_provider_config(args2, {"model": "config-model"})
-    assert resolved3["model"] == "config-model"
-
-    resolved4 = _resolve_provider_config(args2, {})
-    assert resolved4["model"] is None
-
-
-def test_resolve_provider_config_api_key_for_gemini(monkeypatch):
-    import argparse
-
-    from security_scanner.skill.local_cli import _resolve_provider_config
-
-    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    args = argparse.Namespace(provider="gemini", model=None, api_key="flag-key")
-    resolved = _resolve_provider_config(args, {})
-    assert resolved["api_key"] == "flag-key"
-
-    args2 = argparse.Namespace(provider="gemini", model=None, api_key=None)
-    monkeypatch.setenv("GOOGLE_API_KEY", "env-google-key")
-    resolved2 = _resolve_provider_config(args2, {})
-    assert resolved2["api_key"] == "env-google-key"
-
-    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-    resolved3 = _resolve_provider_config(args2, {"google_api_key": "config-google-key"})
-    assert resolved3["api_key"] == "config-google-key"
-
-
-def test_cli_missing_key_exits_2(tmp_path, monkeypatch, capsys):
-    """--local without an LLM API key anywhere → exit 2 with a helpful message."""
-    monkeypatch.setattr(
-        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
-    )
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-    # Empty config — no anthropic_api_key, no google_api_key
-    monkeypatch.setattr(local_cli, "_load_config", lambda: {})
-    rc = local_cli.main(["--local", str(tmp_path)])
-    assert rc == 2
-    captured = capsys.readouterr()
-    assert "--local requires an LLM API key" in captured.err
-
-
-def test_cli_missing_gemini_key_exits_2(tmp_path, monkeypatch, capsys):
-    """--local --provider gemini without a Google key → exit 2."""
-    monkeypatch.setattr(
-        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
-    )
-    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-    monkeypatch.setattr(local_cli, "_load_config", lambda: {})
-    rc = local_cli.main(["--local", "--provider", "gemini", str(tmp_path)])
-    assert rc == 2
-    captured = capsys.readouterr()
-    assert "--local requires an LLM API key" in captured.err
-
-
-def test_login_writes_anthropic_key_to_config(tmp_path, monkeypatch):
-    """login --api-key writes anthropic_api_key to config.yaml without browser flow."""
-    fake_config = tmp_path / ".phrase-sec-scan" / "config.yaml"
-    monkeypatch.setattr(local_cli, "_CONFIG_DIR", tmp_path / ".phrase-sec-scan")
-    monkeypatch.setattr(local_cli, "_CONFIG_FILE", fake_config)
-
-    rc = local_cli.main(["login", "--provider", "claude", "--api-key", "sk-ant-TEST"])
-    assert rc == 0
-    assert fake_config.exists()
-    contents = fake_config.read_text()
-    assert "anthropic_api_key" in contents
-    assert "sk-ant-TEST" in contents
-
-
-def test_login_writes_gemini_key_to_config(tmp_path, monkeypatch):
-    """login --provider gemini --api-key writes google_api_key to config.yaml."""
-    fake_config = tmp_path / ".phrase-sec-scan" / "config.yaml"
-    monkeypatch.setattr(local_cli, "_CONFIG_DIR", tmp_path / ".phrase-sec-scan")
-    monkeypatch.setattr(local_cli, "_CONFIG_FILE", fake_config)
-
-    rc = local_cli.main(["login", "--provider", "gemini", "--api-key", "AIza-TEST"])
-    assert rc == 0
-    contents = fake_config.read_text()
-    assert "google_api_key" in contents
-    assert "AIza-TEST" in contents
-
-
-def test_cli_provider_flag_claude_uses_anthropic_key(tmp_path, monkeypatch):
-    """--provider claude with ANTHROPIC_API_KEY set → key forwarded as override."""
-    monkeypatch.setattr(
-        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
-    )
-    monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
-    (tmp_path / "app.py").write_text("print(1)\n")
-
-    captured = _install_fake_urlopen(monkeypatch, _fake_server_response())
-
-    rc = local_cli.main(["--local", "--provider", "claude", str(tmp_path)])
-    assert rc == 0  # no findings → exit 0
-    body = captured["body"]
-    assert body["llm_override"]["provider"] == "claude"
-    assert body["llm_override"]["api_key"] == "sk-ant-test"

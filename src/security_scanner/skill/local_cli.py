@@ -1,26 +1,13 @@
 """``phrase-sec-scan`` — local pre-push security scan CLI.
 
-Both modes POST to ``${scanner_url}/scan/local``; they differ only in
-*whose* LLM key the scanner uses for that scan:
-
-- **Default** (``phrase-sec-scan .``) — server uses its own org-configured
-  LLM credentials. Bills the org. No personal API key needed on the
-  developer's laptop.
-
-- **BYO key** (``phrase-sec-scan --local .``) — the CLI ships the
-  developer's personal LLM API key in the request body. The scanner uses
-  that key for this one scan only — never logged, cached, or persisted —
-  and bills the developer's account. Useful for testing, free-tier
-  exploration, or projects where you don't want to consume the org quota.
-
-Both paths get the full server-side pipeline (Layer 1 multi-scanner +
-LLM first-pass + verifier + report). The CLI never runs Semgrep/Bandit
-locally; everything happens on the deployed scanner.
+POSTs the working tree to ``${scanner_url}/scan/local`` and prints the
+report. Authentication: a personal scanner token issued through the
+Okta-walled portal (``/portal/``). The CLI stores only the URL + token in
+``~/.phrase-sec-scan/config.yaml`` (mode 0600). No API key is ever stored
+on disk — the server resolves the user's LLM provider settings from the DB.
 
 ``mode=on_demand`` ⇒ BR-009 parallel verification is skipped per spec §4.1
 (same as the hosted skill — this is the informational path, not the gate).
-This is a documented deviation from spec §2.2 (the spec skill fetches from
-GitHub via OAuth). The hosted spec skill is unchanged and still available.
 """
 
 from __future__ import annotations
@@ -294,17 +281,11 @@ def _scan_remote(
     scanner_url: str,
     token: str,
     respect_gitignore: bool = True,
-    llm_override: dict | None = None,
-    provider_override: dict | None = None,
 ) -> int:
     """POST the working tree to /scan/local and write the report.
 
-    Mutually-exclusive-ish payload extras (BYO key wins server-side):
-    - ``llm_override`` (CLI ``--local``): ``{provider, api_key, model?}``.
-      Scanner uses the caller's LLM key for this scan only.
-    - ``provider_override`` (CLI ``--provider`` without ``--local``):
-      ``{provider, model?}``. Scanner uses its own org-side key for the
-      requested provider; the org bills the LLM cost, not the caller.
+    The server loads the user's LLM provider/model/key from the DB using the
+    bearer token identity.  No API key is ever sent by the CLI.
     """
     files = _collect_files(root, directory, respect_gitignore=respect_gitignore)
     if not files:
@@ -317,10 +298,6 @@ def _scan_remote(
         "directory": directory,
         "repo_url": _derive_repo_url(root),
     }
-    if llm_override is not None:
-        payload_obj["llm_override"] = llm_override
-    if provider_override is not None:
-        payload_obj["provider_override"] = provider_override
     body = json.dumps(payload_obj).encode("utf-8")
 
     req = urllib.request.Request(  # noqa: S310 — scanner_url is user-supplied https endpoint
@@ -355,16 +332,53 @@ def _scan_remote(
                 time.sleep(retry_after)
                 continue
             if exc.code == 401:
+                # Try to surface the server's specific reason (expired /
+                # deactivated) so the user knows what to do.
+                detail_text = ""
+                try:
+                    detail_text = json.loads(body_text).get("detail", "") or ""
+                except (ValueError, TypeError):
+                    detail_text = body_text
+                detail_lower = detail_text.lower()
+                if "expired" in detail_lower:
+                    print(
+                        "ERROR: your scanner token has expired (30-day TTL).\n"
+                        f"  Visit {scanner_url.rstrip('/')}/portal/ to re-issue a new one.",
+                        file=sys.stderr,
+                    )
+                elif "deactivated" in detail_lower:
+                    print(
+                        "ERROR: your account has been deactivated. "
+                        "Contact your administrator.",
+                        file=sys.stderr,
+                    )
+                else:
+                    print(
+                        "ERROR: authentication failed. "
+                        "Run `phrase-sec-scan login` to refresh your token.",
+                        file=sys.stderr,
+                    )
+                return 2
+            if exc.code == 412:
+                # User hasn't saved their LLM settings in the portal yet.
+                detail_text = ""
+                try:
+                    detail_text = json.loads(body_text).get("detail", "") or ""
+                except (ValueError, TypeError):
+                    detail_text = body_text
                 print(
-                    "ERROR: 401 from scanner. Run `phrase-sec-scan login` to refresh your token.",
+                    "ERROR: no LLM provider configured for your account.\n"
+                    f"  Visit {scanner_url.rstrip('/')}/portal/settings to "
+                    "choose a provider and save your API key.",
                     file=sys.stderr,
                 )
+                if detail_text:
+                    print(f"  (Server: {detail_text})", file=sys.stderr)
                 return 2
             if exc.code == 502:
                 # Scanner couldn't complete the scan (parse error, LLM quota,
-                # or other upstream failure). Distinct exit code so CI can
-                # distinguish from config/auth errors. Inspect the structured
-                # detail to give the user an actionable message.
+                # or other upstream failure). Distinct exit code so scripts can
+                # distinguish from config/auth errors.
                 detail_kind = ""
                 detail_provider = ""
                 detail_message = body_text
@@ -383,7 +397,9 @@ def _scan_remote(
                     print(
                         f"ERROR: your {provider_name} API key has hit its quota. "
                         "No scan was performed — top up your account (or wait for "
-                        "the daily reset on free tiers), then re-run.",
+                        "the daily reset on free tiers), then re-run.\n"
+                        f"  Visit {scanner_url.rstrip('/')}/portal/settings to "
+                        "update your API key if it has been rotated.",
                         file=sys.stderr,
                     )
                 elif detail_kind == "llm_upstream_unavailable":
@@ -391,7 +407,7 @@ def _scan_remote(
                     print(
                         f"ERROR: {provider_name} is unavailable right now. "
                         "Try again shortly; if it persists, check the provider's "
-                        "status page or your API key.",
+                        "status page or update your API key in the portal.",
                         file=sys.stderr,
                     )
                 else:
@@ -432,85 +448,6 @@ def _scan_remote(
     return 1 if (payload["critical"] or payload["high"]) else 0
 
 
-# --- Local-mode scan (BYO provider/model/key) ---------------------------------
-
-# Provider names the CLI accepts on --provider / SCANNER_LLM_PROVIDER / config.
-_SUPPORTED_PROVIDERS = ("claude", "gemini")
-
-
-def _resolve_provider_config(args: argparse.Namespace, config: dict[str, str]) -> dict:
-    """Resolve provider, model, and api_key from CLI → env → config → default.
-
-    Resolution order (highest precedence first):
-    - CLI flag (``--provider``, ``--model``, ``--api-key``)
-    - Env var (``SCANNER_LLM_PROVIDER``, ``SCANNER_LLM_MODEL``,
-               ``ANTHROPIC_API_KEY`` / ``GOOGLE_API_KEY``)
-    - Config file field
-    - Built-in default (``claude``)
-
-    Returns a dict with keys ``provider``, ``model``, ``api_key``.
-    Raises ``SystemExit(2)`` (via print + return sentinel) for missing key;
-    callers should propagate the return code.
-    """
-    # Provider
-    provider: str = (
-        getattr(args, "provider", None)
-        or os.getenv("SCANNER_LLM_PROVIDER")
-        or config.get("provider")
-        or "claude"
-    ).strip().lower()
-
-    # Normalise aliases
-    if provider == "anthropic":
-        provider = "claude"
-    if provider == "google":
-        provider = "gemini"
-
-    # Model (optional)
-    model: str | None = (
-        getattr(args, "model", None)
-        or os.getenv("SCANNER_LLM_MODEL")
-        or config.get("model")
-        or None
-    )
-
-    # API key for the chosen provider
-    if provider == "gemini":
-        api_key = (
-            getattr(args, "api_key", None)
-            or os.getenv("GOOGLE_API_KEY")
-            or config.get("google_api_key")
-            or ""
-        )
-    else:
-        # Default: claude
-        api_key = (
-            getattr(args, "api_key", None)
-            or os.getenv("ANTHROPIC_API_KEY")
-            or config.get("anthropic_api_key")
-            or ""
-        )
-
-    return {"provider": provider, "model": model, "api_key": api_key}
-
-
-def _resolve_llm_override(args: argparse.Namespace) -> dict | None:
-    """Resolve the BYO LLM key for ``--local`` mode.
-
-    Returns a dict ``{provider, api_key, model}`` suitable for the request
-    body's ``llm_override`` field, or ``None`` if no key can be found
-    (caller should treat as a fatal error and exit 2).
-    """
-    resolved = _resolve_provider_config(args, _load_config())
-    if not resolved["api_key"]:
-        return None
-    return {
-        "provider": resolved["provider"],
-        "api_key": resolved["api_key"],
-        "model": resolved["model"],
-    }
-
-
 # --- argparse wiring ---------------------------------------------------------
 
 
@@ -521,8 +458,11 @@ def _build_scan_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="phrase-sec-scan",
         description=(
-            "Local pre-push security scan. Default mode POSTs to the deployed "
-            "scanner; run `phrase-sec-scan login` once to authenticate."
+            "Local pre-push security scan. POSTs your working tree to the "
+            "deployed scanner, which runs the full pipeline under your stored "
+            "LLM settings. Run `phrase-sec-scan login` once to authenticate.\n\n"
+            "Provider/model/key are managed in the portal (/portal/settings) "
+            "— no API key is ever stored or sent by this CLI."
         ),
     )
     p.add_argument(
@@ -534,32 +474,6 @@ def _build_scan_parser() -> argparse.ArgumentParser:
         help="Scan only this sub-path of the project (use for large repos)",
     )
     p.add_argument(
-        "--local", action="store_true",
-        help="BYO-key mode: scanner still runs the scan, but uses YOUR LLM key "
-             "(from --api-key/env/config) for the LLM call. Bills your account, "
-             "not the org's.",
-    )
-    p.add_argument(
-        "--provider", choices=list(_SUPPORTED_PROVIDERS), default=None,
-        help="LLM provider for this scan: claude or gemini. "
-             "With --local: requires --api-key (BYO key, billed to you). "
-             "Without --local: scanner uses its OWN configured key for that "
-             "provider (org billed). Falls back to SCANNER_LLM_PROVIDER env "
-             "→ config → claude.",
-    )
-    p.add_argument(
-        "--model", default=None,
-        help="Model override for the chosen provider (e.g. claude-sonnet-4-6, "
-             "gemini-flash-latest). Falls back to SCANNER_LLM_MODEL env → "
-             "config → provider default.",
-    )
-    p.add_argument(
-        "--api-key", default=None,
-        help="LLM API key for --local mode (BYO). Falls back to "
-             "ANTHROPIC_API_KEY / GOOGLE_API_KEY env → ~/.phrase-sec-scan/"
-             "config.yaml. Ignored when --local is not set.",
-    )
-    p.add_argument(
         "--no-gitignore", action="store_true",
         help="Do NOT exclude files matched by .gitignore at the scan root. "
              "By default, gitignored files are skipped to avoid wasted work "
@@ -569,20 +483,17 @@ def _build_scan_parser() -> argparse.ArgumentParser:
 
 
 def _build_login_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="phrase-sec-scan login")
+    p = argparse.ArgumentParser(
+        prog="phrase-sec-scan login",
+        description=(
+            "Authenticate with the scanner portal and save your personal token. "
+            "Opens a browser to the portal's loopback login page. Use --manual "
+            "to paste a token from the portal instead."
+        ),
+    )
     p.add_argument("--scanner-url", default=os.getenv("SCANNER_URL"))
-    p.add_argument("--manual", action="store_true")
-    p.add_argument(
-        "--provider", choices=list(_SUPPORTED_PROVIDERS), default=None,
-        help="LLM provider for --local mode. Written to config.yaml so you "
-             "don't need to pass --provider on every scan.",
-    )
-    p.add_argument(
-        "--api-key", default=None,
-        help="API key for the chosen LLM provider. Written to config.yaml "
-             "(mode 0600). Env vars (ANTHROPIC_API_KEY / GOOGLE_API_KEY) "
-             "take precedence over the stored value at scan time.",
-    )
+    p.add_argument("--manual", action="store_true",
+                   help="Paste a token from the portal instead of the browser flow.")
     return p
 
 
@@ -601,44 +512,14 @@ def main(argv: list[str] | None = None) -> int:
         cmd, rest = raw[0], raw[1:]
         if cmd == "login":
             args = _build_login_parser().parse_args(rest)
-            # If --provider/--api-key given without --scanner-url, write the
-            # LLM credentials to the config file and exit (BYO local mode setup).
-            if args.api_key and not args.scanner_url:
-                cfg = _load_config()
-                provider = (args.provider or "claude").lower()
-                if provider in ("google", "gemini"):
-                    cfg["provider"] = "gemini"
-                    cfg["google_api_key"] = args.api_key
-                else:
-                    cfg["provider"] = "claude"
-                    cfg["anthropic_api_key"] = args.api_key
-                _save_config(cfg)
-                print(
-                    f"Saved {provider} API key to {_CONFIG_FILE}. "
-                    "Run `phrase-sec-scan --local <path>` to scan locally."
-                )
-                return 0
             url = args.scanner_url or _load_config().get("scanner_url")
             if not url:
                 print(
                     "ERROR: --scanner-url is required on first login "
-                    "(or set $SCANNER_URL). "
-                    "For local-only setup: phrase-sec-scan login "
-                    "--provider claude --api-key sk-ant-...",
+                    "(or set $SCANNER_URL).",
                     file=sys.stderr,
                 )
                 return 2
-            # Optionally write LLM config at the same time as auth login.
-            if args.api_key:
-                cfg = _load_config()
-                provider = (args.provider or "claude").lower()
-                if provider in ("google", "gemini"):
-                    cfg["provider"] = "gemini"
-                    cfg["google_api_key"] = args.api_key
-                else:
-                    cfg["provider"] = "claude"
-                    cfg["anthropic_api_key"] = args.api_key
-                _save_config(cfg)
             return _login(url, manual=args.manual)
         if cmd == "logout":
             args = _build_logout_parser().parse_args(rest)
@@ -663,30 +544,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    llm_override: dict | None = None
-    provider_override: dict | None = None
-    if args.local:
-        llm_override = _resolve_llm_override(args)
-        if llm_override is None:
-            print(
-                "ERROR: --local requires an LLM API key. Provide via "
-                "--api-key, ANTHROPIC_API_KEY / GOOGLE_API_KEY env var, "
-                "or run `phrase-sec-scan login --provider <claude|gemini> "
-                "--api-key <key>` once.",
-                file=sys.stderr,
-            )
-            return 2
-    elif args.provider:
-        # Default mode + --provider: ask the server to use its OWN
-        # configured key for that provider. No api_key needed.
-        provider_override = {"provider": args.provider.lower()}
-        if args.model:
-            provider_override["model"] = args.model
-
     return _scan_remote(
         root=root, directory=args.directory, scanner_url=scanner_url, token=token,
-        respect_gitignore=respect_gitignore, llm_override=llm_override,
-        provider_override=provider_override,
+        respect_gitignore=respect_gitignore,
     )
 
 
