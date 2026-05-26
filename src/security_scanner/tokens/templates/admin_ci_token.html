@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Admin &mdash; CI Token{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>CI Token Management</h2>
+  <p class="muted">
+    The CI token is the bearer credential used by GitHub Actions to call
+    <code>/agent/scan</code>. Rotate it if the token is compromised or as part of a
+    scheduled credential rotation. After rotating, update the <code>SCANNER_API_TOKEN</code>
+    secret in every consuming GitHub Actions workflow before the next CI run.
+  </p>
+  <p>
+    <a href="/admin/tokens" class="btn">Tokens</a>
+    <a href="/admin/users" class="btn">Users</a>
+    <a href="/admin/org-settings" class="btn">Org settings</a>
+    <a href="/admin/audit" class="btn">Audit log</a>
+  </p>
+</div>
+
+{% if new_token %}
+<div class="card" style="border-color: var(--ok);">
+  <h2 class="ok">New CI token — copy it now</h2>
+  <p class="danger">
+    <strong>This is the only time this token will be shown.</strong>
+    Copy it immediately and update the <code>SCANNER_API_TOKEN</code> GitHub Actions secret.
+    Once you leave this page, the plaintext is gone.
+  </p>
+  <div class="token-box" id="new-ci-token">{{ new_token }}</div>
+  <p style="margin-top: 0.75rem;">
+    <button type="button" class="btn btn-primary" onclick="copyNewToken()">Copy to clipboard</button>
+  </p>
+  <div style="margin-top: 1rem; background: var(--bg); border: 1px solid var(--border);
+              border-radius: 6px; padding: 0.75rem 1rem; font-size: 0.88rem;">
+    <strong>Next steps:</strong>
+    <ol style="margin: 0.5rem 0 0; padding-left: 1.25rem; line-height: 1.7;">
+      <li>Copy the token above.</li>
+      <li>Go to <strong>GitHub → master-scanner-pipeline → Settings → Secrets</strong>.</li>
+      <li>Update <code>SCANNER_API_TOKEN</code> with the new value.</li>
+      <li>Trigger a test CI run to confirm connectivity.</li>
+    </ol>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Active CI token</h2>
+  {% if active %}
+  <dl>
+    <dt>Token ID</dt><dd><code>{{ active.id }}</code></dd>
+    <dt>Created</dt><dd>{{ active.created_at.strftime("%Y-%m-%d %H:%M UTC") }}</dd>
+    <dt>Created by</dt><dd>{{ active.created_by_email }}</dd>
+    <dt>Hash (sha256)</dt>
+    <dd class="mono" style="font-size: 0.78rem; word-break: break-all;">
+      {{ active.token_hash[:16] }}…
+    </dd>
+  </dl>
+  {% else %}
+  <p class="muted">No active CI token. Rotate below to generate one.</p>
+  {% endif %}
+
+  <p style="margin-top: 1.25rem;">
+    <form method="post" action="/admin/ci-token/rotate"
+          onsubmit="return confirm('Rotate the CI token? The old token will stop working immediately. Make sure you update SCANNER_API_TOKEN in GitHub Actions before the next CI run.');">
+      <button type="submit" class="btn btn-danger">
+        {% if active %}Rotate CI token{% else %}Generate CI token{% endif %}
+      </button>
+    </form>
+  </p>
+</div>
+
+<div class="card">
+  <h2>Security notes</h2>
+  <dl>
+    <dt>Storage</dt><dd>Only the SHA-256 hash of the token is stored. The plaintext is shown once at generation time and never persisted.</dd>
+    <dt>Revocation</dt><dd>Rotating immediately marks the old token as revoked. Any in-flight CI request using the old token that hasn't reached the server yet will 401. There is no grace period.</dd>
+    <dt>Format</dt><dd><code>phs_ci_&lt;32-bytes-url-safe-base64&gt;</code> — ~256 bits of entropy, collision-infeasible.</dd>
+    <dt>Validation</dt><dd>The CI handler computes <code>sha256(provided_token)</code> and uses <code>hmac.compare_digest</code> against the stored hash — constant-time comparison prevents timing attacks.</dd>
+  </dl>
+</div>
+
+<script>
+  function copyNewToken() {
+    const t = document.getElementById("new-ci-token").textContent.trim();
+    navigator.clipboard.writeText(t).then(() => {
+      const btn = event.target;
+      const original = btn.textContent;
+      btn.textContent = "Copied!";
+      setTimeout(() => { btn.textContent = original; }, 1500);
+    });
+  }
+</script>
+{% endblock %}

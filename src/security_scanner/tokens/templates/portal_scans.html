@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Scan History — Phrase Security Scanner{% endblock %}
+{% block tabs %}
+<nav class="tabs">
+  <a href="/portal/">Token</a>
+  <a href="/portal/settings">Settings</a>
+  <a href="/portal/scans" class="active">Scans</a>
+  <a href="/portal/usage">Usage</a>
+</nav>
+{% endblock %}
+{% block content %}
+<div class="card" style="padding: 0; overflow: hidden;">
+  <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border);">
+    <h2 style="margin: 0;">Scan History</h2>
+  </div>
+  {% if scans %}
+  <table>
+    <thead>
+      <tr>
+        <th>Started</th>
+        <th>Repo</th>
+        <th>Provider</th>
+        <th>Status</th>
+        <th style="text-align: center;">C</th>
+        <th style="text-align: center;">H</th>
+        <th style="text-align: center;">M</th>
+        <th style="text-align: center;">L</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for scan in scans %}
+      <tr>
+        <td class="mono" style="font-size: 0.82rem; white-space: nowrap;">
+          {{ scan.started_at.strftime("%Y-%m-%d %H:%M") if scan.started_at else "—" }}
+        </td>
+        <td style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+          <span title="{{ scan.repo_url }}">{{ scan.repo_url | replace("https://github.com/", "") }}</span>
+        </td>
+        <td class="muted" style="font-size: 0.85rem;">{{ scan.provider or "—" }}</td>
+        <td>
+          {% if scan.status == "ok" %}
+            <span class="pill pill-ok">ok</span>
+          {% else %}
+            <span class="pill pill-fail">{{ scan.status }}</span>
+          {% endif %}
+        </td>
+        <td style="text-align: center;">
+          {% if scan.critical %}<span class="sev sev-C">{{ scan.critical }}</span>{% else %}<span class="muted">0</span>{% endif %}
+        </td>
+        <td style="text-align: center;">
+          {% if scan.high %}<span class="sev sev-H">{{ scan.high }}</span>{% else %}<span class="muted">0</span>{% endif %}
+        </td>
+        <td style="text-align: center;">
+          {% if scan.medium %}<span class="sev sev-M">{{ scan.medium }}</span>{% else %}<span class="muted">0</span>{% endif %}
+        </td>
+        <td style="text-align: center;">
+          {% if scan.low %}<span class="sev sev-L">{{ scan.low }}</span>{% else %}<span class="muted">0</span>{% endif %}
+        </td>
+        <td>
+          <a href="/portal/scans/{{ scan.scan_id }}" style="font-size: 0.85rem; white-space: nowrap;">View →</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div style="padding: 0.75rem 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+    <span class="muted" style="font-size: 0.85rem;">Page {{ page }}</span>
+    <div>
+      {% if page > 1 %}
+        <a href="/portal/scans?page={{ page - 1 }}" class="btn" style="font-size: 0.85rem;">← Prev</a>
+      {% endif %}
+      {% if has_next %}
+        <a href="/portal/scans?page={{ page + 1 }}" class="btn" style="font-size: 0.85rem;">Next →</a>
+      {% endif %}
+    </div>
+  </div>
+  {% else %}
+  <div style="padding: 2rem 1.5rem; text-align: center; color: var(--muted);">
+    <p>No scans yet.</p>
+    <p style="font-size: 0.9rem;">
+      Run <code>phrase-sec-scan .</code> in your project directory to start your first scan.
+    </p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,5 +1,13 @@
 {% extends "base.html" %}
 {% block title %}New token issued{% endblock %}
+{% block tabs %}
+<nav class="tabs">
+  <a href="/portal/" class="active">Token</a>
+  <a href="/portal/settings">Settings</a>
+  <a href="/portal/scans">Scans</a>
+  <a href="/portal/usage">Usage</a>
+</nav>
+{% endblock %}
 {% block content %}
 <div class="card">
   <h2 class="ok">

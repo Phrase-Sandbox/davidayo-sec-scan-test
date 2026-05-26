@@ -1,28 +1,29 @@
-"""``/portal/*`` — user self-service for per-developer ``/scan/local`` tokens.
+"""``/portal/*`` — user self-service portal.
 
-Three flows live here:
+Four sections:
 
-1. **Browser self-service** (``GET /portal/``, ``POST /portal/tokens``,
-   ``POST /portal/tokens/revoke``) — the developer sees their current token
-   status, issues or rotates, or revokes. The full token plaintext is shown
-   on ``portal_token_shown.html`` **exactly once**; it's never persisted on
-   the server outside the SHA-256 hash and never echoed back on subsequent
-   page loads.
+1. **Token** (``GET /portal/``, ``POST /portal/tokens``,
+   ``POST /portal/tokens/revoke``) — issue, rotate, or revoke the
+   developer's personal scanner token. The plaintext is shown exactly once
+   on ``portal_token_shown.html`` and is never re-displayed.
 
-2. **CLI browser-callback login** (``GET /portal/cli/login``,
+2. **Settings** (``GET/POST /portal/settings``) — save the user's LLM
+   provider, model, and API key (encrypted at rest with Fernet).
+
+3. **Scans** (``GET /portal/scans``, ``GET /portal/scans/<scan_id>``) —
+   paginated scan history and per-scan HTML report viewer.
+
+4. **Usage** (``GET /portal/usage``) — monthly token + call breakdown for
+   the user's own LLM key, with response IDs for cross-referencing with the
+   provider's billing console.
+
+5. **CLI browser-callback login** (``GET /portal/cli/login``,
    ``POST /portal/cli/login/complete``) — the ``phrase-sec-scan`` CLI binds
-   a localhost listener and points the user's browser at the consent page.
-   On approval, the server issues / rotates a token and 302-redirects to
-   ``http://localhost:<port>/?token=...`` so the CLI listener picks it up
-   and writes it to ``~/.phrase-sec-scan/config.yaml``. The redirect target
-   is hard-coded to loopback; we never accept an arbitrary URL.
+   a localhost listener; on approval the server redirects to the loopback
+   listener with the token in the query string.
 
-Trust model: every request here MUST come through the Phrase Platform
-ingress, which terminates Okta and injects ``X-Userinfo``. The
-:func:`require_phrase_user` dep gates every route. For local dev we set
-``ADMIN_LOCAL_BYPASS=true`` and the dep returns a fake user — guarded by
-the startup check in :mod:`security_scanner.main` so this can't enable
-against a non-local DB.
+Trust model: every request MUST come through the Phrase Platform ingress
+(Okta ``X-Userinfo``). For local dev, set ``ADMIN_LOCAL_BYPASS=true``.
 """
 
 from __future__ import annotations
@@ -34,10 +35,20 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, sta
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from sqlalchemy import desc, select
+
 from security_scanner.shared.logging_util import get_logger
+from security_scanner.tokens import audit as token_audit
 from security_scanner.tokens import registry as token_registry
 from security_scanner.tokens.auth import PhraseUser, require_phrase_user
 from security_scanner.tokens.db import get_session_factory
+from security_scanner.tokens.models import (
+    AuditEventType,
+    LLMProvider,
+    LLMUsageMonthly,
+    ScanRecord,
+    UserLLMSettings,
+)
 
 log = get_logger(__name__)
 
@@ -56,6 +67,22 @@ _NO_STORE_HEADERS = {
 
 
 _UserDep = Annotated[PhraseUser, Depends(require_phrase_user)]
+
+# Models surfaced in the /portal/settings dropdown, grouped by provider.
+# The first entry for each provider is the recommended default.
+KNOWN_MODELS: dict[str, list[str]] = {
+    "anthropic": [
+        "claude-sonnet-4-6",
+        "claude-opus-4-7",
+        "claude-haiku-4-5-20251001",
+    ],
+    "google": [
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+    ],
+}
+
+_SCANS_PAGE_SIZE = 20
 
 
 def _valid_callback_port(port: int) -> bool:
@@ -235,6 +262,305 @@ async def cli_login_complete(
         url=redirect,
         status_code=status.HTTP_303_SEE_OTHER,
         headers=_NO_STORE_HEADERS,
+    )
+
+
+# ---------------------------------------------------------------------------
+# LLM Settings (/portal/settings)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/settings", response_class=HTMLResponse)
+async def portal_settings_get(request: Request, user: _UserDep) -> HTMLResponse:
+    """Show the LLM provider/model/key settings form."""
+    factory = get_session_factory()
+    async with factory() as session:
+        stmt = select(UserLLMSettings).where(UserLLMSettings.user_email == user.email)
+        settings_row = (await session.execute(stmt)).scalar_one_or_none()
+
+    masked_key: str | None = None
+    current_provider: str = "anthropic"
+    current_model: str | None = None
+    if settings_row is not None:
+        from security_scanner.tokens.crypto import mask_for_display, decrypt  # noqa: PLC0415
+        try:
+            plaintext = decrypt(settings_row.encrypted_api_key)
+            masked_key = mask_for_display(plaintext)
+        except Exception:  # noqa: BLE001
+            masked_key = "…(decryption error)"
+        current_provider = settings_row.provider.value
+        current_model = settings_row.model
+
+    return templates.TemplateResponse(
+        request,
+        "portal_settings.html",
+        {
+            "user": user,
+            "known_models": KNOWN_MODELS,
+            "current_provider": current_provider,
+            "current_model": current_model,
+            "masked_key": masked_key,
+            "flash": None,
+        },
+        headers=_NO_STORE_HEADERS,
+    )
+
+
+@router.post("/settings", response_class=HTMLResponse)
+async def portal_settings_post(
+    request: Request,
+    user: _UserDep,
+    provider: Annotated[str, Form()],
+    model: Annotated[str, Form()] = "",
+    api_key: Annotated[str, Form()] = "",
+) -> HTMLResponse:
+    """Save or update the user's LLM settings.
+
+    If ``api_key`` is blank the existing key is preserved (the form shows a
+    masked hint so the user knows one is already saved).  The key is encrypted
+    with Fernet before storage and never logged.
+    """
+    from security_scanner.tokens.crypto import encrypt, mask_for_display  # noqa: PLC0415
+
+    provider = provider.strip().lower()
+    model = model.strip() or None
+    api_key = api_key.strip()
+
+    if provider not in ("anthropic", "google"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Unknown provider {provider!r}",
+        )
+
+    factory = get_session_factory()
+    async with factory() as session:
+        stmt = select(UserLLMSettings).where(UserLLMSettings.user_email == user.email)
+        row = (await session.execute(stmt)).scalar_one_or_none()
+
+        if api_key:
+            encrypted = encrypt(api_key)
+        elif row is not None:
+            encrypted = row.encrypted_api_key  # preserve existing
+        else:
+            # No existing key, none supplied — ask the user to provide one.
+            return templates.TemplateResponse(
+                request,
+                "portal_settings.html",
+                {
+                    "user": user,
+                    "known_models": KNOWN_MODELS,
+                    "current_provider": provider,
+                    "current_model": model,
+                    "masked_key": None,
+                    "flash": "error:Please enter your API key.",
+                },
+                headers=_NO_STORE_HEADERS,
+            )
+
+        provider_enum = LLMProvider.anthropic if provider == "anthropic" else LLMProvider.google
+
+        from datetime import UTC, datetime  # noqa: PLC0415
+        now = datetime.now(UTC)
+        if row is None:
+            from security_scanner.tokens.models import UserLLMSettings as _ULS  # noqa: PLC0415
+            row = _ULS(
+                user_email=user.email,
+                provider=provider_enum,
+                model=model,
+                encrypted_api_key=encrypted,
+                updated_at=now,
+            )
+            session.add(row)
+        else:
+            row.provider = provider_enum
+            row.model = model
+            row.encrypted_api_key = encrypted
+            row.updated_at = now
+
+        await token_audit.record(
+            session,
+            event_type=AuditEventType.user_llm_settings_updated,
+            user_email=user.email,
+            provider=provider,
+            model=model or "(default)",
+        )
+        await session.commit()
+
+    masked_key = mask_for_display(api_key) if api_key else "…(unchanged)"
+    log.info("portal llm settings saved", user_email=user.email, provider=provider, model=model)
+
+    return templates.TemplateResponse(
+        request,
+        "portal_settings.html",
+        {
+            "user": user,
+            "known_models": KNOWN_MODELS,
+            "current_provider": provider,
+            "current_model": model,
+            "masked_key": masked_key,
+            "flash": "ok:Settings saved.",
+        },
+        headers=_NO_STORE_HEADERS,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Scan history (/portal/scans, /portal/scans/<scan_id>)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/scans", response_class=HTMLResponse)
+async def portal_scans(
+    request: Request,
+    user: _UserDep,
+    page: Annotated[int, Query(ge=1)] = 1,
+) -> HTMLResponse:
+    """Paginated list of the caller's scan records."""
+    factory = get_session_factory()
+    offset = (page - 1) * _SCANS_PAGE_SIZE
+    async with factory() as session:
+        stmt = (
+            select(ScanRecord)
+            .where(ScanRecord.user_email == user.email)
+            .order_by(desc(ScanRecord.started_at))
+            .offset(offset)
+            .limit(_SCANS_PAGE_SIZE + 1)  # fetch one extra to detect next page
+        )
+        rows = (await session.execute(stmt)).scalars().all()
+
+    has_next = len(rows) > _SCANS_PAGE_SIZE
+    scans = list(rows[:_SCANS_PAGE_SIZE])
+
+    return templates.TemplateResponse(
+        request,
+        "portal_scans.html",
+        {
+            "user": user,
+            "scans": scans,
+            "page": page,
+            "has_next": has_next,
+        },
+    )
+
+
+@router.get("/scans/{scan_id}", response_class=HTMLResponse)
+async def portal_scan_detail(
+    request: Request,
+    user: _UserDep,
+    scan_id: str,
+) -> HTMLResponse:
+    """Render the saved HTML report for a single scan."""
+    import uuid  # noqa: PLC0415
+    try:
+        scan_uuid = uuid.UUID(scan_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid scan ID.")
+
+    factory = get_session_factory()
+    async with factory() as session:
+        from security_scanner.tokens.models import ScanUsage  # noqa: PLC0415
+        stmt = select(ScanRecord).where(
+            ScanRecord.scan_id == scan_uuid,
+            ScanRecord.user_email == user.email,
+        )
+        scan = (await session.execute(stmt)).scalar_one_or_none()
+        usage_row: ScanUsage | None = None
+        if scan is not None:
+            usage_stmt = select(ScanUsage).where(ScanUsage.scan_id == scan_uuid)
+            usage_row = (await session.execute(usage_stmt)).scalar_one_or_none()
+
+    if scan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan not found.")
+
+    response_ids: list[str] = []
+    if usage_row and usage_row.response_ids:
+        response_ids = [r.strip() for r in usage_row.response_ids.split(",") if r.strip()]
+
+    # Anthropic console deep-link format (message inspector)
+    console_base = (
+        "https://console.anthropic.com/workbench"
+        if scan.provider == "anthropic"
+        else "https://console.cloud.google.com/vertex-ai/generative/multimodal"
+    )
+
+    return templates.TemplateResponse(
+        request,
+        "portal_scan_detail.html",
+        {
+            "user": user,
+            "scan": scan,
+            "usage": usage_row,
+            "response_ids": response_ids,
+            "console_base": console_base,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Usage transparency (/portal/usage)
+# ---------------------------------------------------------------------------
+
+# Published list prices (USD) per 1M tokens — best-effort, for estimation only.
+# Real cost = provider invoice; these numbers help users spot surprises.
+_PRICE_PER_MTok: dict[tuple[str, str], tuple[float, float]] = {
+    ("anthropic", "claude-sonnet-4-6"):  (3.00, 15.00),
+    ("anthropic", "claude-opus-4-7"):    (15.00, 75.00),
+    ("anthropic", "claude-haiku-4-5-20251001"): (0.80, 4.00),
+    ("google",    "gemini-2.5-flash"):   (0.075, 0.30),
+    ("google",    "gemini-2.5-pro"):     (1.25, 10.00),
+}
+
+
+def _est_cost_usd(row: LLMUsageMonthly) -> float:
+    """Best-effort cost estimate in USD."""
+    key = (row.provider, row.model or "")
+    prices = _PRICE_PER_MTok.get(key)
+    if prices is None:
+        return 0.0
+    in_price, out_price = prices
+    return (
+        row.input_tokens / 1_000_000 * in_price
+        + row.output_tokens / 1_000_000 * out_price
+    )
+
+
+@router.get("/usage", response_class=HTMLResponse)
+async def portal_usage(request: Request, user: _UserDep) -> HTMLResponse:
+    """Monthly LLM usage breakdown for the caller's BYO key."""
+    from datetime import UTC, datetime  # noqa: PLC0415
+
+    now = datetime.now(UTC)
+    this_month = now.strftime("%Y-%m")
+    # Last month
+    if now.month == 1:
+        last_month = f"{now.year - 1}-12"
+    else:
+        last_month = f"{now.year}-{now.month - 1:02d}"
+
+    factory = get_session_factory()
+    async with factory() as session:
+        stmt = (
+            select(LLMUsageMonthly)
+            .where(LLMUsageMonthly.user_email == user.email)
+            .where(LLMUsageMonthly.year_month.in_([this_month, last_month]))
+            .order_by(LLMUsageMonthly.year_month.desc())
+        )
+        rows = (await session.execute(stmt)).scalars().all()
+
+    usage_with_cost = [
+        {"row": r, "est_cost": _est_cost_usd(r)}
+        for r in rows
+    ]
+
+    return templates.TemplateResponse(
+        request,
+        "portal_usage.html",
+        {
+            "user": user,
+            "this_month": this_month,
+            "last_month": last_month,
+            "usage": usage_with_cost,
+        },
     )
 
 

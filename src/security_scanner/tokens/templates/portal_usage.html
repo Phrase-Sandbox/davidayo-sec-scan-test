@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}Usage — Phrase Security Scanner{% endblock %}
+{% block tabs %}
+<nav class="tabs">
+  <a href="/portal/">Token</a>
+  <a href="/portal/settings">Settings</a>
+  <a href="/portal/scans">Scans</a>
+  <a href="/portal/usage" class="active">Usage</a>
+</nav>
+{% endblock %}
+{% block content %}
+
+{# ---- Group usage rows by month ------------------------------------------ #}
+{% set this_month_rows = [] %}
+{% set last_month_rows = [] %}
+{% for entry in usage %}
+  {% if entry.row.year_month == this_month %}
+    {% set _ = this_month_rows.append(entry) %}
+  {% else %}
+    {% set _ = last_month_rows.append(entry) %}
+  {% endif %}
+{% endfor %}
+
+{# ---- Totals for this month ------------------------------------------------ #}
+{% set total_calls = namespace(v=0) %}
+{% set total_in = namespace(v=0) %}
+{% set total_out = namespace(v=0) %}
+{% set total_cost = namespace(v=0.0) %}
+{% for entry in this_month_rows %}
+  {% set total_calls.v = total_calls.v + entry.row.n_llm_calls %}
+  {% set total_in.v    = total_in.v    + entry.row.input_tokens %}
+  {% set total_out.v   = total_out.v   + entry.row.output_tokens %}
+  {% set total_cost.v  = total_cost.v  + entry.est_cost %}
+{% endfor %}
+
+<div class="card">
+  <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1rem;">
+    <h2 style="margin: 0;">{{ this_month }} — this month</h2>
+    <span class="muted" style="font-size: 0.85rem;">Estimates based on published list prices</span>
+  </div>
+
+  {% if this_month_rows %}
+  <div class="stat-grid" style="margin-bottom: 1.25rem;">
+    <div class="stat-card">
+      <div class="stat-num">{{ "{:,}".format(total_calls.v) }}</div>
+      <div class="stat-label">LLM calls</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num">{{ "{:,}".format(total_in.v) }}</div>
+      <div class="stat-label">Input tokens</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num">{{ "{:,}".format(total_out.v) }}</div>
+      <div class="stat-label">Output tokens</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num">${{ "%.4f"|format(total_cost.v) }}</div>
+      <div class="stat-label">Est. cost</div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Provider</th>
+        <th>Model</th>
+        <th style="text-align: right;">LLM calls</th>
+        <th style="text-align: right;">Input tokens</th>
+        <th style="text-align: right;">Output tokens</th>
+        <th style="text-align: right;">Est. cost (USD)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for entry in this_month_rows %}
+      <tr>
+        <td>{{ entry.row.provider }}</td>
+        <td class="mono" style="font-size: 0.83rem;">{{ entry.row.model or "—" }}</td>
+        <td style="text-align: right;">{{ "{:,}".format(entry.row.n_llm_calls) }}</td>
+        <td style="text-align: right;">{{ "{:,}".format(entry.row.input_tokens) }}</td>
+        <td style="text-align: right;">{{ "{:,}".format(entry.row.output_tokens) }}</td>
+        <td style="text-align: right;">
+          {% if entry.est_cost > 0 %}${{ "%.4f"|format(entry.est_cost) }}
+          {% else %}<span class="muted">—</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div style="margin-top: 1rem; display: flex; gap: 1rem; flex-wrap: wrap;">
+    <a href="https://console.anthropic.com/settings/billing" target="_blank" rel="noopener"
+       style="font-size: 0.85rem;">Verify in Anthropic Console ↗</a>
+    <a href="https://console.cloud.google.com/billing" target="_blank" rel="noopener"
+       style="font-size: 0.85rem;">Verify in Google Cloud Billing ↗</a>
+  </div>
+  {% else %}
+  <p class="muted">No usage recorded for {{ this_month }} yet.</p>
+  {% endif %}
+</div>
+
+{% if last_month_rows %}
+{# ---- Last month summary (collapsed by default) -------------------------- #}
+{% set lm_calls = namespace(v=0) %}
+{% set lm_in = namespace(v=0) %}
+{% set lm_out = namespace(v=0) %}
+{% set lm_cost = namespace(v=0.0) %}
+{% for entry in last_month_rows %}
+  {% set lm_calls.v = lm_calls.v + entry.row.n_llm_calls %}
+  {% set lm_in.v    = lm_in.v    + entry.row.input_tokens %}
+  {% set lm_out.v   = lm_out.v   + entry.row.output_tokens %}
+  {% set lm_cost.v  = lm_cost.v  + entry.est_cost %}
+{% endfor %}
+
+<details class="card" style="padding: 0; overflow: hidden;">
+  <summary style="padding: 1.25rem 1.5rem; cursor: pointer; font-weight: 600; user-select: none;
+                  list-style: none; display: flex; justify-content: space-between; align-items: center;">
+    <span>{{ last_month }} — last month</span>
+    <span class="muted" style="font-size: 0.85rem; font-weight: normal;">
+      {{ "{:,}".format(lm_calls.v) }} calls &middot;
+      {{ "{:,}".format(lm_in.v + lm_out.v) }} tokens &middot;
+      ${{ "%.4f"|format(lm_cost.v) }} est.
+    </span>
+  </summary>
+
+  <div style="border-top: 1px solid var(--border); padding: 1.25rem 1.5rem;">
+    <table>
+      <thead>
+        <tr>
+          <th>Provider</th>
+          <th>Model</th>
+          <th style="text-align: right;">LLM calls</th>
+          <th style="text-align: right;">Input tokens</th>
+          <th style="text-align: right;">Output tokens</th>
+          <th style="text-align: right;">Est. cost (USD)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in last_month_rows %}
+        <tr>
+          <td>{{ entry.row.provider }}</td>
+          <td class="mono" style="font-size: 0.83rem;">{{ entry.row.model or "—" }}</td>
+          <td style="text-align: right;">{{ "{:,}".format(entry.row.n_llm_calls) }}</td>
+          <td style="text-align: right;">{{ "{:,}".format(entry.row.input_tokens) }}</td>
+          <td style="text-align: right;">{{ "{:,}".format(entry.row.output_tokens) }}</td>
+          <td style="text-align: right;">
+            {% if entry.est_cost > 0 %}${{ "%.4f"|format(entry.est_cost) }}
+            {% else %}<span class="muted">—</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</details>
+{% endif %}
+
+<div class="card">
+  <h2>About these estimates</h2>
+  <p class="muted" style="font-size: 0.9rem;">
+    Cost estimates use published list prices and are provided for convenience only.
+    Your actual invoice may differ due to volume discounts, promotional credits, or
+    price changes after this software was last updated.
+  </p>
+  <p class="muted" style="font-size: 0.9rem;">
+    Token counts come directly from the provider SDK response and are recorded per scan.
+    To verify, open any scan in <a href="/portal/scans">Scans</a> and click a response ID to
+    inspect it in your provider's console.
+  </p>
+</div>
+{% endblock %}

@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}LLM Settings — Phrase Security Scanner{% endblock %}
+{% block tabs %}
+<nav class="tabs">
+  <a href="/portal/">Token</a>
+  <a href="/portal/settings" class="active">Settings</a>
+  <a href="/portal/scans">Scans</a>
+  <a href="/portal/usage">Usage</a>
+</nav>
+{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>LLM Provider Settings</h2>
+  <p class="muted">
+    Your API key is encrypted at rest and used only to run your scans.
+    It is never logged or shared. Leave the key field blank to keep the
+    currently saved key.
+  </p>
+  <form method="post" action="/portal/settings" autocomplete="off">
+    <fieldset style="border: none; padding: 0; margin: 0 0 1.25rem;">
+      <legend style="font-weight: 600; margin-bottom: 0.75rem;">Provider</legend>
+      <label style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; cursor: pointer;">
+        <input type="radio" name="provider" value="anthropic"
+               {{ 'checked' if current_provider == 'anthropic' else '' }}
+               onchange="updateModels(this.value)">
+        Anthropic (Claude)
+      </label>
+      <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+        <input type="radio" name="provider" value="google"
+               {{ 'checked' if current_provider == 'google' else '' }}
+               onchange="updateModels(this.value)">
+        Google (Gemini)
+      </label>
+    </fieldset>
+
+    <div style="margin-bottom: 1rem;">
+      <label style="display: block; font-weight: 600; margin-bottom: 0.4rem;" for="model">Model</label>
+      <select name="model" id="model"
+              style="font: inherit; padding: 0.4rem 0.6rem; border: 1px solid var(--border);
+                     border-radius: 6px; background: var(--card); color: var(--fg); width: 100%; max-width: 380px;">
+        {% for provider_key, models in known_models.items() %}
+          {% for m in models %}
+            <option value="{{ m }}"
+                    data-provider="{{ provider_key }}"
+                    {{ 'selected' if m == current_model else '' }}
+                    style="{{ 'display:none' if provider_key != current_provider else '' }}">
+              {{ m }}{% if loop.first %} (recommended){% endif %}
+            </option>
+          {% endfor %}
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="margin-bottom: 1.25rem;">
+      <label style="display: block; font-weight: 600; margin-bottom: 0.4rem;" for="api_key">
+        API Key
+        {% if masked_key %}
+          <span class="muted" style="font-weight: normal; font-size: 0.85rem;">(current: {{ masked_key }})</span>
+        {% endif %}
+      </label>
+      <input
+        type="password"
+        name="api_key"
+        id="api_key"
+        autocomplete="new-password"
+        placeholder="{{ 'Leave blank to keep existing key' if masked_key else 'sk-ant-… or AI…' }}"
+        style="font: 14px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+               padding: 0.45rem 0.65rem; border: 1px solid var(--border);
+               border-radius: 6px; background: var(--card); color: var(--fg);
+               width: 100%; max-width: 480px;">
+      <p class="muted" style="margin-top: 0.35rem; font-size: 0.82rem;">
+        {% if current_provider == "anthropic" %}
+          Find your key at
+          <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com/settings/keys</a>.
+        {% else %}
+          Find your key in
+          <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console → APIs &amp; Services → Credentials</a>.
+        {% endif %}
+      </p>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Save settings</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2 style="font-size: 0.95rem;">How it works</h2>
+  <dl>
+    <dt>Storage</dt><dd>Your key is encrypted with AES-256 (Fernet) before being written to the database. The plaintext is held in memory only for the duration of each scan request.</dd>
+    <dt>Billing</dt><dd>All LLM calls are made with your key. The provider charges you directly. Visit <a href="/portal/usage">Usage</a> to see a breakdown and verify against your provider dashboard.</dd>
+    <dt>Revoke</dt><dd>Delete your key from your provider's console at any time. All future scans will fail with a 401 until you update the key here.</dd>
+  </dl>
+</div>
+
+<script>
+  const knownModels = {{ known_models | tojson }};
+  function updateModels(provider) {
+    const sel = document.getElementById("model");
+    Array.from(sel.options).forEach(opt => {
+      const show = opt.dataset.provider === provider;
+      opt.style.display = show ? "" : "none";
+      if (!show) opt.selected = false;
+    });
+    // Select first visible option
+    const first = Array.from(sel.options).find(o => o.dataset.provider === provider);
+    if (first) first.selected = true;
+
+    // Update key placeholder hint
+    const keyInput = document.getElementById("api_key");
+    if (keyInput) {
+      keyInput.placeholder = provider === "anthropic"
+        ? "sk-ant-… (leave blank to keep existing)"
+        : "AI… (leave blank to keep existing)";
+    }
+  }
+  // Initialise on load in case current_provider != first radio
+  document.addEventListener("DOMContentLoaded", function() {
+    const checked = document.querySelector('input[name="provider"]:checked');
+    if (checked) updateModels(checked.value);
+  });
+</script>
+{% endblock %}

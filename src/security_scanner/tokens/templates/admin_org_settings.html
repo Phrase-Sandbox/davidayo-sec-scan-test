@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Admin &mdash; Org settings{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Org Settings</h2>
+  <p class="muted">
+    LLM keys saved here are encrypted at rest and loaded on every CI scan request.
+    Changes take effect immediately — no restart required.
+  </p>
+  <p>
+    <a href="/admin/tokens" class="btn">Tokens</a>
+    <a href="/admin/users" class="btn">Users</a>
+    <a href="/admin/ci-token" class="btn">CI Token</a>
+    <a href="/admin/audit" class="btn">Audit log</a>
+  </p>
+</div>
+
+<div class="card">
+  <h2>Current configuration</h2>
+  <dl>
+    <dt>Default provider</dt><dd>{{ current_provider }}</dd>
+    <dt>Default model</dt><dd>{{ current_model or "(provider default)" }}</dd>
+    <dt>Anthropic key</dt>
+    <dd>
+      {% if masked_anthropic %}<code>{{ masked_anthropic }}</code> <span class="ok">✓ set</span>
+      {% else %}<span class="muted">not set</span>{% endif %}
+    </dd>
+    <dt>Google key</dt>
+    <dd>
+      {% if masked_google %}<code>{{ masked_google }}</code> <span class="ok">✓ set</span>
+      {% else %}<span class="muted">not set</span>{% endif %}
+    </dd>
+  </dl>
+</div>
+
+<div class="card">
+  <h2>Update settings</h2>
+  <form method="post" action="/admin/org-settings" autocomplete="off">
+
+    <fieldset style="border: none; padding: 0; margin: 0 0 1.25rem;">
+      <legend style="font-weight: 600; margin-bottom: 0.6rem;">Default provider for CI scans</legend>
+      <label style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; cursor: pointer;">
+        <input type="radio" name="default_provider" value="anthropic"
+               {{ 'checked' if current_provider == 'anthropic' else '' }}>
+        Anthropic (Claude)
+      </label>
+      <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+        <input type="radio" name="default_provider" value="google"
+               {{ 'checked' if current_provider == 'google' else '' }}>
+        Google (Gemini)
+      </label>
+    </fieldset>
+
+    <div style="margin-bottom: 1rem;">
+      <label style="display: block; font-weight: 600; margin-bottom: 0.4rem;" for="default_model">
+        Default model <span class="muted" style="font-weight: normal;">(blank = provider default)</span>
+      </label>
+      <input type="text" name="default_model" id="default_model"
+             value="{{ current_model or '' }}"
+             placeholder="e.g. claude-sonnet-4-6"
+             style="font: 14px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+                    padding: 0.45rem 0.65rem; border: 1px solid var(--border);
+                    border-radius: 6px; background: var(--card); color: var(--fg); width: 100%; max-width: 320px;">
+    </div>
+
+    <div style="margin-bottom: 1rem;">
+      <label style="display: block; font-weight: 600; margin-bottom: 0.4rem;" for="anthropic_key">
+        Anthropic API Key
+        {% if masked_anthropic %}
+          <span class="muted" style="font-weight: normal; font-size: 0.85rem;">(current: {{ masked_anthropic }})</span>
+        {% endif %}
+      </label>
+      <input type="password" name="anthropic_key" id="anthropic_key"
+             autocomplete="new-password"
+             placeholder="{{ 'Leave blank to keep existing key' if masked_anthropic else 'sk-ant-…' }}"
+             style="font: 14px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+                    padding: 0.45rem 0.65rem; border: 1px solid var(--border);
+                    border-radius: 6px; background: var(--card); color: var(--fg); width: 100%; max-width: 480px;">
+    </div>
+
+    <div style="margin-bottom: 1.5rem;">
+      <label style="display: block; font-weight: 600; margin-bottom: 0.4rem;" for="google_key">
+        Google API Key
+        {% if masked_google %}
+          <span class="muted" style="font-weight: normal; font-size: 0.85rem;">(current: {{ masked_google }})</span>
+        {% endif %}
+      </label>
+      <input type="password" name="google_key" id="google_key"
+             autocomplete="new-password"
+             placeholder="{{ 'Leave blank to keep existing key' if masked_google else 'AI…' }}"
+             style="font: 14px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+                    padding: 0.45rem 0.65rem; border: 1px solid var(--border);
+                    border-radius: 6px; background: var(--card); color: var(--fg); width: 100%; max-width: 480px;">
+    </div>
+
+    <button type="submit" class="btn btn-primary">Save org settings</button>
+    <p class="muted" style="margin-top: 0.75rem; font-size: 0.85rem;">
+      Saving creates a new versioned row. All previous configs are preserved for audit.
+      The next CI scan will use the new configuration without a server restart.
+    </p>
+  </form>
+</div>
+{% endblock %}

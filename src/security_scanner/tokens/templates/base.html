@@ -99,6 +99,55 @@
     dt { color: var(--muted); }
     dd { margin: 0; font-variant-numeric: tabular-nums; }
     form { display: inline; }
+    /* Tab navigation */
+    .tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 1.5rem;
+    }
+    .tabs a {
+      display: block;
+      padding: 0.55rem 1.1rem;
+      text-decoration: none;
+      color: var(--muted);
+      font-size: 0.92rem;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: color 0.1s;
+    }
+    .tabs a:hover { color: var(--fg); }
+    .tabs a.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+      font-weight: 600;
+    }
+    /* Severity badges */
+    .sev { display: inline-block; padding: 0.1rem 0.45rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; }
+    .sev-C { background: #fde8e8; color: #7f1d1d; }
+    .sev-H { background: #fef3c7; color: #78350f; }
+    .sev-M { background: #fef9c3; color: #713f12; }
+    .sev-L { background: #e0f2fe; color: #0c4a6e; }
+    /* Table */
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    tr:hover td { background: rgba(0,0,0,0.02); }
+    a { color: var(--accent); }
+    /* Status pills */
+    .pill { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 99px; font-size: 0.8rem; }
+    .pill-ok { background: #d1fae5; color: #065f46; }
+    .pill-fail { background: #fee2e2; color: #7f1d1d; }
+    /* Monospace IDs */
+    .mono { font: 13px/1.4 ui-monospace, "SF Mono", Menlo, monospace; word-break: break-all; }
+    /* Flash variants */
+    .flash-ok  { background: rgba(4,120,87,0.08); border-left-color: var(--ok); }
+    .flash-err { background: rgba(185,28,28,0.08); border-left-color: var(--danger); }
+    /* Big stat cards */
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
+    .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; text-align: center; }
+    .stat-card .stat-num { font-size: 1.8rem; font-weight: 700; }
+    .stat-card .stat-label { font-size: 0.8rem; color: var(--muted); margin-top: 0.2rem; }
   </style>
 </head>
 <body>
@@ -107,7 +156,16 @@
       <h1>Phrase Security Scanner — Portal</h1>
       <span class="who">{{ user.email }}</span>
     </header>
-    {% if flash %}<div class="flash">{{ flash }}</div>{% endif %}
+    {% block tabs %}{% endblock %}
+    {% if flash %}
+    {% if flash.startswith("ok:") %}
+      <div class="flash flash-ok">{{ flash[3:] }}</div>
+    {% elif flash.startswith("error:") %}
+      <div class="flash flash-err">{{ flash[6:] }}</div>
+    {% else %}
+      <div class="flash">{{ flash }}</div>
+    {% endif %}
+    {% endif %}
     {% block content %}{% endblock %}
   </main>
 </body>

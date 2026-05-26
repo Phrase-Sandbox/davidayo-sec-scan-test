@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Admin &mdash; Users{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>User Management</h2>
+  <p class="muted">
+    Users are created automatically on first portal login.
+    Deactivating a user blocks all future scans (401) without revoking their token —
+    useful while access is being reviewed. Reactivate to restore access.
+  </p>
+  <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+    <form method="get" action="/admin/users">
+      <input type="text" name="q" placeholder="filter by email" value="{{ q }}"
+             style="padding: 0.4rem 0.65rem; border: 1px solid var(--border);
+                    border-radius: 6px; background: var(--card); color: var(--fg); font: inherit;">
+      <button type="submit" class="btn">Search</button>
+    </form>
+    <a href="/admin/tokens" class="btn">Tokens</a>
+    <a href="/admin/org-settings" class="btn">Org settings</a>
+    <a href="/admin/ci-token" class="btn">CI Token</a>
+    <a href="/admin/audit" class="btn">Audit log</a>
+  </div>
+</div>
+
+<div class="card" style="padding: 0; overflow: hidden;">
+  {% if users %}
+  <table>
+    <thead>
+      <tr>
+        <th>Email</th>
+        <th>Role</th>
+        <th>Status</th>
+        <th>Last login</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td>{{ u.email }}</td>
+        <td class="muted" style="font-size: 0.85rem;">{{ u.role.value }}</td>
+        <td>
+          {% if u.is_active %}
+            <span class="pill pill-ok">active</span>
+          {% else %}
+            <span class="pill pill-fail">deactivated</span>
+          {% endif %}
+        </td>
+        <td class="muted" style="font-size: 0.82rem; white-space: nowrap;">
+          {{ u.last_login_at.strftime("%Y-%m-%d %H:%M") if u.last_login_at else "—" }}
+        </td>
+        <td style="white-space: nowrap;">
+          {% if u.is_active %}
+          <form method="post" action="/admin/users/{{ u.email | urlencode }}/deactivate" style="display: inline;">
+            <button type="submit" class="btn btn-danger"
+                    onclick="return confirm('Deactivate {{ u.email }}? Their next scan will fail with 401.');"
+                    style="font-size: 0.8rem; padding: 0.25rem 0.6rem;">Deactivate</button>
+          </form>
+          {% else %}
+          <form method="post" action="/admin/users/{{ u.email | urlencode }}/reactivate" style="display: inline;">
+            <button type="submit" class="btn btn-primary"
+                    style="font-size: 0.8rem; padding: 0.25rem 0.6rem;">Reactivate</button>
+          </form>
+          {% endif %}
+          <form method="post" action="/admin/users/{{ u.email | urlencode }}/revoke-tokens" style="display: inline;">
+            <button type="submit" class="btn"
+                    onclick="return confirm('Revoke all active tokens for {{ u.email }}?');"
+                    style="font-size: 0.8rem; padding: 0.25rem 0.6rem;">Revoke tokens</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div style="padding: 0.75rem 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+    <span class="muted" style="font-size: 0.85rem;">Page {{ page }}</span>
+    <div>
+      {% if page > 1 %}
+        <a href="/admin/users?page={{ page - 1 }}{% if q %}&q={{ q }}{% endif %}" class="btn" style="font-size: 0.85rem;">← Prev</a>
+      {% endif %}
+      {% if has_next %}
+        <a href="/admin/users?page={{ page + 1 }}{% if q %}&q={{ q }}{% endif %}" class="btn" style="font-size: 0.85rem;">Next →</a>
+      {% endif %}
+    </div>
+  </div>
+  {% else %}
+  <div style="padding: 2rem 1.5rem; text-align: center; color: var(--muted);">
+    <p>No users found{% if q %} matching <em>{{ q }}</em>{% endif %}.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
