@@ -25,6 +25,7 @@ dependencies = [
   "certifi>=2024.2.2",
   "pathspec>=0.12",
   "pyyaml>=6.0",
+  "cryptography>=42.0",
 ]
 
 [project.scripts]

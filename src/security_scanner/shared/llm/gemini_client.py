@@ -24,6 +24,7 @@ from security_scanner.shared.claude.client import (
     ClaudeUnavailableError,
 )
 from security_scanner.shared.llm.parsing import parse_findings
+from security_scanner.shared.llm.usage import LLMUsage
 from security_scanner.shared.logging_util import get_logger
 from security_scanner.shared.prompts.system import (
     build_system_prompt,
@@ -76,6 +77,8 @@ class GeminiClient:
         # reused for subsequent calls within the 5-minute TTL window.
         self._cache_name: str | None = None
         self._cache_created_at: float = 0.0
+        # Per-instance accumulator — reset per request (clients built per scan).
+        self.usage = LLMUsage()
         if client is not None:
             # Injected (tests) — the real SDK is never imported.
             self._client = client
@@ -309,6 +312,7 @@ class GeminiClient:
                 if attempt + 1 < MAX_ATTEMPTS:
                     time.sleep(BACKOFF_SECONDS)
                 continue
+            self._record_usage(resp)
             return getattr(resp, "text", "") or ""
         raise ClaudeUnavailableError(
             f"Gemini unavailable after {MAX_ATTEMPTS} attempts: {last!r}"
@@ -351,7 +355,22 @@ class GeminiClient:
                 if attempt + 1 < MAX_ATTEMPTS:
                     await asyncio.sleep(BACKOFF_SECONDS)
                 continue
+            self._record_usage(resp)
             return getattr(resp, "text", "") or ""
         raise ClaudeUnavailableError(
             f"Gemini unavailable after {MAX_ATTEMPTS} attempts: {last!r}"
+        )
+
+    def _record_usage(self, resp: Any) -> None:
+        """Accumulate token usage from a Gemini response object."""
+        meta = getattr(resp, "usage_metadata", None)
+        if meta is None:
+            self.usage.add()
+            return
+        self.usage.add(
+            input_tokens=getattr(meta, "prompt_token_count", 0) or 0,
+            output_tokens=getattr(meta, "candidates_token_count", 0) or 0,
+            # Gemini does not expose cache-creation / cache-read token counters
+            # in the same way; cached_content_token_count is an input subset.
+            cache_read_input_tokens=getattr(meta, "cached_content_token_count", 0) or 0,
         )

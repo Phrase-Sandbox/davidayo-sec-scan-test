@@ -31,6 +31,7 @@ from typing import Any
 import anthropic
 
 from security_scanner.shared.llm.parsing import parse_findings
+from security_scanner.shared.llm.usage import LLMUsage
 from security_scanner.shared.logging_util import get_logger
 from security_scanner.shared.prompts.system import (
     build_system_prompt,
@@ -175,6 +176,9 @@ class ClaudeClient:
         self._sleep = sleep_fn
         self._clock = clock_fn
         self._circuit_breaker = _CircuitBreaker(clock_fn)
+        # Per-instance accumulator — reset per request because factory builds
+        # a fresh client per scan (never cached across requests).
+        self.usage = LLMUsage()
 
     # --- Public API ---------------------------------------------------------
 
@@ -414,12 +418,23 @@ class ClaudeClient:
 
             latency = self._clock() - start
             usage = getattr(response, "usage", None)
+            _input = getattr(usage, "input_tokens", 0) or 0
+            _output = getattr(usage, "output_tokens", 0) or 0
+            _cache_create = getattr(usage, "cache_creation_input_tokens", 0) or 0
+            _cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
             log.info(
                 "claude call complete",
                 model=self._model,
                 latency_seconds=round(latency, 3),
-                input_tokens=getattr(usage, "input_tokens", None),
-                output_tokens=getattr(usage, "output_tokens", None),
+                input_tokens=_input,
+                output_tokens=_output,
+            )
+            self.usage.add(
+                input_tokens=_input,
+                output_tokens=_output,
+                cache_creation_input_tokens=_cache_create,
+                cache_read_input_tokens=_cache_read,
+                response_id=getattr(response, "id", None),
             )
             self._circuit_breaker.record_success()
             return response

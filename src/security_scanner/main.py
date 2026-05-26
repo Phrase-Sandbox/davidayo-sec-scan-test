@@ -84,6 +84,13 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     _check_admin_bypass_safety(settings)
 
+    try:
+        from security_scanner.tokens.crypto import validate_startup_key  # noqa: PLC0415
+        validate_startup_key(settings)
+    except Exception as exc:  # noqa: BLE001 — exit on any crypto setup error
+        log.error("startup failed: SCANNER_ENCRYPTION_KEY invalid", error=type(exc).__name__)
+        sys.exit(1)
+
     if settings.LOCAL_SCAN_TOKEN and settings.USE_TOKEN_REGISTRY:
         log.warning(
             "LOCAL_SCAN_TOKEN is set but USE_TOKEN_REGISTRY=true; the env "

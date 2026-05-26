@@ -122,6 +122,19 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- Encryption at rest (org_settings + user_llm_settings) ----------------
+    # Required when the new two-channel model is active. Generated with:
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # Rotating: decrypt-with-old, re-encrypt-with-new; see devci-readme.md.
+    SCANNER_ENCRYPTION_KEY: str | None = Field(
+        default=None,
+        description=(
+            "Fernet key (urlsafe-b64, 32 bytes). Required when encrypted "
+            "user/org LLM keys are stored in the DB. Startup fails if the "
+            "value is set but malformed."
+        ),
+    )
+
     PORT: int = Field(default=8000, description="HTTP port")
     LOG_LEVEL: str = Field(default="INFO", description="Logging level")
 

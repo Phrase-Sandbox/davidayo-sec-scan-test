@@ -367,6 +367,9 @@ class ScanPipeline:
             unscanned_files=unscanned,
         )
         result.patches = generate_all_patches(result, files)
+        # Attach the accumulated LLM usage from the client so the handler can
+        # persist it to the DB without needing a second reference to the client.
+        result.llm_usage = getattr(self._claude, "usage", None)
         return result
 
     # --- Internals ---------------------------------------------------------
