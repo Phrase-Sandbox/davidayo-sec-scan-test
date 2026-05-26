@@ -246,6 +246,47 @@ def test_cli_default_mode_omits_llm_override_from_body(tmp_path, monkeypatch):
     )
 
 
+def test_cli_default_mode_with_provider_flag_sends_provider_override(tmp_path, monkeypatch):
+    """Default mode + `--provider gemini` sends `provider_override` (no api_key).
+    Server uses its own org-side Gemini key for this scan."""
+    monkeypatch.setattr(
+        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
+    )
+    monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
+    (tmp_path / "app.py").write_text("print(1)\n")
+
+    captured = _install_fake_urlopen(monkeypatch, _fake_server_response())
+
+    rc = local_cli.main([str(tmp_path), "--provider", "gemini", "--model", "gemini-flash-latest"])
+
+    assert rc == 0, "default-mode provider switch should succeed without --local"
+    body = captured["body"]
+    assert "llm_override" not in body, "no BYO key on default mode"
+    assert body["provider_override"] == {
+        "provider": "gemini",
+        "model": "gemini-flash-latest",
+    }
+
+
+def test_cli_default_mode_no_provider_sends_neither(tmp_path, monkeypatch):
+    """Default mode without --provider sends NEITHER override — server uses
+    SCANNER_LLM_PROVIDER env default."""
+    monkeypatch.setattr(
+        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
+    )
+    monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
+    (tmp_path / "app.py").write_text("print(1)\n")
+
+    captured = _install_fake_urlopen(monkeypatch, _fake_server_response())
+
+    rc = local_cli.main([str(tmp_path)])
+
+    assert rc == 0
+    body = captured["body"]
+    assert "llm_override" not in body
+    assert "provider_override" not in body
+
+
 def test_cli_local_mode_with_explicit_api_key_flag(tmp_path, monkeypatch):
     """`--local --api-key X --provider gemini` overrides env + config."""
     monkeypatch.setattr(

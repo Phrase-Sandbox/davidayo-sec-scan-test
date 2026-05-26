@@ -83,6 +83,59 @@ def build_llm_client(settings: Settings) -> LLMClient:
     )
 
 
+def build_org_llm_client_for(
+    provider: str,
+    settings: Settings,
+    model: str | None = None,
+) -> LLMClient:
+    """Build an LLM client using the **org's** server-side key for the
+    requested provider.
+
+    Used when a caller (CLI default mode, CI) sends a ``provider_override``
+    field to pick which org-configured provider to use for this scan,
+    without shipping their own key. Both ``ANTHROPIC_API_KEY`` and
+    ``GOOGLE_API_KEY`` may be set on the server; this helper picks the
+    one matching ``provider``.
+
+    Raises
+    ------
+    LLMConfigError
+        Unknown provider or the matching server-side key is not configured.
+    """
+    provider = provider.strip().lower()
+
+    if provider in ("anthropic", "claude"):
+        if not settings.ANTHROPIC_API_KEY:
+            raise LLMConfigError(
+                "provider_override=claude requested but ANTHROPIC_API_KEY "
+                "is not configured on the scanner."
+            )
+        from security_scanner.shared.claude.client import ClaudeClient
+
+        if model:
+            return ClaudeClient(api_key=settings.ANTHROPIC_API_KEY, model=model)
+        return ClaudeClient(api_key=settings.ANTHROPIC_API_KEY)
+
+    if provider in ("google", "gemini"):
+        key = getattr(settings, "GOOGLE_API_KEY", None)
+        if not key:
+            raise LLMConfigError(
+                "provider_override=gemini requested but GOOGLE_API_KEY is "
+                "not configured on the scanner."
+            )
+        log.warning("llm_provider_override", provider=provider, notice=_DATA_GOVERNANCE_WARNING)
+        from security_scanner.shared.llm.gemini_client import (
+            DEFAULT_MODEL as GEMINI_DEFAULT,
+        )
+        from security_scanner.shared.llm.gemini_client import GeminiClient
+
+        return GeminiClient(api_key=key, model=model or GEMINI_DEFAULT)
+
+    raise LLMConfigError(
+        f"Unknown provider_override={provider!r} — expected: claude | gemini"
+    )
+
+
 def build_local_llm_client(
     provider: str,
     api_key: str,

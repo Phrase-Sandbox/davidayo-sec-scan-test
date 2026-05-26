@@ -46,7 +46,12 @@ from security_scanner.agent.test_endpoint import _MockGitHubClient
 from security_scanner.observability.metrics import local_scan_auth_outcomes_total
 from security_scanner.pipeline import ScanPipeline, TokenLimitError
 from security_scanner.shared.config import Settings, get_settings
-from security_scanner.shared.llm.factory import build_llm_client, build_local_llm_client
+from security_scanner.shared.llm.base import LLMConfigError
+from security_scanner.shared.llm.factory import (
+    build_llm_client,
+    build_local_llm_client,
+    build_org_llm_client_for,
+)
 from security_scanner.shared.logging_util import get_logger
 from security_scanner.shared.models.enums import GateDecision, ScanTarget, ScanType, Severity
 from security_scanner.shared.models.finding import VulnerabilityFinding
@@ -230,6 +235,24 @@ class LLMOverride(BaseModel):
     model: str | None = None  # provider default if unset
 
 
+class ProviderOverride(BaseModel):
+    """Per-request *routing* override — picks which org-configured provider
+    runs this scan, without shipping a personal API key.
+
+    Used by CLI default mode (`phrase-sec-scan --provider gemini .`) and CI
+    workflows that want to flip provider per-job. The server uses its own
+    `ANTHROPIC_API_KEY` or `GOOGLE_API_KEY` — whichever matches
+    ``provider`` — so the org bills LLM costs, not the caller. If the
+    matching server-side key is not configured the request is rejected
+    422-style at routing time so the caller knows up-front.
+
+    NOTE: ``llm_override`` (BYO key) takes precedence if both are sent.
+    """
+
+    provider: Literal["anthropic", "claude", "google", "gemini"]
+    model: str | None = None
+
+
 class LocalScanRequest(BaseModel):
     """Body of ``POST /scan/local`` — the dev's uploaded working tree."""
 
@@ -241,6 +264,10 @@ class LocalScanRequest(BaseModel):
     # org credentials — the master-pipeline CI path. When set, this scan's
     # LLM call uses the caller's key instead.
     llm_override: LLMOverride | None = None
+    # Optional. Picks which org-configured provider runs this scan (uses
+    # the server's own ANTHROPIC_API_KEY / GOOGLE_API_KEY). Ignored when
+    # ``llm_override`` is set — BYO key wins.
+    provider_override: ProviderOverride | None = None
 
 
 class LocalScanResponse(BaseModel):
@@ -258,7 +285,7 @@ class LocalScanResponse(BaseModel):
 
 
 LocalPipelineFactory = Callable[
-    [dict[str, str], "LLMOverride | None"], ScanPipeline
+    [dict[str, str], "LLMOverride | None", "ProviderOverride | None"], ScanPipeline
 ]
 
 
@@ -267,20 +294,32 @@ def get_local_pipeline_factory(
 ) -> LocalPipelineFactory:
     """On-demand pipeline over uploaded files (no GitHub, no BR-009 gate).
 
-    The returned closure picks the LLM client per-request:
-    - ``llm_override is None`` → ``build_llm_client(settings)`` (org creds);
-      this is the CI/CD path.
-    - ``llm_override is not None`` → ``build_local_llm_client`` with the
-      caller-supplied key; this is the CLI ``--local`` BYO-key path.
+    Resolution order (highest precedence wins):
+    1. ``llm_override`` (BYO key) → ``build_local_llm_client`` with the
+       caller-supplied key. CLI ``--local`` path.
+    2. ``provider_override`` (no key) → ``build_org_llm_client_for`` using
+       the matching server-side org key. CLI default `--provider X`, CI.
+    3. Neither → ``build_llm_client(settings)`` reading env defaults. The
+       legacy single-provider path.
     """
 
-    def build(files: dict[str, str], llm_override: LLMOverride | None) -> ScanPipeline:
+    def build(
+        files: dict[str, str],
+        llm_override: LLMOverride | None,
+        provider_override: ProviderOverride | None = None,
+    ) -> ScanPipeline:
         github_client = _MockGitHubClient(files)
         if llm_override is not None:
             llm_client = build_local_llm_client(
                 provider=llm_override.provider,
                 api_key=llm_override.api_key,
                 model=llm_override.model,
+            )
+        elif provider_override is not None:
+            llm_client = build_org_llm_client_for(
+                provider=provider_override.provider,
+                model=provider_override.model,
+                settings=settings,
             )
         else:
             llm_client = build_llm_client(settings)
@@ -397,9 +436,22 @@ async def scan_local(
         user_email=caller.user_email,
         llm_override_used=body.llm_override is not None,
         llm_override_provider=(body.llm_override.provider if body.llm_override else None),
+        provider_override=(
+            body.provider_override.provider if body.provider_override else None
+        ),
     )
 
-    pipeline = factory(body.files, body.llm_override)
+    try:
+        pipeline = factory(body.files, body.llm_override, body.provider_override)
+    except LLMConfigError as exc:
+        # provider_override pointed at a provider whose server-side key
+        # is not configured (e.g. provider=gemini but GOOGLE_API_KEY unset).
+        # Surface as 422 so the caller knows up-front instead of failing
+        # mid-scan with an upstream error.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
     # Hold a semaphore slot for the duration of the pipeline call. The
     # locked() pre-check above ensures we don't *wait* for a slot if all
     # are taken; this `async with` is only entered when capacity exists.
@@ -448,16 +500,14 @@ async def scan_local(
                 },
             )
 
-        # Detect "LLM totally unavailable" — every file unscanned, with the
-        # pipeline's structured warning indicating an upstream failure
-        # (quota exhaustion, provider outage, etc.).
-        llm_unavailable = (
-            result.partial_scan
-            and len(result.unscanned_files) == len(body.files)
-            and any(
-                w.startswith("LLM upstream unavailable")
-                for w in result.warnings
-            )
+        # Detect "LLM totally unavailable" — the pipeline tags the result
+        # with this exact warning prefix only when ALL LLM calls failed
+        # (every chunk exhausted retries). We trust the warning as the
+        # definitive signal rather than comparing file counts (the pipeline
+        # filters files before counting LLM-eligible inputs, so a count
+        # comparison against body.files would miss).
+        llm_unavailable = any(
+            w.startswith("LLM upstream unavailable") for w in result.warnings
         )
         if llm_unavailable:
             reason = next(

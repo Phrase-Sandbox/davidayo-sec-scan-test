@@ -27,7 +27,9 @@ from security_scanner.agent.slack_alert import (
 from security_scanner.pipeline import ScanPipeline, TokenLimitError
 from security_scanner.shared.config import Settings, get_settings
 from security_scanner.shared.github.client import GitHubClient
-from security_scanner.shared.llm.factory import build_llm_client
+from security_scanner.agent.local_scan import ProviderOverride
+from security_scanner.shared.llm.base import LLMConfigError
+from security_scanner.shared.llm.factory import build_llm_client, build_org_llm_client_for
 from security_scanner.shared.logging_util import get_logger
 from security_scanner.shared.models.enums import (
     GateDecision,
@@ -54,6 +56,10 @@ class ScanRequest(BaseModel):
     base: str | None = None
     head: str | None = None
     directory: str = ""
+    # Optional. Picks which org-configured provider runs this scan (uses
+    # the server's own ANTHROPIC_API_KEY / GOOGLE_API_KEY). None falls
+    # back to the SCANNER_LLM_PROVIDER env default.
+    provider_override: ProviderOverride | None = None
 
 
 _SettingsDep = Annotated[Settings, Depends(get_settings)]
@@ -84,6 +90,7 @@ async def scan(
     body: ScanRequest,
     _token: _TokenDep,
     pipeline: _PipelineDep,
+    settings: _SettingsDep,
 ) -> ScanResult:
     if not _REPO_URL_RE.match(body.repo_url):
         raise HTTPException(
@@ -92,6 +99,26 @@ async def scan(
                 "Invalid repo_url; expected https://github.com/{org}/{repo} "
                 f"(got {body.repo_url!r})"
             ),
+        )
+
+    # When provider_override is sent, rebuild the pipeline with the requested
+    # org-side provider for this single request. The injected `pipeline` is
+    # otherwise reused — preserving test override patterns.
+    if body.provider_override is not None:
+        try:
+            llm_client = build_org_llm_client_for(
+                provider=body.provider_override.provider,
+                model=body.provider_override.model,
+                settings=settings,
+            )
+        except LLMConfigError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(exc),
+            ) from exc
+        # Reuse the GitHub client + mode the injected pipeline was built with.
+        pipeline = ScanPipeline(
+            pipeline._github, llm_client, mode=pipeline._mode
         )
 
     try:

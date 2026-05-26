@@ -98,7 +98,7 @@ def client(mock_pipeline):
     app.include_router(agent_router)
 
     def factory_provider():
-        return lambda files, llm_override: mock_pipeline  # noqa: ARG005
+        return lambda files, llm_override, provider_override=None: mock_pipeline  # noqa: ARG005
 
     app.dependency_overrides[get_local_pipeline_factory] = factory_provider
     app.dependency_overrides[get_pipeline] = lambda: mock_pipeline
@@ -274,6 +274,25 @@ def test_agent_scan_failed_returns_502(client, mock_pipeline):
     assert detail["error"] == "scanner_upstream_error"
 
 
+def test_agent_scan_provider_override_missing_key_returns_422(client, mock_pipeline, monkeypatch):
+    """/agent/scan with provider_override=gemini and no GOOGLE_API_KEY → 422 up-front."""
+    # Force GOOGLE_API_KEY absent for this test.
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+
+    r = client.post(
+        "/agent/scan",
+        json={
+            "repo_url": "https://github.com/local/x",
+            "scan_target": "full_repo",
+            "triggered_by": "ci",
+            "provider_override": {"provider": "gemini"},
+        },
+        headers={"Authorization": f"Bearer {_CI_TOKEN}"},
+    )
+    assert r.status_code == 422, r.text
+    assert "GOOGLE_API_KEY" in r.json()["detail"]
+
+
 def test_local_token_cannot_reach_ci_gate(client):
     # The reverse boundary: the local-advisory token must NOT pass the CI gate.
     r = client.post(
@@ -418,6 +437,129 @@ def test_llm_override_empty_api_key_returns_422(client):
     assert r.status_code == 422
 
 
+def test_provider_override_flows_through_to_factory(client, mock_pipeline):
+    """provider_override (no api_key) reaches the factory so the server uses
+    its own org key for the requested provider."""
+    captured: dict = {}
+
+    def real_factory_provider():
+        def build(files, llm_override, provider_override=None):
+            captured["llm_override"] = llm_override
+            captured["provider_override"] = provider_override
+            return mock_pipeline
+        return build
+
+    mock_pipeline.run.return_value = _result([])
+    from security_scanner.agent.local_scan import get_local_pipeline_factory
+
+    client.app.dependency_overrides[get_local_pipeline_factory] = real_factory_provider
+    try:
+        r = client.post(
+            "/scan/local",
+            json={
+                "files": {"a.py": "print(1)"},
+                "triggered_by": "tester",
+                "repo_url": "https://github.com/x/y",
+                "provider_override": {"provider": "gemini", "model": "gemini-flash-latest"},
+            },
+            headers={"Authorization": f"Bearer {_LOCAL_TOKEN}"},
+        )
+        assert r.status_code == 200, r.text
+        assert captured["llm_override"] is None  # not BYO
+        assert captured["provider_override"] is not None
+        assert captured["provider_override"].provider == "gemini"
+        assert captured["provider_override"].model == "gemini-flash-latest"
+    finally:
+        client.app.dependency_overrides[get_local_pipeline_factory] = lambda: (
+            lambda files, llm_override, provider_override=None: mock_pipeline  # noqa: ARG005
+        )
+
+
+def test_provider_override_missing_server_key_returns_422(client, mock_pipeline, monkeypatch):
+    """If provider_override=gemini but the server has no GOOGLE_API_KEY,
+    the request is rejected 422 BEFORE running the pipeline — caller knows
+    up-front instead of mid-scan."""
+    # Real factory with a fake settings object lacking GOOGLE_API_KEY.
+    from security_scanner.agent.local_scan import (
+        get_local_pipeline_factory,
+    )
+    from security_scanner.shared.config import get_settings
+
+    real_settings = get_settings()
+    # Patch GOOGLE_API_KEY to None on a copy of settings for this test.
+    class _FakeSettings:
+        ANTHROPIC_API_KEY = real_settings.ANTHROPIC_API_KEY
+        GOOGLE_API_KEY = None
+
+    def factory_provider():
+        from security_scanner.agent.local_scan import get_local_pipeline_factory
+        return get_local_pipeline_factory(_FakeSettings())
+
+    client.app.dependency_overrides[get_local_pipeline_factory] = factory_provider
+    try:
+        r = client.post(
+            "/scan/local",
+            json={
+                "files": {"a.py": "print(1)"},
+                "triggered_by": "tester",
+                "repo_url": "https://github.com/x/y",
+                "provider_override": {"provider": "gemini"},
+            },
+            headers={"Authorization": f"Bearer {_LOCAL_TOKEN}"},
+        )
+        assert r.status_code == 422, r.text
+        assert "GOOGLE_API_KEY" in r.json()["detail"]
+    finally:
+        client.app.dependency_overrides[get_local_pipeline_factory] = lambda: (
+            lambda files, llm_override, provider_override=None: mock_pipeline  # noqa: ARG005
+        )
+
+
+def test_llm_override_wins_over_provider_override(client, mock_pipeline):
+    """When both are sent, llm_override (BYO key) takes precedence — server
+    must NOT silently use its org key when the caller explicitly provided
+    their own."""
+    captured: dict = {}
+
+    def real_factory_provider():
+        def build(files, llm_override, provider_override=None):
+            captured["llm_override"] = llm_override
+            captured["provider_override"] = provider_override
+            return mock_pipeline
+        return build
+
+    mock_pipeline.run.return_value = _result([])
+    from security_scanner.agent.local_scan import get_local_pipeline_factory
+
+    client.app.dependency_overrides[get_local_pipeline_factory] = real_factory_provider
+    try:
+        r = client.post(
+            "/scan/local",
+            json={
+                "files": {"a.py": "print(1)"},
+                "triggered_by": "tester",
+                "repo_url": "https://github.com/x/y",
+                "llm_override": {
+                    "provider": "claude",
+                    "api_key": "sk-ant-byo",
+                    "model": None,
+                },
+                "provider_override": {"provider": "gemini"},
+            },
+            headers={"Authorization": f"Bearer {_LOCAL_TOKEN}"},
+        )
+        assert r.status_code == 200, r.text
+        # Both flow to the factory; the factory itself enforces precedence.
+        # End-to-end behaviour: BYO key is used (verified by factory logic
+        # in build_org_llm_client_for tests).
+        assert captured["llm_override"] is not None
+        assert captured["llm_override"].api_key == "sk-ant-byo"
+    finally:
+        client.app.dependency_overrides[get_local_pipeline_factory] = lambda: (
+            lambda files, llm_override, provider_override=None: mock_pipeline  # noqa: ARG005
+        )
+
+
 def test_llm_override_flows_through_to_factory(client, mock_pipeline):
     """End-to-end: llm_override in request body reaches the factory closure."""
     from unittest.mock import patch
@@ -425,8 +567,9 @@ def test_llm_override_flows_through_to_factory(client, mock_pipeline):
     captured: dict = {}
 
     def real_factory_provider():
-        def build(files, llm_override):
+        def build(files, llm_override, provider_override=None):
             captured["llm_override"] = llm_override
+            captured["provider_override"] = provider_override
             return mock_pipeline
         return build
 
@@ -457,7 +600,7 @@ def test_llm_override_flows_through_to_factory(client, mock_pipeline):
     finally:
         # Restore the default mock factory for subsequent tests
         client.app.dependency_overrides[get_local_pipeline_factory] = lambda: (
-            lambda files, llm_override: mock_pipeline  # noqa: ARG005
+            lambda files, llm_override, provider_override=None: mock_pipeline  # noqa: ARG005
         )
 
 

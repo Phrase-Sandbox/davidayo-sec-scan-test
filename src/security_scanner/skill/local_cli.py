@@ -295,13 +295,16 @@ def _scan_remote(
     token: str,
     respect_gitignore: bool = True,
     llm_override: dict | None = None,
+    provider_override: dict | None = None,
 ) -> int:
     """POST the working tree to /scan/local and write the report.
 
-    If ``llm_override`` is provided (``--local`` BYO-key mode), it's included
-    in the request body so the scanner uses the caller's LLM key for this
-    scan instead of its own org credentials. The override dict is
-    ``{"provider": str, "api_key": str, "model": str | None}``.
+    Mutually-exclusive-ish payload extras (BYO key wins server-side):
+    - ``llm_override`` (CLI ``--local``): ``{provider, api_key, model?}``.
+      Scanner uses the caller's LLM key for this scan only.
+    - ``provider_override`` (CLI ``--provider`` without ``--local``):
+      ``{provider, model?}``. Scanner uses its own org-side key for the
+      requested provider; the org bills the LLM cost, not the caller.
     """
     files = _collect_files(root, directory, respect_gitignore=respect_gitignore)
     if not files:
@@ -316,6 +319,8 @@ def _scan_remote(
     }
     if llm_override is not None:
         payload_obj["llm_override"] = llm_override
+    if provider_override is not None:
+        payload_obj["provider_override"] = provider_override
     body = json.dumps(payload_obj).encode("utf-8")
 
     req = urllib.request.Request(  # noqa: S310 — scanner_url is user-supplied https endpoint
@@ -536,18 +541,23 @@ def _build_scan_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--provider", choices=list(_SUPPORTED_PROVIDERS), default=None,
-        help="LLM provider for --local mode: claude (default) or gemini. "
-             "Falls back to SCANNER_LLM_PROVIDER env → config → claude.",
+        help="LLM provider for this scan: claude or gemini. "
+             "With --local: requires --api-key (BYO key, billed to you). "
+             "Without --local: scanner uses its OWN configured key for that "
+             "provider (org billed). Falls back to SCANNER_LLM_PROVIDER env "
+             "→ config → claude.",
     )
     p.add_argument(
         "--model", default=None,
-        help="Model override for --local mode (e.g. claude-sonnet-4-6). "
-             "Falls back to SCANNER_LLM_MODEL env → config → provider default.",
+        help="Model override for the chosen provider (e.g. claude-sonnet-4-6, "
+             "gemini-flash-latest). Falls back to SCANNER_LLM_MODEL env → "
+             "config → provider default.",
     )
     p.add_argument(
         "--api-key", default=None,
-        help="LLM API key for --local mode. Falls back to ANTHROPIC_API_KEY "
-             "/ GOOGLE_API_KEY env → ~/.phrase-sec-scan/config.yaml.",
+        help="LLM API key for --local mode (BYO). Falls back to "
+             "ANTHROPIC_API_KEY / GOOGLE_API_KEY env → ~/.phrase-sec-scan/"
+             "config.yaml. Ignored when --local is not set.",
     )
     p.add_argument(
         "--no-gitignore", action="store_true",
@@ -654,6 +664,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     llm_override: dict | None = None
+    provider_override: dict | None = None
     if args.local:
         llm_override = _resolve_llm_override(args)
         if llm_override is None:
@@ -665,10 +676,17 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 2
+    elif args.provider:
+        # Default mode + --provider: ask the server to use its OWN
+        # configured key for that provider. No api_key needed.
+        provider_override = {"provider": args.provider.lower()}
+        if args.model:
+            provider_override["model"] = args.model
 
     return _scan_remote(
         root=root, directory=args.directory, scanner_url=scanner_url, token=token,
         respect_gitignore=respect_gitignore, llm_override=llm_override,
+        provider_override=provider_override,
     )
 
 

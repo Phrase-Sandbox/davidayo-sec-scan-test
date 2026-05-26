@@ -141,7 +141,7 @@ def client(mock_pipeline):
     app.include_router(local_router)
     app.include_router(agent_router)
     app.dependency_overrides[get_local_pipeline_factory] = lambda: (
-        lambda _files, _llm_override: mock_pipeline
+        lambda _files, _llm_override, _provider_override=None: mock_pipeline
     )
     app.dependency_overrides[get_pipeline] = lambda: mock_pipeline
     return TestClient(app)

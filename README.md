@@ -232,12 +232,22 @@ scanner uses for the LLM call.
 
 ```bash
 phrase-sec-scan .
+
+# Pick which org provider runs this scan (server uses its OWN key):
+phrase-sec-scan --provider gemini --model gemini-flash-latest .
+phrase-sec-scan --provider claude .
 ```
 
-The CLI uploads your files; the server runs the scan using its org-configured
-LLM credentials. The org pays for the LLM tokens. **Your personal API key
-never crosses the wire.** This is the right mode for normal day-to-day use
-and what the CI pipeline does.
+The CLI uploads your files; the server runs the scan using its
+org-configured LLM credentials. The org pays for the LLM tokens. **Your
+personal API key never crosses the wire.** This is the right mode for
+normal day-to-day use and what the CI pipeline does.
+
+When you add `--provider X` (without `--local`), the CLI tells the
+scanner *"use your own org key for provider X for this scan"* — useful
+when the scanner has both `ANTHROPIC_API_KEY` and `GOOGLE_API_KEY`
+configured and you want to flip per-request. Without `--provider`, the
+scanner uses its `SCANNER_LLM_PROVIDER` env default.
 
 ### `--local` mode — BYO key
 
@@ -282,17 +292,26 @@ message pointing you at `phrase-sec-scan login --provider X --api-key Y`.
 
 ### Server-side provider (default mode)
 
-The org operator picks the scanner's default provider/model in `.env.local`:
+The org operator can configure **both** Claude and Gemini keys on the
+scanner and pick a default in `.env.local`:
 
 ```bash
-SCANNER_LLM_PROVIDER=anthropic   # or: google
-SCANNER_LLM_MODEL=claude-sonnet-4-6   # optional
-GOOGLE_API_KEY=AIza-...          # only if provider=google
+ANTHROPIC_API_KEY=sk-ant-...
+GOOGLE_API_KEY=AIza-...
+SCANNER_LLM_PROVIDER=anthropic   # default when caller sends no override
+SCANNER_LLM_MODEL=claude-sonnet-4-6   # optional default
 ```
 
-This applies to **default-mode** scans (CI and any `phrase-sec-scan .`
-call without `--local`). `--local` callers override this per-request via
-their own key.
+Callers then choose per-request:
+- No flags → `SCANNER_LLM_PROVIDER` default is used.
+- `--provider gemini` (default mode) → scanner uses its own
+  `GOOGLE_API_KEY` for this scan.
+- `--local --provider gemini --api-key AIza...` → scanner uses the
+  caller's BYO key for this scan.
+
+If a caller asks for a provider whose server-side key isn't configured
+(e.g. `--provider gemini` but `GOOGLE_API_KEY` is unset), the request
+is rejected with HTTP 422 up-front so they know before the scan starts.
 
 ### Want fully-offline scanning?
 
