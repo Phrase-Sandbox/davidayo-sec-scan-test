@@ -126,6 +126,10 @@ async def portal_issue_or_rotate(
     """
     factory = get_session_factory()
     async with factory() as session:
+        # Ensure a users row exists — required FK parent for user_llm_settings
+        # and scan_records. Called here so the row is always present before
+        # any FK-constrained child insert in this session or later ones.
+        await token_registry.upsert_user(session, email=user.email)
         issued = await token_registry.issue_or_rotate_for_user(
             session, user_email=user.email
         )
@@ -340,6 +344,9 @@ async def portal_settings_post(
 
     factory = get_session_factory()
     async with factory() as session:
+        # Ensure users row exists before any FK-constrained child insert.
+        await token_registry.upsert_user(session, email=user.email)
+
         stmt = select(UserLLMSettings).where(UserLLMSettings.user_email == user.email)
         row = (await session.execute(stmt)).scalar_one_or_none()
 

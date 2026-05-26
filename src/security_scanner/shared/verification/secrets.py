@@ -490,12 +490,14 @@ def _apply_verdict(
         )
 
     # verdict == "real"
+    # NOTE: reasoning is intentionally NOT logged — it may contain the literal
+    # secret value as quoted by the LLM. It is embedded in the finding
+    # description for the report but must never appear in structured logs.
     log.info(
         "secret verification: confirmed real credential",
         detector=hit.detector,
         file=hit.filename,
         line=hit.line,
-        reasoning=reasoning,
     )
     if reasoning:
         new_desc = f"{finding.description}\n\nLLM verification: {reasoning}"
