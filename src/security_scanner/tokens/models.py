@@ -56,6 +56,7 @@ class AuditEventType(enum.StrEnum):
     user_llm_settings_updated = "user_llm_settings_updated"  # noqa: S105
     org_config_changed = "org_config_changed"
     ci_token_rotated = "ci_token_rotated"  # noqa: S105
+    slack_webhook_configured = "slack_webhook_configured"  # noqa: S105
 
 
 class UserRole(enum.StrEnum):
@@ -200,6 +201,11 @@ class OrgSettings(Base):
     # provider's own default (e.g. CLAUDE_MODEL env var / GeminiClient default).
     anthropic_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
     google_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Fernet-encrypted Slack webhook URL (migration 0004).  NULL = not configured;
+    # the scanner falls back to the SLACK_WEBHOOK_URL environment variable.
+    encrypted_slack_webhook: Mapped[bytes | None] = mapped_column(
+        LargeBinary(), nullable=True
+    )
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_by_email: Mapped[str] = mapped_column(String(320), nullable=False)
 

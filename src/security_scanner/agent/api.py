@@ -71,17 +71,40 @@ async def _load_active_org_settings():
     """Return the latest ``OrgSettings`` row, or ``None`` if none exist yet.
 
     ``None`` means we are in the bootstrap window (fresh install, no admin has
-    saved keys via /admin/org-settings yet).  In that case the caller falls
-    back to env-var credentials.
+    saved keys via /admin/org-settings yet, or ``DATABASE_URL`` is not
+    configured).  In that case the caller falls back to env-var credentials.
     """
-    from sqlalchemy import select  # noqa: PLC0415
-    from security_scanner.tokens.db import get_session_factory  # noqa: PLC0415
-    from security_scanner.tokens.models import OrgSettings  # noqa: PLC0415
+    try:
+        from sqlalchemy import select  # noqa: PLC0415
+        from security_scanner.tokens.db import get_session_factory  # noqa: PLC0415
+        from security_scanner.tokens.models import OrgSettings  # noqa: PLC0415
 
-    factory = get_session_factory()
-    async with factory() as session:
-        stmt = select(OrgSettings).order_by(OrgSettings.id.desc()).limit(1)
-        return (await session.execute(stmt)).scalar_one_or_none()
+        factory = get_session_factory()
+        async with factory() as session:
+            stmt = select(OrgSettings).order_by(OrgSettings.id.desc()).limit(1)
+            return (await session.execute(stmt)).scalar_one_or_none()
+    except RuntimeError:
+        # DATABASE_URL not configured (e.g. bootstrap / single-token mode).
+        # Treat as "no org settings" → callers fall back to env-var credentials.
+        return None
+
+
+def _resolve_slack_webhook(org_row: object | None) -> str | None:
+    """Decrypt the Slack webhook URL from org_row if one is stored.
+
+    Returns ``None`` when no DB-stored webhook exists, signalling the caller
+    (``send_*_alert``) to fall back to the ``SLACK_WEBHOOK_URL`` env var.
+    """
+    if org_row is None:
+        return None
+    encrypted = getattr(org_row, "encrypted_slack_webhook", None)
+    if not encrypted:
+        return None
+    try:
+        from security_scanner.tokens.crypto import decrypt  # noqa: PLC0415
+        return decrypt(encrypted)
+    except Exception:  # noqa: BLE001 — decryption error, fall back to env
+        return None
 
 
 async def get_pipeline(settings: _SettingsDep) -> ScanPipeline:
@@ -248,7 +271,14 @@ async def bypass(body: BypassRequest, _token: _TokenDep) -> ScanResult:
         high=high,
         justification_provided=bool(body.justification),
     )
-    await send_bypass_alert(bypassed, body.developer, body.commit_sha, body.justification)
+    org_row = await _load_active_org_settings()
+    await send_bypass_alert(
+        bypassed,
+        body.developer,
+        body.commit_sha,
+        body.justification,
+        webhook_url=_resolve_slack_webhook(org_row),
+    )
     return bypassed
 
 
@@ -315,6 +345,7 @@ async def pr_event(body: PrEventRequest, _token: _TokenDep) -> dict[str, bool]:
         )
         return {"ignored": False, "logged": True, "alerted": False}
 
+    org_row = await _load_active_org_settings()
     await send_pr_rejected_alert(
         repo_url=body.repo_url,
         pr_number=body.pr_number,
@@ -324,6 +355,7 @@ async def pr_event(body: PrEventRequest, _token: _TokenDep) -> dict[str, bool]:
         reason=body.reason,
         critical=body.critical,
         high=body.high,
+        webhook_url=_resolve_slack_webhook(org_row),
     )
     return {"ignored": False, "logged": True, "alerted": True}
 

@@ -231,3 +231,201 @@ def test_admin_audit_400_on_unknown_event_type(client, session_factory):
 def test_admin_audit_403_for_non_admin(client, session_factory):
     r = client.get("/admin/audit", headers=_user_headers())
     assert r.status_code == 403
+
+
+# --- Org settings: Slack webhook + data governance --------------------------
+
+
+def _fake_encrypt(plaintext: str, *, settings=None) -> bytes:
+    """Deterministic fake: just encodes as UTF-8 with a recognisable prefix."""
+    return b"ENC:" + plaintext.encode("utf-8")
+
+
+def _fake_decrypt(ciphertext: bytes, *, settings=None) -> str:
+    prefix = b"ENC:"
+    if ciphertext.startswith(prefix):
+        return ciphertext[len(prefix):].decode("utf-8")
+    return ciphertext.decode("utf-8", errors="replace")
+
+
+def _fake_mask(plaintext: str, *, keep: int = 4) -> str:
+    return f"…{plaintext[-keep:]}"  # e.g. "…/xyz"
+
+
+@pytest.fixture
+def _crypto(monkeypatch):
+    """Patch crypto helpers so tests don't need a real Fernet key in env."""
+    monkeypatch.setattr("security_scanner.tokens.crypto.encrypt", _fake_encrypt)
+    monkeypatch.setattr("security_scanner.tokens.crypto.decrypt", _fake_decrypt)
+    monkeypatch.setattr("security_scanner.tokens.crypto.mask_for_display", _fake_mask)
+
+
+def test_org_settings_get_no_row_shows_no_slack_test_button(client, session_factory, _crypto):
+    """With no saved org settings, the Slack test button must not appear."""
+    r = client.get("/admin/org-settings", headers=_admin_headers())
+    assert r.status_code == 200
+    assert "Send test message" not in r.text
+
+
+async def test_org_settings_post_encrypts_slack_webhook(client, session_factory, _crypto):
+    """Posting a webhook URL saves it encrypted; the response shows the masked value."""
+    from security_scanner.tokens.models import OrgSettings as _OrgSettings
+
+    r = client.post(
+        "/admin/org-settings",
+        headers=_admin_headers(),
+        data={
+            "default_provider": "anthropic",
+            "slack_webhook": "https://hooks.slack.com/services/T123/B456/xyz123",
+        },
+    )
+    assert r.status_code == 200
+    assert "Org settings saved" in r.text
+
+    # DB row has encrypted bytes
+    async with session_factory() as session:
+        row = (
+            await session.execute(
+                select(_OrgSettings).order_by(_OrgSettings.id.desc()).limit(1)
+            )
+        ).scalar_one()
+    assert row.encrypted_slack_webhook is not None
+    # Fake encrypt stores plaintext with prefix — round-trip recovers original
+    assert _fake_decrypt(row.encrypted_slack_webhook) == (
+        "https://hooks.slack.com/services/T123/B456/xyz123"
+    )
+
+    # Page shows masked tail (keep=8 → last 8 chars of URL = "xyz123" + maybe more)
+    tail = "xyz123"[-8:]  # "xyz123" is 6 chars; whole suffix fits
+    assert tail in r.text
+
+
+async def test_org_settings_post_preserves_webhook_when_blank(client, session_factory, _crypto):
+    """Re-saving with a blank webhook field must keep the previously stored value."""
+    from security_scanner.tokens.models import OrgSettings as _OrgSettings
+
+    # First save: set a webhook
+    client.post(
+        "/admin/org-settings",
+        headers=_admin_headers(),
+        data={
+            "default_provider": "anthropic",
+            "slack_webhook": "https://hooks.slack.com/services/T111/B222/original",
+        },
+    )
+
+    # Second save: blank webhook field
+    r2 = client.post(
+        "/admin/org-settings",
+        headers=_admin_headers(),
+        data={
+            "default_provider": "google",
+            "slack_webhook": "",
+        },
+    )
+    assert r2.status_code == 200
+
+    # Latest DB row should still have the original webhook
+    async with session_factory() as session:
+        row = (
+            await session.execute(
+                select(_OrgSettings).order_by(_OrgSettings.id.desc()).limit(1)
+            )
+        ).scalar_one()
+    assert row.encrypted_slack_webhook is not None
+    assert _fake_decrypt(row.encrypted_slack_webhook) == (
+        "https://hooks.slack.com/services/T111/B222/original"
+    )
+
+
+async def test_org_settings_post_shows_slack_test_button_after_save(client, session_factory, _crypto):
+    """Once a webhook is saved the test-slack button appears in the response."""
+    r = client.post(
+        "/admin/org-settings",
+        headers=_admin_headers(),
+        data={
+            "default_provider": "anthropic",
+            "slack_webhook": "https://hooks.slack.com/services/T999/B999/token",
+        },
+    )
+    assert r.status_code == 200
+    assert "Send test message" in r.text
+
+
+async def test_org_settings_test_slack_no_webhook_returns_error(client, session_factory, _crypto, monkeypatch):
+    """Test-slack with no webhook in DB and no env var renders an error flash."""
+    monkeypatch.delenv("SLACK_WEBHOOK_URL", raising=False)
+
+    # Patch _post_to_slack to ensure it's never called
+    called: list[str] = []
+
+    async def _fake_post(text, *, kind, http_client, webhook_url=None, **kw):
+        called.append(webhook_url or "")
+
+    monkeypatch.setattr("security_scanner.agent.slack_alert._post_to_slack", _fake_post)
+
+    r = client.post("/admin/org-settings/test-slack", headers=_admin_headers())
+    assert r.status_code == 200
+    assert "error:" in r.text or "No Slack webhook" in r.text
+    assert called == []  # _post_to_slack was never invoked
+
+
+async def test_org_settings_test_slack_success_with_db_webhook(client, session_factory, _crypto, monkeypatch):
+    """Test-slack uses the DB-stored webhook and renders a success flash."""
+    # Save a webhook first
+    client.post(
+        "/admin/org-settings",
+        headers=_admin_headers(),
+        data={
+            "default_provider": "anthropic",
+            "slack_webhook": "https://hooks.slack.com/services/T000/B000/webhookabc",
+        },
+    )
+
+    posted_to: list[str] = []
+
+    async def _fake_post(text, *, kind, http_client, webhook_url=None, **kw):
+        posted_to.append(webhook_url or "")
+
+    monkeypatch.setattr("security_scanner.agent.slack_alert._post_to_slack", _fake_post)
+
+    r = client.post("/admin/org-settings/test-slack", headers=_admin_headers())
+    assert r.status_code == 200
+    assert "ok:" in r.text or "Test message sent" in r.text
+    # Webhook must have been resolved from DB and passed through
+    assert posted_to == ["https://hooks.slack.com/services/T000/B000/webhookabc"]
+
+
+def test_org_settings_template_contains_dg_warning(client, session_factory, _crypto):
+    """The data-governance warning <div> must be present in the org-settings page."""
+    r = client.get("/admin/org-settings", headers=_admin_headers())
+    assert r.status_code == 200
+    assert "dg-warning" in r.text
+    assert "Data governance" in r.text or "data governance" in r.text.lower()
+
+
+# --- Usage analytics (/admin/usage) -----------------------------------------
+
+
+def test_admin_usage_200_empty_tables(client, session_factory):
+    """Usage page renders without error when both tables are empty."""
+    r = client.get("/admin/usage", headers=_admin_headers())
+    assert r.status_code == 200
+    assert "Usage Analytics" in r.text
+    # Empty tables → descriptive "no data" text present
+    assert "No scans" in r.text or "No LLM usage" in r.text
+
+
+def test_admin_usage_403_for_non_admin(client, session_factory):
+    r = client.get("/admin/usage", headers=_user_headers())
+    assert r.status_code == 403
+
+
+def test_admin_usage_shows_all_nav_links(client, session_factory):
+    """Usage page must include nav links to the other admin sections."""
+    r = client.get("/admin/usage", headers=_admin_headers())
+    assert r.status_code == 200
+    assert "/admin/tokens" in r.text
+    assert "/admin/users" in r.text
+    assert "/admin/ci-token" in r.text
+    assert "/admin/audit" in r.text

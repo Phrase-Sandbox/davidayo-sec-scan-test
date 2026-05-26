@@ -358,3 +358,96 @@ def test_pr_rejected_no_webhook_skips(monkeypatch, capsys):
     monkeypatch.delenv("SLACK_WEBHOOK_URL", raising=False)
     _run(send_pr_rejected_alert(**_pr_kwargs()))
     assert "slack webhook not configured" in capsys.readouterr().out
+
+
+# --- webhook_url parameter: DB override over env var -------------------------
+
+_OTHER_WEBHOOK = "https://hooks.slack.example.com/services/T999/B999/db_stored"
+
+
+def test_explicit_webhook_url_overrides_env_var():
+    """Passing webhook_url sends to that URL, not to SLACK_WEBHOOK_URL env var."""
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        return httpx.Response(200)
+
+    _run(
+        send_bypass_alert(
+            _result(),
+            developer="alice",
+            commit_sha="sha",
+            webhook_url=_OTHER_WEBHOOK,
+            http_client=_mock_client(handler),
+        )
+    )
+
+    # Must have gone to the explicitly provided URL, not the env-var webhook.
+    assert captured["url"] == _OTHER_WEBHOOK
+    assert captured["url"] != _WEBHOOK
+
+
+def test_none_webhook_url_falls_back_to_env_var():
+    """webhook_url=None falls back to SLACK_WEBHOOK_URL env var (set by _env fixture)."""
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        return httpx.Response(200)
+
+    # _env fixture sets SLACK_WEBHOOK_URL = _WEBHOOK; webhook_url=None → falls back to env
+    _run(
+        send_bypass_alert(
+            _result(),
+            developer="alice",
+            commit_sha="sha",
+            webhook_url=None,
+            http_client=_mock_client(handler),
+        )
+    )
+
+    assert captured["url"] == _WEBHOOK
+
+
+def test_llm_unavailable_explicit_webhook_url_used():
+    """send_llm_unavailable_alert also honours the webhook_url param."""
+    from security_scanner.agent.slack_alert import send_llm_unavailable_alert
+
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        captured["text"] = json.loads(request.content)["text"]
+        return httpx.Response(200)
+
+    _run(
+        send_llm_unavailable_alert(
+            scan_id="scan-123",
+            reason="quota exceeded",
+            provider="anthropic",
+            triggered_by="alice",
+            repo_url="https://github.com/org/repo",
+            webhook_url=_OTHER_WEBHOOK,
+            http_client=_mock_client(handler),
+        )
+    )
+
+    assert captured["url"] == _OTHER_WEBHOOK
+    assert "quota" in captured["text"].lower() or "LLM" in captured["text"]
+
+
+def test_webhook_url_none_and_env_missing_skips(monkeypatch, capsys):
+    """webhook_url=None + no env var → skip, not crash."""
+    monkeypatch.delenv("SLACK_WEBHOOK_URL", raising=False)
+
+    _run(
+        send_bypass_alert(
+            _result(),
+            developer="alice",
+            commit_sha="sha",
+            webhook_url=None,
+        )
+    )
+
+    assert "slack webhook not configured" in capsys.readouterr().out

@@ -12,6 +12,7 @@
     <a href="/admin/users" class="btn">Users</a>
     <a href="/admin/ci-token" class="btn">CI Token</a>
     <a href="/admin/audit" class="btn">Audit log</a>
+    <a href="/admin/usage" class="btn">Usage</a>
   </p>
 </div>
 
@@ -31,6 +32,11 @@
       {% if masked_google %}<code>{{ masked_google }}</code> <span class="ok">✓ set</span>
       {% else %}<span class="muted">not set</span>{% endif %}
     </dd>
+    <dt>Slack webhook</dt>
+    <dd>
+      {% if masked_slack %}<code>{{ masked_slack }}</code> <span class="ok">✓ set</span>
+      {% else %}<span class="muted">not set</span>{% endif %}
+    </dd>
   </dl>
 </div>
 
@@ -42,7 +48,7 @@
   </p>
   <form method="post" action="/admin/org-settings" autocomplete="off">
 
-    <fieldset style="border: none; padding: 0; margin: 0 0 1.25rem;">
+    <fieldset style="border: none; padding: 0; margin: 0 0 0.75rem;">
       <legend style="font-weight: 600; margin-bottom: 0.6rem;">Default provider for CI scans</legend>
       <label style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; cursor: pointer;">
         <input type="radio" name="default_provider" value="anthropic"
@@ -55,6 +61,16 @@
         Google (Gemini)
       </label>
     </fieldset>
+
+    <!-- Data-governance warning — shown when Google is selected -->
+    <div id="dg-warning" style="display:none; background: #fff3cd; border: 1px solid #ffc107;
+         border-radius: 6px; padding: 0.75rem 1rem; margin: 0 0 1rem; font-size: 0.88rem;">
+      <strong>⚠️ Data governance notice:</strong>
+      Zero-Data-Retention (ZDR) and DPA assurances are confirmed for
+      <strong>Anthropic only</strong>. Selecting Google as the CI default sends
+      source code to Google without those guarantees. Ensure Security and Legal
+      approval is in place before enabling.
+    </div>
 
     <div style="margin-bottom: 1rem;">
       <label style="display: block; font-weight: 600; margin-bottom: 0.4rem;" for="anthropic_model">
@@ -124,11 +140,53 @@
                     border-radius: 6px; background: var(--card); color: var(--fg); width: 100%; max-width: 480px;">
     </div>
 
+    <div style="margin-bottom: 1.5rem;">
+      <label style="display: block; font-weight: 600; margin-bottom: 0.4rem;" for="slack_webhook">
+        Slack Webhook URL
+        {% if masked_slack %}
+          <span class="muted" style="font-weight: normal; font-size: 0.85rem;">(current: {{ masked_slack }})</span>
+        {% endif %}
+      </label>
+      <p class="muted" style="font-size: 0.85rem; margin: 0 0 0.4rem;">
+        Used for bypass alerts and LLM-unavailable notifications.
+        Stored encrypted. Overrides the <code>SLACK_WEBHOOK_URL</code> env var.
+      </p>
+      <input type="password" name="slack_webhook" id="slack_webhook"
+             autocomplete="new-password"
+             placeholder="{{ 'Leave blank to keep existing webhook' if masked_slack else 'https://hooks.slack.com/services/T…/B…/…' }}"
+             style="font: 14px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+                    padding: 0.45rem 0.65rem; border: 1px solid var(--border);
+                    border-radius: 6px; background: var(--card); color: var(--fg); width: 100%; max-width: 540px;">
+    </div>
+
     <button type="submit" class="btn btn-primary">Save org settings</button>
     <p class="muted" style="margin-top: 0.75rem; font-size: 0.85rem;">
       Saving creates a new versioned row. All previous configs are preserved for audit.
       The next scan will use the new configuration without a server restart.
     </p>
   </form>
+
+  {% if masked_slack %}
+  <hr style="border: none; border-top: 1px solid var(--border); margin: 1.25rem 0;">
+  <h3 style="font-size: 0.95rem; margin: 0 0 0.5rem;">Test Slack integration</h3>
+  <p class="muted" style="font-size: 0.85rem;">
+    Sends a test message to verify the saved webhook is working.
+  </p>
+  <form method="post" action="/admin/org-settings/test-slack">
+    <button type="submit" class="btn">Send test message</button>
+  </form>
+  {% endif %}
 </div>
+
+<script>
+  function updateDgWarning() {
+    var v = document.querySelector('input[name="default_provider"]:checked');
+    var warn = document.getElementById('dg-warning');
+    if (warn) warn.style.display = (v && v.value === 'google') ? 'block' : 'none';
+  }
+  document.querySelectorAll('input[name="default_provider"]').forEach(function(r) {
+    r.addEventListener('change', updateDgWarning);
+  });
+  updateDgWarning();
+</script>
 {% endblock %}

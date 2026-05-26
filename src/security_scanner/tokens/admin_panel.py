@@ -20,13 +20,14 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 
 from security_scanner.shared.logging_util import get_logger
 from security_scanner.tokens import audit as token_audit
@@ -38,7 +39,9 @@ from security_scanner.tokens.models import (
     AuditEventType,
     CIToken,
     LLMProvider,
+    LLMUsageMonthly,
     OrgSettings,
+    ScanRecord,
     User,
 )
 
@@ -261,7 +264,7 @@ def _hash_ci_token(token: str) -> str:
 
 @router.get("/org-settings", response_class=HTMLResponse)
 async def admin_org_settings_get(request: Request, admin: _AdminDep) -> HTMLResponse:
-    from security_scanner.tokens.crypto import mask_for_display  # noqa: PLC0415
+    from security_scanner.tokens.crypto import decrypt, mask_for_display  # noqa: PLC0415
 
     factory = get_session_factory()
     async with factory() as session:
@@ -270,11 +273,11 @@ async def admin_org_settings_get(request: Request, admin: _AdminDep) -> HTMLResp
 
     masked_anthropic: str | None = None
     masked_google: str | None = None
+    masked_slack: str | None = None
     current_provider = "anthropic"
     current_anthropic_model: str | None = None
     current_google_model: str | None = None
     if org_row is not None:
-        from security_scanner.tokens.crypto import decrypt  # noqa: PLC0415
         if org_row.encrypted_anthropic_key:
             try:
                 masked_anthropic = mask_for_display(decrypt(org_row.encrypted_anthropic_key))
@@ -285,6 +288,13 @@ async def admin_org_settings_get(request: Request, admin: _AdminDep) -> HTMLResp
                 masked_google = mask_for_display(decrypt(org_row.encrypted_google_key))
             except Exception:  # noqa: BLE001
                 masked_google = "…(decryption error)"
+        if org_row.encrypted_slack_webhook:
+            try:
+                masked_slack = mask_for_display(
+                    decrypt(org_row.encrypted_slack_webhook), keep=8
+                )
+            except Exception:  # noqa: BLE001
+                masked_slack = "…(decryption error)"
         current_provider = org_row.default_provider.value
         current_anthropic_model = org_row.anthropic_model
         current_google_model = org_row.google_model
@@ -296,6 +306,7 @@ async def admin_org_settings_get(request: Request, admin: _AdminDep) -> HTMLResp
             "user": admin,
             "masked_anthropic": masked_anthropic,
             "masked_google": masked_google,
+            "masked_slack": masked_slack,
             "current_provider": current_provider,
             "current_anthropic_model": current_anthropic_model,
             "current_google_model": current_google_model,
@@ -315,18 +326,20 @@ async def admin_org_settings_post(
     google_model: Annotated[str, Form()] = "",
     anthropic_key: Annotated[str, Form()] = "",
     google_key: Annotated[str, Form()] = "",
+    slack_webhook: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
     """Save a new org_settings row (version-bumped, immutable history).
 
     Per-provider models are now separate fields (anthropic_model, google_model).
+    Slack webhook URL stored encrypted (blank = keep existing).
     Keys left blank → preserve the existing encrypted value (if any).
     """
-    from datetime import UTC, datetime  # noqa: PLC0415
-    from security_scanner.tokens.crypto import encrypt, mask_for_display, decrypt  # noqa: PLC0415
+    from security_scanner.tokens.crypto import decrypt, encrypt, mask_for_display  # noqa: PLC0415
 
     default_provider = default_provider.strip().lower()
     anthropic_model = anthropic_model.strip() or None
     google_model = google_model.strip() or None
+    slack_webhook = slack_webhook.strip()
 
     if default_provider not in ("anthropic", "google"):
         raise HTTPException(
@@ -341,17 +354,21 @@ async def admin_org_settings_post(
 
         enc_anthropic = current.encrypted_anthropic_key if current else None
         enc_google = current.encrypted_google_key if current else None
+        enc_slack = current.encrypted_slack_webhook if current else None
 
         if anthropic_key.strip():
             enc_anthropic = encrypt(anthropic_key.strip())
         if google_key.strip():
             enc_google = encrypt(google_key.strip())
+        if slack_webhook:
+            enc_slack = encrypt(slack_webhook)
 
         now = datetime.now(UTC)
         provider_enum = LLMProvider.anthropic if default_provider == "anthropic" else LLMProvider.google
         new_row = OrgSettings(
             encrypted_anthropic_key=enc_anthropic,
             encrypted_google_key=enc_google,
+            encrypted_slack_webhook=enc_slack,
             default_provider=provider_enum,
             anthropic_model=anthropic_model,
             google_model=google_model,
@@ -365,6 +382,8 @@ async def admin_org_settings_post(
             changed_fields.append("anthropic_key")
         if google_key.strip():
             changed_fields.append("google_key")
+        if slack_webhook:
+            changed_fields.append("slack_webhook")
         changed_fields.extend(["default_provider", "anthropic_model", "google_model"])
 
         await token_audit.record(
@@ -375,11 +394,13 @@ async def admin_org_settings_post(
             default_provider=default_provider,
             anthropic_model=anthropic_model or "(none)",
             google_model=google_model or "(none)",
+            slack_webhook_configured=bool(enc_slack),
         )
         await session.commit()
 
     masked_anthropic_out: str | None = None
     masked_google_out: str | None = None
+    masked_slack_out: str | None = None
     if enc_anthropic:
         try:
             masked_anthropic_out = mask_for_display(decrypt(enc_anthropic))
@@ -390,6 +411,11 @@ async def admin_org_settings_post(
             masked_google_out = mask_for_display(decrypt(enc_google))
         except Exception:  # noqa: BLE001
             masked_google_out = "…(decryption error)"
+    if enc_slack:
+        try:
+            masked_slack_out = mask_for_display(decrypt(enc_slack), keep=8)
+        except Exception:  # noqa: BLE001
+            masked_slack_out = "…(decryption error)"
 
     log.info(
         "admin org settings saved",
@@ -397,6 +423,7 @@ async def admin_org_settings_post(
         default_provider=default_provider,
         anthropic_model=anthropic_model,
         google_model=google_model,
+        slack_webhook_set=bool(enc_slack),
     )
     return templates.TemplateResponse(
         request,
@@ -405,12 +432,99 @@ async def admin_org_settings_post(
             "user": admin,
             "masked_anthropic": masked_anthropic_out,
             "masked_google": masked_google_out,
+            "masked_slack": masked_slack_out,
             "current_provider": default_provider,
             "current_anthropic_model": anthropic_model,
             "current_google_model": google_model,
             "known_models": KNOWN_MODELS,
             "flash": "ok:Org settings saved. All CI scans will use the new configuration immediately.",
         },
+        headers=_NO_STORE_HEADERS,
+    )
+
+
+@router.post("/org-settings/test-slack", response_class=HTMLResponse)
+async def admin_test_slack(request: Request, admin: _AdminDep) -> HTMLResponse:
+    """Send a test message to the configured Slack webhook.
+
+    Resolves the webhook from DB first (admin-saved), falls back to the
+    ``SLACK_WEBHOOK_URL`` env var.  Renders org-settings inline with a flash
+    showing success or the specific error (no redirect needed — PRG pattern is
+    the same page with a flash banner, which is already the convention here).
+    """
+    from security_scanner.agent.slack_alert import _post_to_slack  # noqa: PLC0415
+    from security_scanner.shared.config import get_settings  # noqa: PLC0415
+    from security_scanner.tokens.crypto import decrypt, mask_for_display  # noqa: PLC0415
+
+    factory = get_session_factory()
+    async with factory() as session:
+        stmt = select(OrgSettings).order_by(OrgSettings.id.desc()).limit(1)
+        org_row = (await session.execute(stmt)).scalar_one_or_none()
+
+    # Resolve webhook: DB wins over env var
+    webhook_url: str | None = None
+    masked_anthropic: str | None = None
+    masked_google: str | None = None
+    masked_slack: str | None = None
+    current_provider = "anthropic"
+    current_anthropic_model: str | None = None
+    current_google_model: str | None = None
+
+    if org_row:
+        if org_row.encrypted_anthropic_key:
+            try:
+                masked_anthropic = mask_for_display(decrypt(org_row.encrypted_anthropic_key))
+            except Exception:  # noqa: BLE001
+                masked_anthropic = "…(decryption error)"
+        if org_row.encrypted_google_key:
+            try:
+                masked_google = mask_for_display(decrypt(org_row.encrypted_google_key))
+            except Exception:  # noqa: BLE001
+                masked_google = "…(decryption error)"
+        if org_row.encrypted_slack_webhook:
+            try:
+                webhook_url = decrypt(org_row.encrypted_slack_webhook)
+                masked_slack = mask_for_display(webhook_url, keep=8)
+            except Exception:  # noqa: BLE001
+                masked_slack = "…(decryption error)"
+        current_provider = org_row.default_provider.value
+        current_anthropic_model = org_row.anthropic_model
+        current_google_model = org_row.google_model
+
+    if not webhook_url:
+        webhook_url = get_settings().SLACK_WEBHOOK_URL
+
+    ctx = {
+        "user": admin,
+        "masked_anthropic": masked_anthropic,
+        "masked_google": masked_google,
+        "masked_slack": masked_slack,
+        "current_provider": current_provider,
+        "current_anthropic_model": current_anthropic_model,
+        "current_google_model": current_google_model,
+        "known_models": KNOWN_MODELS,
+    }
+
+    if not webhook_url:
+        return templates.TemplateResponse(
+            request,
+            "admin_org_settings.html",
+            {**ctx, "flash": "error:No Slack webhook configured. Save a webhook URL in the form below first."},
+            headers=_NO_STORE_HEADERS,
+        )
+
+    text = (
+        f":white_check_mark: *Test message from Phrase Security Scanner*\n"
+        f"• Sent by: {admin.email}\n"
+        f"• If you see this, your Slack webhook is working correctly."
+    )
+    await _post_to_slack(text, kind="admin-test", http_client=None, webhook_url=webhook_url)
+    log.info("admin slack test message sent", actor_email=admin.email)
+
+    return templates.TemplateResponse(
+        request,
+        "admin_org_settings.html",
+        {**ctx, "flash": "ok:Test message sent to Slack successfully."},
         headers=_NO_STORE_HEADERS,
     )
 
@@ -618,4 +732,79 @@ async def admin_ci_token_rotate(request: Request, admin: _AdminDep) -> HTMLRespo
             "flash": "ok:CI token rotated. Copy the new token below and update the GitHub Actions secret SCANNER_API_TOKEN immediately.",
         },
         headers=_NO_STORE_HEADERS,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Usage analytics (/admin/usage)
+# ---------------------------------------------------------------------------
+
+_USAGE_LOOKBACK_DAYS = 90
+
+
+@router.get("/usage", response_class=HTMLResponse)
+async def admin_usage(
+    request: Request,
+    admin: _AdminDep,
+) -> HTMLResponse:
+    """Per-user scan activity and LLM token spend from the last 90 days.
+
+    Queries ``scan_records`` for scan counts + severity totals and
+    ``llm_usage_monthly`` for token spend across the last 3 calendar months.
+    No new data is written — read-only view over existing tables.
+    """
+    cutoff = datetime.now(UTC) - timedelta(days=_USAGE_LOOKBACK_DAYS)
+
+    # Compute the last 3 calendar months (e.g. "2026-05", "2026-04", "2026-03")
+    now = datetime.now(UTC)
+    months: list[str] = []
+    for i in range(3):
+        # Subtract i months by stepping back month by month
+        y, m = now.year, now.month - i
+        while m <= 0:
+            m += 12
+            y -= 1
+        months.append(f"{y:04d}-{m:02d}")
+
+    factory = get_session_factory()
+    async with factory() as session:
+        # --- Scan activity: per-user aggregates over last 90 days ---
+        scan_stmt = (
+            select(
+                ScanRecord.user_email,
+                func.count().label("total_scans"),
+                func.sum(ScanRecord.critical).label("total_critical"),
+                func.sum(ScanRecord.high).label("total_high"),
+                func.sum(ScanRecord.findings_count).label("total_findings"),
+                func.max(ScanRecord.started_at).label("last_scan_at"),
+            )
+            .where(ScanRecord.started_at >= cutoff)
+            .group_by(ScanRecord.user_email)
+            .order_by(desc("total_scans"))
+        )
+        scan_rows = list((await session.execute(scan_stmt)).all())
+
+        # --- Token spend: last 3 months, all rows ---
+        usage_stmt = (
+            select(LLMUsageMonthly)
+            .where(LLMUsageMonthly.year_month.in_(months))
+            .order_by(
+                LLMUsageMonthly.year_month.desc(),
+                LLMUsageMonthly.user_email,
+                LLMUsageMonthly.provider,
+            )
+        )
+        usage_rows = list((await session.execute(usage_stmt)).scalars().all())
+
+    return templates.TemplateResponse(
+        request,
+        "admin_usage.html",
+        {
+            "user": admin,
+            "scan_rows": scan_rows,
+            "usage_rows": usage_rows,
+            "months": months,
+            "lookback_days": _USAGE_LOOKBACK_DAYS,
+            "flash": None,
+        },
     )

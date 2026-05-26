@@ -34,6 +34,7 @@ async def _post_to_slack(
     *,
     kind: str,
     http_client: httpx.AsyncClient | None,
+    webhook_url: str | None = None,
     **log_ctx: object,
 ) -> None:
     """POST ``text`` to the #security webhook; fail-open.
@@ -43,8 +44,13 @@ async def _post_to_slack(
     ``log_ctx`` is non-sensitive context only — never the justification /
     rejection reason body (kept out of logs by the transport; the audit log
     that intentionally records the reason lives in the calling endpoint).
+
+    ``webhook_url`` may be passed explicitly (e.g. from a DB-stored encrypted
+    value decrypted by the caller).  If omitted, falls back to the
+    ``SLACK_WEBHOOK_URL`` environment variable.  DB value takes precedence
+    so the admin portal can override infra config without a restart.
     """
-    webhook = get_settings().SLACK_WEBHOOK_URL
+    webhook = webhook_url or get_settings().SLACK_WEBHOOK_URL
     if webhook is None:
         log.warning("slack webhook not configured — alert skipped", kind=kind)
         return
@@ -75,17 +81,22 @@ async def send_bypass_alert(
     justification: str | None = None,
     *,
     http_client: httpx.AsyncClient | None = None,
+    webhook_url: str | None = None,
 ) -> None:
     """POST a structured bypass alert to the #security webhook.
 
     Enforcement of "Critical bypasses require justification" is the caller's
     responsibility (the ``/agent/bypass`` endpoint). This module sends
     whatever it is given.
+
+    Pass ``webhook_url`` to override the ``SLACK_WEBHOOK_URL`` env var with a
+    DB-stored value (e.g. decrypted from ``OrgSettings.encrypted_slack_webhook``).
     """
     await _post_to_slack(
         _build_message_text(result, developer, commit_sha, justification),
         kind="bypass",
         http_client=http_client,
+        webhook_url=webhook_url,
         developer=developer,
         commit_sha=commit_sha,
     )
@@ -99,6 +110,7 @@ async def send_llm_unavailable_alert(
     triggered_by: str,
     repo_url: str,
     http_client: httpx.AsyncClient | None = None,
+    webhook_url: str | None = None,
 ) -> None:
     """POST a "scanner LLM upstream unavailable" alert to the #security webhook.
 
@@ -135,6 +147,7 @@ async def send_llm_unavailable_alert(
         text,
         kind="llm-unavailable",
         http_client=http_client,
+        webhook_url=webhook_url,
         provider=provider,
         scan_id=scan_id,
         is_quota=is_quota,
@@ -152,6 +165,7 @@ async def send_pr_rejected_alert(
     critical: int,
     high: int,
     http_client: httpx.AsyncClient | None = None,
+    webhook_url: str | None = None,
 ) -> None:
     """POST a "bot auto-fix PR rejected" alert (D-16).
 
@@ -164,6 +178,7 @@ async def send_pr_rejected_alert(
         ),
         kind="pr-rejected",
         http_client=http_client,
+        webhook_url=webhook_url,
         pr_number=pr_number,
         closed_by=closed_by,
     )
