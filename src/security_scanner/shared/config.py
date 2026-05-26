@@ -101,6 +101,27 @@ class Settings(BaseSettings):
         description="Slack #security webhook for bypass alerts; None disables Slack",
     )
 
+    # --- GitHub OIDC auth (master-scanner-pipeline → /scan) ---------------------
+    # When True, /scan accepts GitHub-issued OIDC JWTs from workflows that
+    # match GITHUB_OIDC_ALLOWED_WORKFLOW_REFS. Bearer-token auth still works
+    # as a fallback (CLI/local paths). Off by default.
+    GITHUB_OIDC_ENABLED: bool = Field(
+        default=False,
+        description="When True, /scan accepts GitHub OIDC JWTs in addition to bearer tokens",
+    )
+    GITHUB_OIDC_AUDIENCE: str = Field(
+        default="phrase-scanner",
+        description="Expected `aud` claim on incoming OIDC tokens",
+    )
+    GITHUB_OIDC_ALLOWED_WORKFLOW_REFS: str = Field(
+        default="",
+        description=(
+            "Comma-separated prefixes that the OIDC `job_workflow_ref` claim "
+            "must match. Example: "
+            "'Phrase-Sandbox/master-scanner-pipeline/.github/workflows/scanner.yml@'"
+        ),
+    )
+
     PORT: int = Field(default=8000, description="HTTP port")
     LOG_LEVEL: str = Field(default="INFO", description="Logging level")
 

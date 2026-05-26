@@ -60,3 +60,4 @@ asdfg/
 # --- Local-only Claude docs (kept on machine, never committed) ---
 STATUS.md
 CLAUDE.md
+devci-readme.md

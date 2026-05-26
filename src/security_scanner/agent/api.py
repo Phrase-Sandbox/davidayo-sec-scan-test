@@ -95,7 +95,7 @@ async def scan(
         )
 
     try:
-        return await pipeline.run(
+        result = await pipeline.run(
             repo_url=body.repo_url,
             scan_target=body.scan_target,
             triggered_by=body.triggered_by,
@@ -111,6 +111,21 @@ async def scan(
             threshold=exc.threshold,
         )
         return _token_limit_advisory(body, exc)
+
+    # Surface mid-scan LLM parse failures as 502 rather than letting the
+    # caller (CI) interpret a scan_failed result + 0 findings as "clean".
+    if result.gate_decision == GateDecision.scan_failed:
+        reason = result.warnings[0] if result.warnings else "scanner upstream error"
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "error": "scanner_upstream_error",
+                "message": str(reason),
+                "scan_id": str(result.scan_id),
+            },
+        )
+
+    return result
 
 
 class BypassRequest(BaseModel):

@@ -91,6 +91,56 @@ async def send_bypass_alert(
     )
 
 
+async def send_llm_unavailable_alert(
+    *,
+    scan_id: str,
+    reason: str,
+    provider: str,
+    triggered_by: str,
+    repo_url: str,
+    http_client: httpx.AsyncClient | None = None,
+) -> None:
+    """POST a "scanner LLM upstream unavailable" alert to the #security webhook.
+
+    Fired when default-mode scans (org credentials) fully fail to reach the
+    LLM — typically org-key quota exhaustion or provider outage. The user's
+    scan still returns an advisory partial result (BR-006 fail-open), but
+    the security team needs an immediate signal to top up / rotate the key.
+
+    Reason text from the upstream SDK is included verbatim so on-call can
+    triage; we trust upstream errors not to embed credentials, and the
+    field-name redaction (``api_key`` in REDACT_FIELDS) catches any
+    accidental field-form key leakage at the structured-log layer.
+    """
+    is_quota = any(
+        kw in reason.lower()
+        for kw in ("quota", "resource_exhausted", "exceeded", "billing")
+    )
+    headline = (
+        "🚨 *Scanner LLM quota exhausted*"
+        if is_quota
+        else "🚨 *Scanner LLM upstream unavailable*"
+    )
+    text = (
+        f"{headline}\n"
+        f"• Provider: `{provider}`\n"
+        f"• Triggered by: `{triggered_by}`\n"
+        f"• Repo: {repo_url}\n"
+        f"• Scan id: `{scan_id}`\n"
+        f"• Upstream error: {reason}\n"
+        "Scan returned an advisory partial result; the codebase was NOT "
+        "analysed. Top up / rotate the org LLM key, then re-run the gate."
+    )
+    await _post_to_slack(
+        text,
+        kind="llm-unavailable",
+        http_client=http_client,
+        provider=provider,
+        scan_id=scan_id,
+        is_quota=is_quota,
+    )
+
+
 async def send_pr_rejected_alert(
     *,
     repo_url: str,

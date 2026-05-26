@@ -92,10 +92,10 @@ seconds and try again — the scanner is still starting.
 
 The scanner is running on your laptop. To talk to it from anywhere (or to
 let the browser-based portal work), expose it through a free Cloudflare
-tunnel. **Open a new terminal window** (leave the first one alone) and run:
+tunnel. **Open a new terminal window** (leave the first one alone), `cd`
+into the same project folder you cloned in Step 1, and run:
 
 ```bash
-cd ~/davidayo-sec-scan-test
 cloudflared tunnel --url http://localhost:8000
 ```
 
@@ -137,14 +137,14 @@ Pick the right file for your computer:
 | Your computer | File to download |
 | --- | --- |
 | Mac with M1/M2/M3 chip (Apple Silicon) | `phrase-sec-scan-darwin-arm64` |
-| Mac with Intel chip | `phrase-sec-scan-darwin-x86_64` |
 | Linux | `phrase-sec-scan-linux-x86_64` |
 | Windows | `phrase-sec-scan-windows-x86_64.exe` |
+| Mac with Intel chip | *not pre-built — see "Intel Mac: build from source" below* |
 
 For Mac (Apple Silicon), run:
 
 ```bash
-gh release download v0.2.0 \
+gh release download v0.5.0 \
   -R Phrase-Sandbox/davidayo-sec-scan-test \
   -p 'phrase-sec-scan-darwin-arm64' \
   -O /usr/local/bin/phrase-sec-scan
@@ -161,6 +161,23 @@ xattr -d com.apple.quarantine /usr/local/bin/phrase-sec-scan
 
 If it says `No such xattr: com.apple.quarantine` — that's fine, it means
 nothing to clear.
+
+### Intel Mac (x86_64) — build from source
+
+The pre-built Intel Mac binary is not currently in the v0.5.0 release
+(`macos-13` runner scheduling on Phrase-Sandbox is slow). Build it locally
+instead — takes about 2 minutes:
+
+```bash
+cd ~/davidayo-sec-scan-test
+python3.12 -m venv .venv
+.venv/bin/pip install -e '.[dev]'
+PYTHON=.venv/bin/python3.12 ./build.sh
+sudo mv dist/phrase-sec-scan /usr/local/bin/phrase-sec-scan
+```
+
+You can also use this same flow on Apple Silicon if you want to run from
+HEAD instead of the latest tagged release.
 
 ---
 
@@ -197,84 +214,92 @@ suggested fix. The exit code tells you:
 - `0` — no Critical or High findings (clean).
 - `1` — at least one Critical or High finding.
 - `2` — config or auth error (usually means run `login` again).
+- `3` — scanner failed mid-scan (transient upstream LLM error). Retry; if it persists, file a bug.
 
 ---
 
 ## Provider selection
 
 The scanner supports two LLM backends: **Anthropic Claude** (the default,
-spec-mandated, ZDR/DPA-confirmed) and **Google Gemini** (optional, sim-only,
-pending Security/Legal sign-off — see Appendix D-15).
+ZDR/DPA-confirmed) and **Google Gemini** (alternative provider, approved
+for production).
 
-### Local-BYO mode (`--local`)
+Both modes POST your files to the deployed scanner and get the same
+full-coverage report back. They differ only in **whose LLM API key** the
+scanner uses for the LLM call.
 
-When you scan locally (no server), you supply your own API key and optionally
-choose the provider and model:
+### Default mode — org-paid scan
 
 ```bash
-# Default: uses ANTHROPIC_API_KEY from your environment
+phrase-sec-scan .
+```
+
+The CLI uploads your files; the server runs the scan using its org-configured
+LLM credentials. The org pays for the LLM tokens. **Your personal API key
+never crosses the wire.** This is the right mode for normal day-to-day use
+and what the CI pipeline does.
+
+### `--local` mode — BYO key
+
+```bash
+# Uses ANTHROPIC_API_KEY from your environment
 phrase-sec-scan --local .
 
-# Explicit provider + model (env-based key)
-phrase-sec-scan --local --provider claude --model claude-sonnet-4-6 .
-phrase-sec-scan --local --provider gemini --model gemini-2.5-pro .
+# Pass the key explicitly
+phrase-sec-scan --local --provider claude --api-key sk-ant-... .
+phrase-sec-scan --local --provider gemini --model gemini-2.5-flash --api-key AIza-... .
 
-# Store your key once so you don't need the env var every time
+# Or store the key once so you don't pass it every time
 phrase-sec-scan login --provider claude --api-key sk-ant-...
-phrase-sec-scan login --provider gemini --api-key AIza-...
-
-# After login you can just run
 phrase-sec-scan --local .
 ```
 
-**Resolution order** (highest wins):
+The CLI uploads your files **AND** your personal LLM API key. The server uses
+your key for that single scan's LLM call instead of its org credentials —
+the LLM tokens are billed to your account, not the org's. Useful when:
+- You want to try a different provider or model than the org default.
+- You want the org's LLM quota free for production CI runs.
+- You're on a free-tier key exploring the scanner.
+
+The forwarded key lives only in memory during the request. The scanner
+never logs, caches, or persists it (the `api_key` field name is in
+the global logging redact list as a structural safety net).
+
+### Key resolution (`--local` mode only)
+
+When `--local` is set, the CLI looks for your LLM API key in this order
+(highest wins):
 
 | Source | Provider | Model | Key |
 |--------|----------|-------|-----|
-| CLI flag | `--provider` | `--model` | — |
+| CLI flag | `--provider` | `--model` | `--api-key` |
 | Env var | `SCANNER_LLM_PROVIDER` | `SCANNER_LLM_MODEL` | `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY` |
 | Config file (`~/.phrase-sec-scan/config.yaml`) | `provider:` | `model:` | `anthropic_api_key:` / `google_api_key:` |
 | Built-in default | `claude` | provider default | — |
 
-The config file is never required — env vars always work. Env vars take
-precedence over the stored key, so per-shell overrides (`ANTHROPIC_API_KEY=sk-ant-... phrase-sec-scan --local .`) work without changing your config.
+If no key resolves from any source, `--local` exits with code 2 and a
+message pointing you at `phrase-sec-scan login --provider X --api-key Y`.
 
-To install the Gemini SDK (not bundled by default):
+### Server-side provider (default mode)
 
-```bash
-pip install phrase-sec-scan[providers]
-```
-
-### Remote/org scan (default CLI mode + server)
-
-When the CLI POSTs to the deployed scanner (the default, no `--local` flag),
-the server picks the provider using its own environment variables. **The CLI
-never forwards your personal API key to the server.** The server has its own
-org-level credentials configured by the operator.
-
-Server-side provider selection:
+The org operator picks the scanner's default provider/model in `.env.local`:
 
 ```bash
-# In .env.local (or the server's environment)
 SCANNER_LLM_PROVIDER=anthropic   # or: google
-SCANNER_LLM_MODEL=claude-sonnet-4-6   # optional override
+SCANNER_LLM_MODEL=claude-sonnet-4-6   # optional
 GOOGLE_API_KEY=AIza-...          # only if provider=google
 ```
 
-Both `/agent/scan` (the CI gate path) and `/scan/local` (the on-demand
-advisory path) use the same factory — a single `SCANNER_LLM_PROVIDER` env
-var switches both endpoints consistently.
+This applies to **default-mode** scans (CI and any `phrase-sec-scan .`
+call without `--local`). `--local` callers override this per-request via
+their own key.
 
-### Credential separation
+### Want fully-offline scanning?
 
-| Mode | Who owns credentials | Where keys live |
-|------|----------------------|-----------------|
-| `--local` | Developer (BYO) | Developer's env / `~/.phrase-sec-scan/config.yaml` |
-| Remote (default) | Organisation / operator | Server's `.env.local` / secrets manager |
-
-The CLI client **never** forwards API keys to the server. The server **never**
-reads the developer's local config. This separation is enforced by design —
-there is no flag or config that bridges the two.
+The CLI no longer runs the pipeline in-process — both modes need the
+remote scanner. If you need to scan without any network egress, run the
+scanner Docker image on your own laptop and point the CLI at
+`http://localhost:8000` via `phrase-sec-scan login --scanner-url ...`.
 
 For CI/CD integration, see the `master-scanner-pipeline` sibling repo which
 provides a reusable GitHub Actions workflow that calls this scanner's API.
@@ -317,8 +342,8 @@ again.
 When you change the CLI code and want to ship a new version:
 
 ```bash
-git tag v0.2.1
-git push origin v0.2.1
+git tag v0.5.1
+git push origin v0.5.1
 ```
 
 GitHub Actions (the `release-cli` workflow) builds the binary on Linux,

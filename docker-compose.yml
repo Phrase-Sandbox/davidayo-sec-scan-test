@@ -69,6 +69,11 @@ services:
       - SCANNER_TIMEOUT_SECONDS=${SCANNER_TIMEOUT_SECONDS:-60}
       - VULN_VERIFIER_PARALLELISM=${VULN_VERIFIER_PARALLELISM:-2}
       - CLAUDE_CHUNK_SIZE=${CLAUDE_CHUNK_SIZE:-48}
+      # Gemini-specific tuning. Explicit defaults so we don't accidentally
+      # inherit CLAUDE_CHUNK_SIZE (which is set lower for the Cloudflare
+      # tunnel timeout but suboptimal for Gemini's 1M context window).
+      - GEMINI_CHUNK_SIZE=${GEMINI_CHUNK_SIZE:-24}
+      - GEMINI_MAX_TOKENS=${GEMINI_MAX_TOKENS:-16384}
       - VULN_VERIFIER_KEEP_CONFIDENCES=${VULN_VERIFIER_KEEP_CONFIDENCES:-high}
       - ADVISORY_CONFIDENCES=${ADVISORY_CONFIDENCES:-medium,low}
       # Semgrep writes settings/log/version-cache on startup; redirect all to /tmp so read_only: true doesn't block it

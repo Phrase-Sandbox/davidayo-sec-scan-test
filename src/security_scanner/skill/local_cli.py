@@ -1,15 +1,21 @@
 """``phrase-sec-scan`` — local pre-push security scan CLI.
 
-Two modes, sharing the same UX:
+Both modes POST to ``${scanner_url}/scan/local``; they differ only in
+*whose* LLM key the scanner uses for that scan:
 
-- **Remote (default)** — POSTs the working tree to ``${scanner_url}/scan/local``.
-  No ``ANTHROPIC_API_KEY`` required on the developer's machine; the deployed
-  scanner runs the LLM call with its own key. Auth uses a per-developer token
-  obtained via ``phrase-sec-scan login`` (browser-callback flow that drops the
-  token into ``~/.phrase-sec-scan/config.yaml`` with mode 0600).
+- **Default** (``phrase-sec-scan .``) — server uses its own org-configured
+  LLM credentials. Bills the org. No personal API key needed on the
+  developer's laptop.
 
-- **Local (``--local``)** — preserves the original on-laptop pipeline behaviour
-  for offline use. Needs ``ANTHROPIC_API_KEY`` in the environment.
+- **BYO key** (``phrase-sec-scan --local .``) — the CLI ships the
+  developer's personal LLM API key in the request body. The scanner uses
+  that key for this one scan only — never logged, cached, or persisted —
+  and bills the developer's account. Useful for testing, free-tier
+  exploration, or projects where you don't want to consume the org quota.
+
+Both paths get the full server-side pipeline (Layer 1 multi-scanner +
+LLM first-pass + verifier + report). The CLI never runs Semgrep/Bandit
+locally; everything happens on the deployed scanner.
 
 ``mode=on_demand`` ⇒ BR-009 parallel verification is skipped per spec §4.1
 (same as the hosted skill — this is the informational path, not the gate).
@@ -39,12 +45,6 @@ from urllib.error import URLError
 
 import certifi
 
-# Module-level imports for `--local` mode. Kept at module scope so test code
-# can monkeypatch ``local_cli.build_local_llm_client`` without chasing lazy imports.
-from security_scanner.shared.llm.factory import build_local_llm_client
-from security_scanner.shared.models.enums import ScanTarget, ScanType, Severity
-from security_scanner.shared.reports.html import build_html_report
-from security_scanner.shared.reports.markdown import build_markdown_report
 from security_scanner.skill.local_files import LocalFilesClient
 
 _REPORT_FILENAME = "security-scan-report.md"
@@ -294,20 +294,29 @@ def _scan_remote(
     scanner_url: str,
     token: str,
     respect_gitignore: bool = True,
+    llm_override: dict | None = None,
 ) -> int:
+    """POST the working tree to /scan/local and write the report.
+
+    If ``llm_override`` is provided (``--local`` BYO-key mode), it's included
+    in the request body so the scanner uses the caller's LLM key for this
+    scan instead of its own org credentials. The override dict is
+    ``{"provider": str, "api_key": str, "model": str | None}``.
+    """
     files = _collect_files(root, directory, respect_gitignore=respect_gitignore)
     if not files:
         print("ERROR: no files to scan.", file=sys.stderr)
         return 2
 
-    body = json.dumps(
-        {
-            "files": files,
-            "triggered_by": _triggered_by(root),
-            "directory": directory,
-            "repo_url": _derive_repo_url(root),
-        }
-    ).encode("utf-8")
+    payload_obj: dict = {
+        "files": files,
+        "triggered_by": _triggered_by(root),
+        "directory": directory,
+        "repo_url": _derive_repo_url(root),
+    }
+    if llm_override is not None:
+        payload_obj["llm_override"] = llm_override
+    body = json.dumps(payload_obj).encode("utf-8")
 
     req = urllib.request.Request(  # noqa: S310 — scanner_url is user-supplied https endpoint
         scanner_url.rstrip("/") + "/scan/local",
@@ -345,8 +354,51 @@ def _scan_remote(
                     "ERROR: 401 from scanner. Run `phrase-sec-scan login` to refresh your token.",
                     file=sys.stderr,
                 )
-            else:
-                print(f"ERROR: scanner returned HTTP {exc.code}: {body_text}", file=sys.stderr)
+                return 2
+            if exc.code == 502:
+                # Scanner couldn't complete the scan (parse error, LLM quota,
+                # or other upstream failure). Distinct exit code so CI can
+                # distinguish from config/auth errors. Inspect the structured
+                # detail to give the user an actionable message.
+                detail_kind = ""
+                detail_provider = ""
+                detail_message = body_text
+                try:
+                    parsed = json.loads(body_text)
+                    detail = parsed.get("detail") if isinstance(parsed, dict) else None
+                    if isinstance(detail, dict):
+                        detail_kind = str(detail.get("error") or "")
+                        detail_provider = str(detail.get("provider") or "")
+                        detail_message = str(detail.get("message") or body_text)
+                except (ValueError, TypeError):
+                    pass
+
+                if detail_kind == "llm_quota_exhausted":
+                    provider_name = detail_provider or "your LLM provider"
+                    print(
+                        f"ERROR: your {provider_name} API key has hit its quota. "
+                        "No scan was performed — top up your account (or wait for "
+                        "the daily reset on free tiers), then re-run.",
+                        file=sys.stderr,
+                    )
+                elif detail_kind == "llm_upstream_unavailable":
+                    provider_name = detail_provider or "the LLM provider"
+                    print(
+                        f"ERROR: {provider_name} is unavailable right now. "
+                        "Try again shortly; if it persists, check the provider's "
+                        "status page or your API key.",
+                        file=sys.stderr,
+                    )
+                else:
+                    print(
+                        "ERROR: scanner failed mid-scan (upstream LLM error). "
+                        "Try again; if it persists, file a bug.",
+                        file=sys.stderr,
+                    )
+                if detail_message:
+                    print(f"  details: {detail_message}", file=sys.stderr)
+                return 3
+            print(f"ERROR: scanner returned HTTP {exc.code}: {body_text}", file=sys.stderr)
             return 2
         except (URLError, OSError) as exc:
             print(f"ERROR: could not reach scanner at {scanner_url}: {exc}", file=sys.stderr)
@@ -437,121 +489,21 @@ def _resolve_provider_config(args: argparse.Namespace, config: dict[str, str]) -
     return {"provider": provider, "model": model, "api_key": api_key}
 
 
-def _scan_local(
-    *,
-    root: Path,
-    directory: str,
-    respect_gitignore: bool = True,
-    args: argparse.Namespace | None = None,
-) -> int:
-    import asyncio  # noqa: PLC0415
+def _resolve_llm_override(args: argparse.Namespace) -> dict | None:
+    """Resolve the BYO LLM key for ``--local`` mode.
 
-    from security_scanner.pipeline import ScanPipeline, TokenLimitError  # noqa: PLC0415
-
-    if args is None:
-        # Compat shim for callers that don't pass args (tests, etc.)
-        import argparse as _ap  # noqa: PLC0415
-        args = _ap.Namespace(provider=None, model=None, api_key=None)
-
-    config = _load_config()
-    resolved = _resolve_provider_config(args, config)
-    provider = resolved["provider"]
-
+    Returns a dict ``{provider, api_key, model}`` suitable for the request
+    body's ``llm_override`` field, or ``None`` if no key can be found
+    (caller should treat as a fatal error and exit 2).
+    """
+    resolved = _resolve_provider_config(args, _load_config())
     if not resolved["api_key"]:
-        if provider == "gemini":
-            print(
-                "ERROR: GOOGLE_API_KEY is required for --local --provider gemini. "
-                "Set the env var or run `phrase-sec-scan login --provider gemini --api-key <key>`.",
-                file=sys.stderr,
-            )
-        else:
-            print(
-                "ERROR: ANTHROPIC_API_KEY is required for --local mode. "
-                "Drop the flag to use the remote scanner instead, or set the env var.",
-                file=sys.stderr,
-            )
-        return 2
-
-    try:
-        llm_client = build_local_llm_client(
-            provider=provider,
-            api_key=resolved["api_key"],
-            model=resolved["model"],
-        )
-    except ImportError:
-        # google-genai not installed
-        print(
-            "ERROR: the 'google-genai' package is not installed. "
-            "Install it with:  pip install phrase-sec-scan[providers]",
-            file=sys.stderr,
-        )
-        return 2
-    except Exception as exc:  # noqa: BLE001
-        print(f"ERROR: could not build LLM client: {exc}", file=sys.stderr)
-        return 2
-
-    scan_target = ScanTarget.directory if directory else ScanTarget.full_repo
-    pipeline = ScanPipeline(
-        LocalFilesClient(root, respect_gitignore=respect_gitignore),
-        llm_client,
-        mode=ScanType.on_demand,
-    )
-
-    print(f"Scanning {root} (local pre-push, on_demand) …")
-    try:
-        result = asyncio.run(
-            pipeline.run(
-                repo_url=_derive_repo_url(root),
-                scan_target=scan_target,
-                triggered_by=_triggered_by(root),
-                directory=directory,
-            )
-        )
-    except TokenLimitError as exc:
-        print(
-            f"Project is too large to scan in one pass "
-            f"(~{exc.estimated_tokens} tokens > {exc.threshold} limit).\n"
-            f"Re-run scoped to a sub-directory:  phrase-sec-scan --directory <subdir>",
-            file=sys.stderr,
-        )
-        return 2
-
-    report_dir = root / _REPORT_DIR
-    report_dir.mkdir(parents=True, exist_ok=True)
-    md_path = report_dir / _REPORT_FILENAME
-    md_path.write_text(build_markdown_report(result), encoding="utf-8")
-    html_path = report_dir / _REPORT_FILENAME.replace(".md", ".html")
-    # Re-collect files so the HTML report can show the actual vulnerable
-    # lines behind a per-finding "Show vulnerable code" toggle. The pipeline
-    # has already finished; this second read is small change vs. the value
-    # of letting a reviewer eyeball the offending lines without a checkout.
-    snippet_files = _collect_files(
-        root, directory, respect_gitignore=respect_gitignore
-    )
-    html_path.write_text(
-        build_html_report(result, files=snippet_files), encoding="utf-8"
-    )
-    written = [
-        str(md_path.relative_to(root)),
-        str(html_path.relative_to(root)),
-    ]
-    for filename, patch_text in result.patches.items():
-        (root / filename).write_text(patch_text, encoding="utf-8")
-        written.append(filename)
-
-    critical = sum(1 for f in result.findings if f.severity == Severity.Critical)
-    high = sum(1 for f in result.findings if f.severity == Severity.High)
-    print(
-        f"\nDone. {result.findings_count} findings "
-        f"({critical} Critical, {high} High)."
-        + (" Scan was partial — see report header." if result.partial_scan else "")
-    )
-    print("Wrote: " + ", ".join(written))
-    print(
-        f"Open {html_path.relative_to(root)} (or the .md) for findings + fix snippets. "
-        "Apply patches with `git apply <file>.patch` after reviewing, then re-run."
-    )
-    return 1 if (critical or high) else 0
+        return None
+    return {
+        "provider": resolved["provider"],
+        "api_key": resolved["api_key"],
+        "model": resolved["model"],
+    }
 
 
 # --- argparse wiring ---------------------------------------------------------
@@ -578,8 +530,9 @@ def _build_scan_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--local", action="store_true",
-        help="Run the scan pipeline on this machine (BYO API key) "
-             "instead of POSTing to the deployed scanner.",
+        help="BYO-key mode: scanner still runs the scan, but uses YOUR LLM key "
+             "(from --api-key/env/config) for the LLM call. Bills your account, "
+             "not the org's.",
     )
     p.add_argument(
         "--provider", choices=list(_SUPPORTED_PROVIDERS), default=None,
@@ -590,6 +543,11 @@ def _build_scan_parser() -> argparse.ArgumentParser:
         "--model", default=None,
         help="Model override for --local mode (e.g. claude-sonnet-4-6). "
              "Falls back to SCANNER_LLM_MODEL env → config → provider default.",
+    )
+    p.add_argument(
+        "--api-key", default=None,
+        help="LLM API key for --local mode. Falls back to ANTHROPIC_API_KEY "
+             "/ GOOGLE_API_KEY env → ~/.phrase-sec-scan/config.yaml.",
     )
     p.add_argument(
         "--no-gitignore", action="store_true",
@@ -686,23 +644,31 @@ def main(argv: list[str] | None = None) -> int:
 
     respect_gitignore = not args.no_gitignore
 
-    if args.local:
-        return _scan_local(
-            root=root, directory=args.directory, respect_gitignore=respect_gitignore,
-            args=args,
-        )
-
     scanner_url, token = _resolve_endpoint()
     if not scanner_url or not token:
         print(
             "ERROR: not logged in. Run `phrase-sec-scan login --scanner-url "
-            "https://<scanner>` first, or pass --local for offline mode.",
+            "https://<scanner>` first.",
             file=sys.stderr,
         )
         return 2
+
+    llm_override: dict | None = None
+    if args.local:
+        llm_override = _resolve_llm_override(args)
+        if llm_override is None:
+            print(
+                "ERROR: --local requires an LLM API key. Provide via "
+                "--api-key, ANTHROPIC_API_KEY / GOOGLE_API_KEY env var, "
+                "or run `phrase-sec-scan login --provider <claude|gemini> "
+                "--api-key <key>` once.",
+                file=sys.stderr,
+            )
+            return 2
+
     return _scan_remote(
         root=root, directory=args.directory, scanner_url=scanner_url, token=token,
-        respect_gitignore=respect_gitignore,
+        respect_gitignore=respect_gitignore, llm_override=llm_override,
     )
 
 

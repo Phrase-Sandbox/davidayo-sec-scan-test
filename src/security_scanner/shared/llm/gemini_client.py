@@ -33,17 +33,24 @@ from security_scanner.shared.prompts.system import (
 log = get_logger(__name__)
 
 DEFAULT_MODEL = "gemini-2.5-pro"
-DEFAULT_MAX_TOKENS = 4096
+# Max output tokens. Gemini-2.5-flash supports ≥32K; 16K gives headroom for
+# finding-heavy chunks without overcommitting tail latency. The previous
+# 4096 truncated mid-JSON on dvpwa-class inputs and surfaced as
+# ClaudeResponseError → empty findings (silent quality loss).
+DEFAULT_MAX_TOKENS = int(os.environ.get("GEMINI_MAX_TOKENS") or 16384)
 DEFAULT_TIMEOUT_SECONDS = 60.0
 MAX_ATTEMPTS = 2
 BACKOFF_SECONDS = 2.0
 
-# Read chunk size from LLM_CHUNK_SIZE (provider-agnostic) or fall back to
-# CLAUDE_CHUNK_SIZE (backward-compat alias) or default 12.
+# Chunk size lookup order: GEMINI_CHUNK_SIZE (provider-specific) →
+# LLM_CHUNK_SIZE (provider-agnostic) → CLAUDE_CHUNK_SIZE (compat alias) →
+# default 24. Gemini's 1M context window tolerates larger chunks than Claude;
+# tiny chunks throw away cross-file context needed to follow tainted-data flow.
 _LLM_CHUNK_SIZE = int(
-    os.environ.get("LLM_CHUNK_SIZE")
+    os.environ.get("GEMINI_CHUNK_SIZE")
+    or os.environ.get("LLM_CHUNK_SIZE")
     or os.environ.get("CLAUDE_CHUNK_SIZE")
-    or "12"
+    or "24"
 )
 
 # Context-cache TTL: 5 minutes, matching Claude's ephemeral cache window.
@@ -115,9 +122,20 @@ class GeminiClient:
         """
         effective_chunk_size = max(1, chunk_size) if chunk_size > 0 else len(files)
 
-        # Fast path: everything fits in a single chunk.
+        # Fast path: everything fits in a single chunk. Route through the
+        # halve-retry wrapper so a truncated-output parse error still gets
+        # one chance to recover instead of failing the whole scan.
         if len(files) <= effective_chunk_size:
-            return await self.analyse_async(files), []
+            try:
+                findings = await self._analyse_with_halving_retry(files)
+            except ClaudeResponseError as exc:
+                log.warning(
+                    "gemini single-chunk parse error after halve-retry — files marked partial",
+                    file_count=len(files),
+                    reason=str(exc),
+                )
+                return [], list(files.keys())
+            return findings, []
 
         items = list(files.items())
         chunks: list[dict[str, str]] = [
@@ -133,7 +151,8 @@ class GeminiClient:
         )
 
         tasks = [
-            asyncio.create_task(self.analyse_async(chunk)) for chunk in chunks
+            asyncio.create_task(self._analyse_with_halving_retry(chunk))
+            for chunk in chunks
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -144,6 +163,15 @@ class GeminiClient:
             if isinstance(result, ClaudeTimeoutError):
                 log.warning(
                     "gemini chunk timeout — files marked partial",
+                    file_count=len(chunk),
+                    reason=str(result),
+                )
+                partial_files.extend(chunk.keys())
+            elif isinstance(result, ClaudeResponseError):
+                # Parse error survived the halve-retry. Mark this chunk's
+                # files partial rather than failing the whole scan.
+                log.warning(
+                    "gemini chunk unparseable after halve-retry — files marked partial",
                     file_count=len(chunk),
                     reason=str(result),
                 )
@@ -159,6 +187,55 @@ class GeminiClient:
             partial_file_count=len(partial_files),
         )
         return raw_findings, partial_files
+
+    async def _analyse_with_halving_retry(
+        self, chunk: dict[str, str]
+    ) -> list[dict]:
+        """Run ``analyse_async`` on ``chunk``; on parse error, halve and retry once.
+
+        Truncated-output JSON failures are size-driven (model hit the
+        ``max_tokens`` ceiling mid-string). Halving the input reliably fits.
+        If a half also fails to parse, we still return findings from the
+        other half rather than dropping the whole chunk on the floor.
+        """
+        try:
+            return await self.analyse_async(chunk)
+        except ClaudeResponseError as exc:
+            if len(chunk) <= 1:
+                # Can't halve further — propagate so the chunked loop can
+                # mark this file partial.
+                raise
+            items = list(chunk.items())
+            mid = len(items) // 2
+            left = dict(items[:mid])
+            right = dict(items[mid:])
+            log.warning(
+                "gemini chunk parse error — halving and retrying",
+                original_file_count=len(chunk),
+                left_count=len(left),
+                right_count=len(right),
+                reason=str(exc),
+            )
+            results = await asyncio.gather(
+                self.analyse_async(left),
+                self.analyse_async(right),
+                return_exceptions=True,
+            )
+            findings: list[dict] = []
+            still_failed = 0
+            for result in results:
+                if isinstance(result, ClaudeResponseError):
+                    still_failed += 1
+                elif isinstance(result, Exception):
+                    raise result
+                else:
+                    findings.extend(result)
+            if still_failed == 2:
+                # Both halves unparseable — propagate so caller marks partial.
+                raise ClaudeResponseError(
+                    f"both halves of chunk ({len(chunk)} files) failed to parse"
+                ) from exc
+            return findings
 
     # --- Context caching ----------------------------------------------------
 

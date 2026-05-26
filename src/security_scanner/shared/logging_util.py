@@ -33,7 +33,7 @@ def get_scan_id() -> str | None:
     return _SCAN_ID_VAR.get()
 
 REDACT_FIELDS: frozenset[str] = frozenset(
-    {"content", "source_code", "code", "file_content", "prompt", "payload"}
+    {"content", "source_code", "code", "file_content", "prompt", "payload", "api_key"}
 )
 REDACTED_VALUE = "[REDACTED]"
 

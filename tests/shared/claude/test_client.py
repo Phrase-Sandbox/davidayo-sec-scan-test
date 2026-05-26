@@ -417,6 +417,69 @@ def test_chunked_single_chunk_fast_path_calls_analyse_async_once():
     assert partial_files == []
 
 
+# --- Halve-and-retry on ClaudeResponseError --------------------------------
+
+
+def test_chunked_parse_error_triggers_halve_retry_recovers_findings():
+    """A chunk that raises ClaudeResponseError gets retried as two halves.
+
+    Simulates the truncated-output failure mode: the original 8-file chunk
+    would exceed max_tokens and parse fails, but each 4-file half fits and
+    parses fine. Result: all findings recovered, no partial_files.
+    """
+    files = {f"f{i}.py": f"x = {i}" for i in range(8)}  # single chunk
+    call_log: list[tuple[str, ...]] = []
+
+    async def fake_analyse_async(chunk):
+        keys = tuple(sorted(chunk.keys()))
+        call_log.append(keys)
+        if len(chunk) == 8:
+            raise ClaudeResponseError("Unterminated string starting at line 1")
+        return [{"vulnerability_id": f"F{k}"} for k in chunk]
+
+    client = _chunked_client()
+
+    with patch.object(client, "analyse_async", side_effect=fake_analyse_async):
+        raw_findings, partial_files = _async_run(
+            client.analyse_async_chunked(files, chunk_size=8)
+        )
+
+    # 1 original call (8 files, failed) + 2 halved retries (4 files each, ok).
+    assert len(call_log) == 3
+    assert len(call_log[0]) == 8
+    assert len(call_log[1]) == 4
+    assert len(call_log[2]) == 4
+    # All 8 findings recovered.
+    assert len(raw_findings) == 8
+    assert partial_files == []
+
+
+def test_chunked_parse_error_both_halves_fail_marks_chunk_partial():
+    """If both halves also fail to parse, the chunk's files become partial_files.
+
+    Crucial: the *other* chunks in the same gather() should still return
+    their findings — the failure is scoped to the affected chunk only.
+    """
+    files = {f"f{i}.py": f"x = {i}" for i in range(10)}  # 2 chunks of 5
+
+    async def fake_analyse_async(chunk):
+        # First chunk (f0..f4) always fails, even halved.
+        first_chunk_files = {f"f{i}.py" for i in range(5)}
+        if set(chunk.keys()) <= first_chunk_files:
+            raise ClaudeResponseError("Unterminated string")
+        return [{"vulnerability_id": f"F{k}"} for k in chunk]
+
+    client = _chunked_client()
+    with patch.object(client, "analyse_async", side_effect=fake_analyse_async):
+        raw_findings, partial_files = _async_run(
+            client.analyse_async_chunked(files, chunk_size=5)
+        )
+
+    # Chunk 2 (5 files) succeeded; chunk 1 (5 files) flagged partial after retry.
+    assert len(raw_findings) == 5
+    assert set(partial_files) == {f"f{i}.py" for i in range(5)}
+
+
 # --- Phase 4: prompt caching ------------------------------------------------
 
 

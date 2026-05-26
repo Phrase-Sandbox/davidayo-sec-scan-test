@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from security_scanner.shared.claude.client import (
+    ClaudeResponseError,
     ClaudeTimeoutError,
     ClaudeUnavailableError,
 )
@@ -154,6 +155,101 @@ async def test_gemini_analyse_async_chunked_timeout_marks_partial(monkeypatch):
     # First chunk timed out → its files are partial.
     assert set(partial) == {"a.py", "b.py"}
     assert findings == []
+
+
+# --- Gemini chunk-size + max-tokens env resolution ------------------------
+
+
+def test_gemini_chunk_size_env_resolution(monkeypatch):
+    """GEMINI_CHUNK_SIZE wins over LLM_CHUNK_SIZE wins over CLAUDE_CHUNK_SIZE."""
+    import importlib
+
+    from security_scanner.shared.llm import gemini_client
+
+    monkeypatch.setenv("CLAUDE_CHUNK_SIZE", "4")
+    monkeypatch.setenv("LLM_CHUNK_SIZE", "12")
+    monkeypatch.setenv("GEMINI_CHUNK_SIZE", "20")
+    reloaded = importlib.reload(gemini_client)
+    assert reloaded._LLM_CHUNK_SIZE == 20
+
+    # Falls back to LLM_CHUNK_SIZE if GEMINI_CHUNK_SIZE unset.
+    monkeypatch.delenv("GEMINI_CHUNK_SIZE", raising=False)
+    reloaded = importlib.reload(gemini_client)
+    assert reloaded._LLM_CHUNK_SIZE == 12
+
+    # Falls back to CLAUDE_CHUNK_SIZE if both unset.
+    monkeypatch.delenv("LLM_CHUNK_SIZE", raising=False)
+    reloaded = importlib.reload(gemini_client)
+    assert reloaded._LLM_CHUNK_SIZE == 4
+
+    # Default 24 if all unset.
+    monkeypatch.delenv("CLAUDE_CHUNK_SIZE", raising=False)
+    reloaded = importlib.reload(gemini_client)
+    assert reloaded._LLM_CHUNK_SIZE == 24
+    # Restore the module to canonical state for later tests in the session.
+    importlib.reload(reloaded)
+
+
+def test_gemini_max_tokens_env_resolution(monkeypatch):
+    """GEMINI_MAX_TOKENS overrides the default 16384 baseline."""
+    import importlib
+
+    from security_scanner.shared.llm import gemini_client
+
+    monkeypatch.setenv("GEMINI_MAX_TOKENS", "32768")
+    reloaded = importlib.reload(gemini_client)
+    assert reloaded.DEFAULT_MAX_TOKENS == 32768
+
+    monkeypatch.delenv("GEMINI_MAX_TOKENS", raising=False)
+    reloaded = importlib.reload(gemini_client)
+    assert reloaded.DEFAULT_MAX_TOKENS == 16384
+    importlib.reload(reloaded)
+
+
+# --- Gemini halve-and-retry on parse error --------------------------------
+
+
+@pytest.mark.asyncio
+async def test_gemini_chunked_parse_error_halves_and_recovers(monkeypatch):
+    """Truncated-output JSON failure on the original chunk → halve-retry recovers."""
+    c = GeminiClient(api_key="x", client=_gemini_sdk_async('{"findings": []}'))
+
+    call_log: list[int] = []
+
+    async def fake_analyse_async(chunk):
+        call_log.append(len(chunk))
+        if len(chunk) == 6:
+            raise ClaudeResponseError("Unterminated string")
+        return [{"vulnerability_id": f"F{k}"} for k in chunk]
+
+    monkeypatch.setattr(c, "analyse_async", fake_analyse_async)
+    files = {f"f{i}.py": f"x = {i}" for i in range(6)}
+    findings, partial = await c.analyse_async_chunked(files, chunk_size=6)
+
+    # 1 original truncated call + 2 halved retries = 3 total.
+    assert sorted(call_log) == [3, 3, 6]
+    assert partial == []
+    assert len(findings) == 6
+
+
+@pytest.mark.asyncio
+async def test_gemini_chunked_parse_error_both_halves_fail_marks_partial(monkeypatch):
+    """Both halves still unparseable → chunk's files become partial_files,
+    other chunks unaffected."""
+    c = GeminiClient(api_key="x", client=_gemini_sdk_async('{"findings": []}'))
+
+    async def fake_analyse_async(chunk):
+        first_chunk_files = {f"f{i}.py" for i in range(5)}
+        if set(chunk.keys()) <= first_chunk_files:
+            raise ClaudeResponseError("Unterminated string")
+        return [{"vulnerability_id": f"F{k}"} for k in chunk]
+
+    monkeypatch.setattr(c, "analyse_async", fake_analyse_async)
+    files = {f"f{i}.py": f"x = {i}" for i in range(10)}
+    findings, partial = await c.analyse_async_chunked(files, chunk_size=5)
+
+    assert set(partial) == {f"f{i}.py" for i in range(5)}
+    assert len(findings) == 5
 
 
 # --- Gemini context caching ------------------------------------------------

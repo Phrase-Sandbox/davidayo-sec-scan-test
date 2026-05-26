@@ -238,9 +238,20 @@ class ClaudeClient:
         """
         effective_chunk_size = max(1, chunk_size) if chunk_size > 0 else len(files)
 
-        # Fast path: fits in a single chunk.
+        # Fast path: fits in a single chunk. Route through the halve-retry
+        # wrapper so a truncated-output parse error still gets one chance to
+        # recover instead of dropping the whole scan.
         if len(files) <= effective_chunk_size:
-            return await self.analyse_async(files), []
+            try:
+                findings = await self._analyse_with_halving_retry(files)
+            except ClaudeResponseError as exc:
+                log.warning(
+                    "claude single-chunk parse error after halve-retry — files marked partial",
+                    file_count=len(files),
+                    reason=str(exc),
+                )
+                return [], list(files.keys())
+            return findings, []
 
         # Split into chunks preserving insertion order.
         items = list(files.items())
@@ -255,7 +266,10 @@ class ClaudeClient:
             chunk_size=effective_chunk_size,
         )
 
-        tasks = [asyncio.create_task(self.analyse_async(chunk)) for chunk in chunks]
+        tasks = [
+            asyncio.create_task(self._analyse_with_halving_retry(chunk))
+            for chunk in chunks
+        ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         raw_findings: list[dict] = []
@@ -269,8 +283,19 @@ class ClaudeClient:
                     reason=str(result),
                 )
                 partial_files.extend(chunk.keys())
+            elif isinstance(result, ClaudeResponseError):
+                # Parse error survived halve-retry. Mark this chunk's files
+                # partial rather than failing the whole scan (the previous
+                # behaviour was to propagate, which discarded findings from
+                # ALL other chunks in the same gather).
+                log.warning(
+                    "claude chunk unparseable after halve-retry — files marked partial",
+                    file_count=len(chunk),
+                    reason=str(result),
+                )
+                partial_files.extend(chunk.keys())
             elif isinstance(result, Exception):
-                # Propagate non-timeout errors (unavailable, response parse, etc.)
+                # Propagate non-recoverable errors (unavailable, circuit-open, etc.)
                 raise result
             else:
                 raw_findings.extend(result)
@@ -285,6 +310,54 @@ class ClaudeClient:
     async def ask_async(self, system: str, user: str) -> str:
         """Async wrapper around ``ask`` for use in an event loop."""
         return await asyncio.to_thread(self.ask, system, user)
+
+    async def _analyse_with_halving_retry(
+        self, chunk: dict[str, str]
+    ) -> list[dict]:
+        """Run ``analyse_async`` on ``chunk``; on parse error, halve and retry once.
+
+        Truncated-output JSON failures are size-driven (model hit the
+        ``max_tokens`` ceiling mid-string). Halving the input reliably fits.
+        If a half also fails to parse, we still return findings from the
+        other half rather than dropping the whole chunk.
+        """
+        try:
+            return await self.analyse_async(chunk)
+        except ClaudeResponseError as exc:
+            if len(chunk) <= 1:
+                # Can't halve further — propagate so the chunked loop can
+                # mark this file partial.
+                raise
+            items = list(chunk.items())
+            mid = len(items) // 2
+            left = dict(items[:mid])
+            right = dict(items[mid:])
+            log.warning(
+                "claude chunk parse error — halving and retrying",
+                original_file_count=len(chunk),
+                left_count=len(left),
+                right_count=len(right),
+                reason=str(exc),
+            )
+            results = await asyncio.gather(
+                self.analyse_async(left),
+                self.analyse_async(right),
+                return_exceptions=True,
+            )
+            findings: list[dict] = []
+            still_failed = 0
+            for result in results:
+                if isinstance(result, ClaudeResponseError):
+                    still_failed += 1
+                elif isinstance(result, Exception):
+                    raise result
+                else:
+                    findings.extend(result)
+            if still_failed == 2:
+                raise ClaudeResponseError(
+                    f"both halves of chunk ({len(chunk)} files) failed to parse"
+                ) from exc
+            return findings
 
     # --- Internals ----------------------------------------------------------
 

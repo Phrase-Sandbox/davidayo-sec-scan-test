@@ -68,7 +68,7 @@ def _finding(severity: Severity) -> VulnerabilityFinding:
     )
 
 
-def _result(findings) -> ScanResult:
+def _result(findings, *, gate_decision=GateDecision.advisory, warnings=None) -> ScanResult:
     return ScanResult(
         scan_id=uuid4(),
         repo_url="https://github.com/local/workspace",
@@ -77,11 +77,11 @@ def _result(findings) -> ScanResult:
         triggered_by="local-dev",
         timestamp=datetime(2026, 5, 19, tzinfo=UTC),
         findings_count=len(findings),
-        gate_decision=GateDecision.advisory,
+        gate_decision=gate_decision,
         partial_scan=False,
         unscanned_files=[],
         findings=findings,
-        warnings=[],
+        warnings=warnings or [],
         patches={},
     )
 
@@ -98,7 +98,7 @@ def client(mock_pipeline):
     app.include_router(agent_router)
 
     def factory_provider():
-        return lambda files: mock_pipeline  # noqa: ARG005
+        return lambda files, llm_override: mock_pipeline  # noqa: ARG005
 
     app.dependency_overrides[get_local_pipeline_factory] = factory_provider
     app.dependency_overrides[get_pipeline] = lambda: mock_pipeline
@@ -156,6 +156,124 @@ def test_empty_files_rejected(client, mock_pipeline):
     assert r.status_code == 422
 
 
+def _result_llm_unavailable(reason="quota exceeded for model gemini-2.5-flash") -> ScanResult:
+    """A pipeline result mirroring the 'LLM totally unavailable' path —
+    every file unscanned, structured warning, advisory gate decision."""
+    return ScanResult(
+        scan_id=uuid4(),
+        repo_url="https://github.com/local/workspace",
+        scan_target=ScanTarget.full_repo,
+        scan_type=ScanType.on_demand,
+        triggered_by="local-dev",
+        timestamp=datetime(2026, 5, 26, tzinfo=UTC),
+        findings_count=0,
+        gate_decision=GateDecision.advisory,
+        partial_scan=True,
+        unscanned_files=["app/db.py"],
+        findings=[],
+        warnings=[f"LLM upstream unavailable: {reason}"],
+        patches={},
+    )
+
+
+def test_byo_key_llm_quota_exhausted_returns_502_quota_error(client, mock_pipeline, monkeypatch):
+    """--local + LLM totally unavailable + quota in reason → HTTP 502 + quota error code."""
+    mock_pipeline.run.return_value = _result_llm_unavailable(
+        "Gemini unavailable after 2 attempts: RESOURCE_EXHAUSTED quota exceeded"
+    )
+    # Slack helper must NOT fire on the BYO-key path.
+    slack_called = {"n": 0}
+
+    async def fake_slack(*_a, **_kw):
+        slack_called["n"] += 1
+
+    monkeypatch.setattr(
+        "security_scanner.agent.local_scan.send_llm_unavailable_alert",
+        fake_slack,
+    )
+
+    r = client.post(
+        "/scan/local",
+        json={
+            "files": {"app/db.py": "x = 1"},
+            "llm_override": {
+                "provider": "gemini",
+                "api_key": "AIza-fake",
+                "model": "gemini-2.5-flash",
+            },
+        },
+        headers={"Authorization": f"Bearer {_LOCAL_TOKEN}"},
+    )
+    assert r.status_code == 502, r.text
+    detail = r.json()["detail"]
+    assert detail["error"] == "llm_quota_exhausted"
+    assert detail["provider"] == "gemini"
+    assert "RESOURCE_EXHAUSTED" in detail["message"]
+    assert slack_called["n"] == 0  # BYO-key path must not Slack-notify
+
+
+def test_default_mode_llm_unavailable_keeps_advisory_and_sends_slack(client, mock_pipeline, monkeypatch):
+    """Default mode (no llm_override): keep advisory result, send Slack alert
+    to security so the org key gets topped up."""
+    mock_pipeline.run.return_value = _result_llm_unavailable(
+        "Claude unavailable after 3 attempts: rate limited (429); waited 8.0s"
+    )
+    captured: dict[str, object] = {}
+
+    async def fake_slack(**kw):
+        captured.update(kw)
+
+    monkeypatch.setattr(
+        "security_scanner.agent.local_scan.send_llm_unavailable_alert",
+        fake_slack,
+    )
+
+    r = _post(client, _LOCAL_TOKEN)  # default mode: no llm_override in body
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["findings_count"] == 0  # advisory partial — no findings
+    # Slack was notified with the upstream reason.
+    assert captured.get("scan_id")
+    assert "rate limited" in str(captured.get("reason"))
+    assert captured.get("triggered_by") == "local-dev"
+
+
+def test_scan_failed_returns_502_with_detail(client, mock_pipeline):
+    """Mid-scan LLM parse failure → HTTP 502, NOT a silent 200/0-findings."""
+    mock_pipeline.run.return_value = _result(
+        [],
+        gate_decision=GateDecision.scan_failed,
+        warnings=["Claude response could not be parsed: Unterminated string"],
+    )
+    r = _post(client, _LOCAL_TOKEN)
+    assert r.status_code == 502
+    detail = r.json()["detail"]
+    assert detail["error"] == "scanner_upstream_error"
+    assert "Unterminated string" in detail["message"]
+    assert "scan_id" in detail
+
+
+def test_agent_scan_failed_returns_502(client, mock_pipeline):
+    """Same surfacing on the gate endpoint — CI sees an explicit failure."""
+    mock_pipeline.run.return_value = _result(
+        [],
+        gate_decision=GateDecision.scan_failed,
+        warnings=["Claude response could not be parsed: Unterminated string"],
+    )
+    r = client.post(
+        "/agent/scan",
+        json={
+            "repo_url": "https://github.com/local/x",
+            "scan_target": "full_repo",
+            "triggered_by": "ci",
+        },
+        headers={"Authorization": f"Bearer {_CI_TOKEN}"},
+    )
+    assert r.status_code == 502
+    detail = r.json()["detail"]
+    assert detail["error"] == "scanner_upstream_error"
+
+
 def test_local_token_cannot_reach_ci_gate(client):
     # The reverse boundary: the local-advisory token must NOT pass the CI gate.
     r = client.post(
@@ -209,25 +327,138 @@ def test_max_concurrent_scans_env_var_override(monkeypatch):
     assert _read_max_concurrent_scans() == 4
 
 
-def test_get_local_pipeline_factory_uses_build_llm_client(monkeypatch):
-    """A1 regression guard: factory calls build_llm_client, not ClaudeClient."""
+def test_get_local_pipeline_factory_no_override_uses_org_creds(monkeypatch):
+    """Factory with llm_override=None → uses settings via build_llm_client."""
     from unittest.mock import MagicMock, patch
 
     fake_llm = MagicMock()
-    with patch(
-        "security_scanner.agent.local_scan.build_llm_client",
-        return_value=fake_llm,
-    ) as mock_factory:
+    with (
+        patch(
+            "security_scanner.agent.local_scan.build_llm_client",
+            return_value=fake_llm,
+        ) as mock_org_factory,
+        patch(
+            "security_scanner.agent.local_scan.build_local_llm_client",
+        ) as mock_byo_factory,
+    ):
         from security_scanner.agent.local_scan import get_local_pipeline_factory
         from security_scanner.shared.config import Settings
 
         settings = Settings()
         pipeline_factory = get_local_pipeline_factory(settings)
-        # get_local_pipeline_factory returns a closure; build_llm_client is only
-        # invoked when that closure runs against an actual file set.
         assert callable(pipeline_factory)
-        pipeline_factory({"a.py": "print(1)"})
-        mock_factory.assert_called_once_with(settings)
+        pipeline_factory({"a.py": "print(1)"}, None)
+        mock_org_factory.assert_called_once_with(settings)
+        mock_byo_factory.assert_not_called()
+
+
+def test_get_local_pipeline_factory_with_override_uses_caller_key(monkeypatch):
+    """Factory with llm_override set → uses build_local_llm_client w/ caller key."""
+    from unittest.mock import MagicMock, patch
+
+    from security_scanner.agent.local_scan import LLMOverride
+
+    fake_llm = MagicMock()
+    with (
+        patch(
+            "security_scanner.agent.local_scan.build_local_llm_client",
+            return_value=fake_llm,
+        ) as mock_byo_factory,
+        patch(
+            "security_scanner.agent.local_scan.build_llm_client",
+        ) as mock_org_factory,
+    ):
+        from security_scanner.agent.local_scan import get_local_pipeline_factory
+        from security_scanner.shared.config import Settings
+
+        settings = Settings()
+        pipeline_factory = get_local_pipeline_factory(settings)
+        override = LLMOverride(
+            provider="anthropic",
+            api_key="sk-ant-caller-key-xxx",
+            model="claude-sonnet-4-6",
+        )
+        pipeline_factory({"a.py": "print(1)"}, override)
+        mock_byo_factory.assert_called_once_with(
+            provider="anthropic",
+            api_key="sk-ant-caller-key-xxx",
+            model="claude-sonnet-4-6",
+        )
+        mock_org_factory.assert_not_called()
+
+
+def test_llm_override_missing_api_key_returns_422(client):
+    """Pydantic validation rejects an override without an api_key."""
+    r = client.post(
+        "/scan/local",
+        json={
+            "files": {"a.py": "print(1)"},
+            "triggered_by": "tester",
+            "repo_url": "https://github.com/x/y",
+            "llm_override": {"provider": "anthropic"},  # missing api_key
+        },
+        headers={"Authorization": f"Bearer {_LOCAL_TOKEN}"},
+    )
+    assert r.status_code == 422
+    assert "api_key" in r.text.lower()
+
+
+def test_llm_override_empty_api_key_returns_422(client):
+    """Pydantic validation rejects an empty api_key (min_length=1)."""
+    r = client.post(
+        "/scan/local",
+        json={
+            "files": {"a.py": "print(1)"},
+            "triggered_by": "tester",
+            "repo_url": "https://github.com/x/y",
+            "llm_override": {"provider": "google", "api_key": ""},
+        },
+        headers={"Authorization": f"Bearer {_LOCAL_TOKEN}"},
+    )
+    assert r.status_code == 422
+
+
+def test_llm_override_flows_through_to_factory(client, mock_pipeline):
+    """End-to-end: llm_override in request body reaches the factory closure."""
+    from unittest.mock import patch
+
+    captured: dict = {}
+
+    def real_factory_provider():
+        def build(files, llm_override):
+            captured["llm_override"] = llm_override
+            return mock_pipeline
+        return build
+
+    mock_pipeline.run.return_value = _result([])
+    from security_scanner.agent.local_scan import get_local_pipeline_factory
+
+    client.app.dependency_overrides[get_local_pipeline_factory] = real_factory_provider
+    try:
+        r = client.post(
+            "/scan/local",
+            json={
+                "files": {"a.py": "print(1)"},
+                "triggered_by": "tester",
+                "repo_url": "https://github.com/x/y",
+                "llm_override": {
+                    "provider": "google",
+                    "api_key": "AIza-fake-key-for-test",
+                    "model": "gemini-2.5-flash",
+                },
+            },
+            headers={"Authorization": f"Bearer {_LOCAL_TOKEN}"},
+        )
+        assert r.status_code == 200, r.text
+        assert captured["llm_override"] is not None
+        assert captured["llm_override"].provider == "google"
+        assert captured["llm_override"].api_key == "AIza-fake-key-for-test"
+        assert captured["llm_override"].model == "gemini-2.5-flash"
+    finally:
+        # Restore the default mock factory for subsequent tests
+        client.app.dependency_overrides[get_local_pipeline_factory] = lambda: (
+            lambda files, llm_override: mock_pipeline  # noqa: ARG005
+        )
 
 
 def test_returns_429_when_semaphore_is_drained(client, monkeypatch):

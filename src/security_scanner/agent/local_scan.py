@@ -36,18 +36,19 @@ import re
 from collections.abc import Callable
 from html import escape
 from dataclasses import dataclass
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
+from security_scanner.agent.slack_alert import send_llm_unavailable_alert
 from security_scanner.agent.test_endpoint import _MockGitHubClient
 from security_scanner.observability.metrics import local_scan_auth_outcomes_total
 from security_scanner.pipeline import ScanPipeline, TokenLimitError
 from security_scanner.shared.config import Settings, get_settings
-from security_scanner.shared.llm.factory import build_llm_client
+from security_scanner.shared.llm.factory import build_llm_client, build_local_llm_client
 from security_scanner.shared.logging_util import get_logger
-from security_scanner.shared.models.enums import ScanTarget, ScanType, Severity
+from security_scanner.shared.models.enums import GateDecision, ScanTarget, ScanType, Severity
 from security_scanner.shared.models.finding import VulnerabilityFinding
 from security_scanner.shared.reports.html import build_html_report
 from security_scanner.shared.reports.markdown import build_markdown_report
@@ -213,6 +214,22 @@ async def verify_local_scan_token(request: Request) -> AuthenticatedLocalCaller:
 # --- Request / response models -----------------------------------------------
 
 
+class LLMOverride(BaseModel):
+    """Per-request LLM credentials supplied by the caller (BYO key).
+
+    The CLI's ``--local`` mode populates this so the scanner uses the
+    developer's personal LLM API key for this single scan instead of its
+    org credentials. The key is held only in memory for the request
+    lifecycle, never logged, cached, or persisted. ``api_key`` is treated
+    as a secret value — the logging filter in ``shared.logging_util``
+    redacts any field literally named ``api_key``.
+    """
+
+    provider: Literal["anthropic", "claude", "google", "gemini"]
+    api_key: str = Field(..., min_length=1)
+    model: str | None = None  # provider default if unset
+
+
 class LocalScanRequest(BaseModel):
     """Body of ``POST /scan/local`` — the dev's uploaded working tree."""
 
@@ -220,6 +237,10 @@ class LocalScanRequest(BaseModel):
     triggered_by: str = "local-dev"
     directory: str = ""
     repo_url: str = "https://github.com/local/workspace"
+    # Optional. When None (default), the scanner uses its env-configured
+    # org credentials — the master-pipeline CI path. When set, this scan's
+    # LLM call uses the caller's key instead.
+    llm_override: LLMOverride | None = None
 
 
 class LocalScanResponse(BaseModel):
@@ -236,17 +257,33 @@ class LocalScanResponse(BaseModel):
     findings: list[VulnerabilityFinding]
 
 
-LocalPipelineFactory = Callable[[dict[str, str]], ScanPipeline]
+LocalPipelineFactory = Callable[
+    [dict[str, str], "LLMOverride | None"], ScanPipeline
+]
 
 
 def get_local_pipeline_factory(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> LocalPipelineFactory:
-    """On-demand pipeline over uploaded files (no GitHub, no BR-009 gate)."""
+    """On-demand pipeline over uploaded files (no GitHub, no BR-009 gate).
 
-    def build(files: dict[str, str]) -> ScanPipeline:
+    The returned closure picks the LLM client per-request:
+    - ``llm_override is None`` → ``build_llm_client(settings)`` (org creds);
+      this is the CI/CD path.
+    - ``llm_override is not None`` → ``build_local_llm_client`` with the
+      caller-supplied key; this is the CLI ``--local`` BYO-key path.
+    """
+
+    def build(files: dict[str, str], llm_override: LLMOverride | None) -> ScanPipeline:
         github_client = _MockGitHubClient(files)
-        llm_client = build_llm_client(settings)
+        if llm_override is not None:
+            llm_client = build_local_llm_client(
+                provider=llm_override.provider,
+                api_key=llm_override.api_key,
+                model=llm_override.model,
+            )
+        else:
+            llm_client = build_llm_client(settings)
         return ScanPipeline(github_client, llm_client, mode=ScanType.on_demand)
 
     return build
@@ -350,15 +387,19 @@ async def scan_local(
     # §12: log the count only — never the paths or content. token_id +
     # user_email are populated in registry mode so the line is attributable;
     # in legacy mode both are None and the line falls back to triggered_by.
+    # llm_override_used surfaces "did this caller send their own LLM key?"
+    # for cost attribution; the key itself is NEVER logged.
     log.info(
         "local advisory scan",
         file_count=len(body.files),
         triggered_by=body.triggered_by,
         token_id=caller.token_id,
         user_email=caller.user_email,
+        llm_override_used=body.llm_override is not None,
+        llm_override_provider=(body.llm_override.provider if body.llm_override else None),
     )
 
-    pipeline = factory(body.files)
+    pipeline = factory(body.files, body.llm_override)
     # Hold a semaphore slot for the duration of the pipeline call. The
     # locked() pre-check above ensures we don't *wait* for a slot if all
     # are taken; this `async with` is only entered when capacity exists.
@@ -391,6 +432,68 @@ async def scan_local(
                 low=0,
                 findings=[],
             )
+
+        # Surface mid-scan parse failures (transient LLM truncation) as
+        # 502 Bad Gateway rather than silently returning HTTP 200 + 0 findings.
+        # Callers (CLI, CI) need to distinguish "clean repo" from "scanner
+        # error mid-parse" — a 200/0 silently masks a quality loss.
+        if result.gate_decision == GateDecision.scan_failed:
+            reason = result.warnings[0] if result.warnings else "scanner upstream error"
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail={
+                    "error": "scanner_upstream_error",
+                    "message": str(reason),
+                    "scan_id": str(result.scan_id),
+                },
+            )
+
+        # Detect "LLM totally unavailable" — every file unscanned, with the
+        # pipeline's structured warning indicating an upstream failure
+        # (quota exhaustion, provider outage, etc.).
+        llm_unavailable = (
+            result.partial_scan
+            and len(result.unscanned_files) == len(body.files)
+            and any(
+                w.startswith("LLM upstream unavailable")
+                for w in result.warnings
+            )
+        )
+        if llm_unavailable:
+            reason = next(
+                (w for w in result.warnings if w.startswith("LLM upstream unavailable")),
+                "LLM upstream unavailable",
+            )
+            if body.llm_override is not None:
+                # BYO-key mode: fail loud so the user sees the actual problem
+                # (their personal LLM key is out of quota or otherwise broken).
+                is_quota = any(
+                    kw in reason.lower()
+                    for kw in ("quota", "resource_exhausted", "exceeded", "billing")
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail={
+                        "error": "llm_quota_exhausted" if is_quota else "llm_upstream_unavailable",
+                        "provider": body.llm_override.provider,
+                        "message": reason,
+                        "scan_id": str(result.scan_id),
+                    },
+                )
+            # Default mode (org credentials): keep advisory fallback per
+            # BR-006 fail-open, but alert #security so the org key gets
+            # topped up / rotated promptly.
+            try:
+                await send_llm_unavailable_alert(
+                    scan_id=str(result.scan_id),
+                    reason=reason,
+                    provider=type(pipeline._claude).__name__ if hasattr(pipeline, "_claude") else "unknown",
+                    triggered_by=body.triggered_by,
+                    repo_url=body.repo_url,
+                )
+            except Exception as exc:  # noqa: BLE001
+                # Never let a Slack failure break the scan (BR-006 spirit).
+                log.warning("slack llm-unavailable alert raised", error=type(exc).__name__)
 
         def _count(sev: Severity) -> int:
             return sum(1 for f in result.findings if f.severity == sev)

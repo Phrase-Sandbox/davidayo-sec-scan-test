@@ -236,11 +236,17 @@ class ScanPipeline:
                 raw_findings = []
                 aggregated_candidates = []
             except ClaudeUnavailableError as exc:
+                reason = str(exc)
                 log.warning(
-                    "claude unavailable — degraded scan with advisory result",
+                    "llm upstream unavailable — degraded scan with advisory result",
                     mode=self._mode.value,
-                    reason=str(exc),
+                    provider=type(self._claude).__name__,
+                    reason=reason,
                 )
+                # Tag the result with a structured warning so the API layer
+                # can detect "every file unscanned because the LLM was
+                # totally unavailable" and route accordingly (BYO-key →
+                # surface as 502; default mode → keep advisory + Slack alert).
                 return _build_result(
                     repo_url=repo_url, scan_target=scan_target, scan_type=self._mode,
                     triggered_by=triggered_by,
@@ -248,9 +254,14 @@ class ScanPipeline:
                     gate_decision=GateDecision.advisory,
                     partial_scan=True,
                     unscanned_files=list(files.keys()),
+                    warnings=[f"LLM upstream unavailable: {reason}"],
                 )
             except ClaudeResponseError as exc:
-                log.warning("claude response malformed", reason=str(exc))
+                log.warning(
+                    "llm response malformed",
+                    provider=type(self._claude).__name__,
+                    reason=str(exc),
+                )
                 return _scan_failed(
                     repo_url, scan_target, self._mode, triggered_by,
                     reason=f"Claude response could not be parsed: {exc}",
@@ -270,11 +281,17 @@ class ScanPipeline:
                 unscanned = list(files.keys())
                 raw_findings = []
             except ClaudeUnavailableError as exc:
+                reason = str(exc)
                 log.warning(
-                    "claude unavailable — degraded scan with advisory result",
+                    "llm upstream unavailable — degraded scan with advisory result",
                     mode=self._mode.value,
-                    reason=str(exc),
+                    provider=type(self._claude).__name__,
+                    reason=reason,
                 )
+                # Tag the result with a structured warning so the API layer
+                # can detect "every file unscanned because the LLM was
+                # totally unavailable" and route accordingly (BYO-key →
+                # surface as 502; default mode → keep advisory + Slack alert).
                 return _build_result(
                     repo_url=repo_url, scan_target=scan_target, scan_type=self._mode,
                     triggered_by=triggered_by,
@@ -282,9 +299,14 @@ class ScanPipeline:
                     gate_decision=GateDecision.advisory,
                     partial_scan=True,
                     unscanned_files=list(files.keys()),
+                    warnings=[f"LLM upstream unavailable: {reason}"],
                 )
             except ClaudeResponseError as exc:
-                log.warning("claude response malformed", reason=str(exc))
+                log.warning(
+                    "llm response malformed",
+                    provider=type(self._claude).__name__,
+                    reason=str(exc),
+                )
                 return _scan_failed(
                     repo_url, scan_target, self._mode, triggered_by,
                     reason=f"Claude response could not be parsed: {exc}",
@@ -472,6 +494,7 @@ def _build_result(
     gate_decision: GateDecision,
     partial_scan: bool,
     unscanned_files: list[str],
+    warnings: list[str] | None = None,
 ) -> ScanResult:
     return ScanResult(
         repo_url=repo_url,
@@ -484,6 +507,7 @@ def _build_result(
         partial_scan=partial_scan,
         unscanned_files=unscanned_files,
         findings=findings,
+        warnings=warnings or [],
     )
 
 
