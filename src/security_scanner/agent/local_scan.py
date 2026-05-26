@@ -45,7 +45,7 @@ from security_scanner.observability.metrics import local_scan_auth_outcomes_tota
 from security_scanner.pipeline import ScanPipeline, TokenLimitError
 from security_scanner.shared.config import Settings, get_settings
 from security_scanner.shared.llm.base import LLMConfigError
-from security_scanner.shared.llm.factory import build_user_llm_client
+from security_scanner.shared.llm.factory import build_user_llm_client, _get_model_for_provider
 from security_scanner.shared.logging_util import get_logger
 from security_scanner.shared.models.enums import GateDecision, ScanTarget, ScanType, Severity
 from security_scanner.shared.models.finding import VulnerabilityFinding
@@ -257,6 +257,22 @@ class LocalScanResponse(BaseModel):
 
 
 _CallerDep = Annotated[AuthenticatedLocalCaller, Depends(verify_local_scan_token)]
+
+
+async def _load_active_org_settings():
+    """Return the latest ``OrgSettings`` row, or ``None`` if none exist yet.
+
+    ``None`` means the bootstrap window (no admin has saved org settings yet).
+    In that case ``_get_model_for_provider`` returns ``None`` → provider uses
+    its own default model.
+    """
+    from sqlalchemy import select as _select  # noqa: PLC0415
+    from security_scanner.tokens.models import OrgSettings  # noqa: PLC0415
+
+    _factory = get_session_factory()
+    async with _factory() as _session:
+        _stmt = _select(OrgSettings).order_by(OrgSettings.id.desc()).limit(1)
+        return (await _session.execute(_stmt)).scalar_one_or_none()
 
 
 async def _load_user_llm_settings(user_email: str) -> UserLLMSettings:
@@ -485,12 +501,18 @@ async def scan_local(
             detail="No files supplied to scan.",
         )
 
-    # Load the user's stored provider/model/key.  Raises 412 with a portal
-    # pointer if the user has not yet visited /portal/settings.
+    # Load the user's stored provider/key.  Raises 412 with a portal pointer
+    # if the user has not yet visited /portal/settings.
     settings_row = await _load_user_llm_settings(caller.user_email)
     api_key = crypto.decrypt(settings_row.encrypted_api_key)
     provider_name = settings_row.provider.value   # "anthropic" | "google"
-    model_name = settings_row.model or None
+
+    # Model is admin-controlled: read from the active OrgSettings row so all
+    # users (CLI + CI) get a consistent model regardless of their individual
+    # settings.  Falls back to None (provider default) when no org settings row
+    # exists yet (bootstrap window before admin has saved config).
+    org_row = await _load_active_org_settings()
+    model_name = _get_model_for_provider(org_row, provider_name)
 
     # §12: log the count only — never paths or content.
     log.info(

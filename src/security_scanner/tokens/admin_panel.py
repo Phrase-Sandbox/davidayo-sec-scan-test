@@ -46,6 +46,20 @@ log = get_logger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
+# Admin-managed model options surfaced in the /admin/org-settings dropdowns.
+# First entry per provider is the recommended default.
+KNOWN_MODELS: dict[str, list[str]] = {
+    "anthropic": [
+        "claude-sonnet-4-6",
+        "claude-opus-4-7",
+        "claude-haiku-4-5-20251001",
+    ],
+    "google": [
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+    ],
+}
+
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
@@ -257,7 +271,8 @@ async def admin_org_settings_get(request: Request, admin: _AdminDep) -> HTMLResp
     masked_anthropic: str | None = None
     masked_google: str | None = None
     current_provider = "anthropic"
-    current_model: str | None = None
+    current_anthropic_model: str | None = None
+    current_google_model: str | None = None
     if org_row is not None:
         from security_scanner.tokens.crypto import decrypt  # noqa: PLC0415
         if org_row.encrypted_anthropic_key:
@@ -271,7 +286,8 @@ async def admin_org_settings_get(request: Request, admin: _AdminDep) -> HTMLResp
             except Exception:  # noqa: BLE001
                 masked_google = "…(decryption error)"
         current_provider = org_row.default_provider.value
-        current_model = org_row.default_model
+        current_anthropic_model = org_row.anthropic_model
+        current_google_model = org_row.google_model
 
     return templates.TemplateResponse(
         request,
@@ -281,7 +297,9 @@ async def admin_org_settings_get(request: Request, admin: _AdminDep) -> HTMLResp
             "masked_anthropic": masked_anthropic,
             "masked_google": masked_google,
             "current_provider": current_provider,
-            "current_model": current_model,
+            "current_anthropic_model": current_anthropic_model,
+            "current_google_model": current_google_model,
+            "known_models": KNOWN_MODELS,
             "flash": None,
         },
         headers=_NO_STORE_HEADERS,
@@ -293,19 +311,22 @@ async def admin_org_settings_post(
     request: Request,
     admin: _AdminDep,
     default_provider: Annotated[str, Form()],
-    default_model: Annotated[str, Form()] = "",
+    anthropic_model: Annotated[str, Form()] = "",
+    google_model: Annotated[str, Form()] = "",
     anthropic_key: Annotated[str, Form()] = "",
     google_key: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
     """Save a new org_settings row (version-bumped, immutable history).
 
+    Per-provider models are now separate fields (anthropic_model, google_model).
     Keys left blank → preserve the existing encrypted value (if any).
     """
     from datetime import UTC, datetime  # noqa: PLC0415
     from security_scanner.tokens.crypto import encrypt, mask_for_display, decrypt  # noqa: PLC0415
 
     default_provider = default_provider.strip().lower()
-    default_model = default_model.strip() or None
+    anthropic_model = anthropic_model.strip() or None
+    google_model = google_model.strip() or None
 
     if default_provider not in ("anthropic", "google"):
         raise HTTPException(
@@ -332,7 +353,8 @@ async def admin_org_settings_post(
             encrypted_anthropic_key=enc_anthropic,
             encrypted_google_key=enc_google,
             default_provider=provider_enum,
-            default_model=default_model,
+            anthropic_model=anthropic_model,
+            google_model=google_model,
             updated_at=now,
             updated_by_email=admin.email,
         )
@@ -343,7 +365,7 @@ async def admin_org_settings_post(
             changed_fields.append("anthropic_key")
         if google_key.strip():
             changed_fields.append("google_key")
-        changed_fields.extend(["default_provider", "default_model"])
+        changed_fields.extend(["default_provider", "anthropic_model", "google_model"])
 
         await token_audit.record(
             session,
@@ -351,7 +373,8 @@ async def admin_org_settings_post(
             actor_email=admin.email,
             changed_fields=",".join(changed_fields),
             default_provider=default_provider,
-            default_model=default_model or "(none)",
+            anthropic_model=anthropic_model or "(none)",
+            google_model=google_model or "(none)",
         )
         await session.commit()
 
@@ -372,7 +395,8 @@ async def admin_org_settings_post(
         "admin org settings saved",
         actor_email=admin.email,
         default_provider=default_provider,
-        default_model=default_model,
+        anthropic_model=anthropic_model,
+        google_model=google_model,
     )
     return templates.TemplateResponse(
         request,
@@ -382,7 +406,9 @@ async def admin_org_settings_post(
             "masked_anthropic": masked_anthropic_out,
             "masked_google": masked_google_out,
             "current_provider": default_provider,
-            "current_model": default_model,
+            "current_anthropic_model": anthropic_model,
+            "current_google_model": google_model,
+            "known_models": KNOWN_MODELS,
             "flash": "ok:Org settings saved. All CI scans will use the new configuration immediately.",
         },
         headers=_NO_STORE_HEADERS,

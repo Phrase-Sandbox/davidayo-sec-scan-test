@@ -194,7 +194,8 @@ async def test_org_settings_new_row_per_save(session: AsyncSession):
         encrypted_anthropic_key=b"enc1",
         encrypted_google_key=None,
         default_provider=LLMProvider.anthropic,
-        default_model="claude-sonnet-4-6",
+        anthropic_model="claude-sonnet-4-6",
+        google_model=None,
         updated_at=now,
         updated_by_email="admin@phrase.com",
     )
@@ -206,7 +207,8 @@ async def test_org_settings_new_row_per_save(session: AsyncSession):
         encrypted_anthropic_key=b"enc2",
         encrypted_google_key=None,
         default_provider=LLMProvider.anthropic,
-        default_model="claude-opus-4-7",
+        anthropic_model="claude-opus-4-7",
+        google_model=None,
         updated_at=now,
         updated_by_email="admin@phrase.com",
     )
@@ -217,7 +219,7 @@ async def test_org_settings_new_row_per_save(session: AsyncSession):
     stmt = select(OrgSettings).order_by(OrgSettings.id.desc()).limit(1)
     latest = (await session.execute(stmt)).scalar_one()
     assert latest.id > v1_id
-    assert latest.default_model == "claude-opus-4-7"
+    assert latest.anthropic_model == "claude-opus-4-7"
     assert latest.encrypted_anthropic_key == b"enc2"
 
 

@@ -110,7 +110,7 @@ def _mock_user_llm_settings(provider: str = "anthropic", model: str = "claude-so
 
 
 def _patch_scan_deps(mock_pipeline, monkeypatch, *, provider="anthropic"):
-    """Patch the four collaborators scan_local() calls internally.
+    """Patch the five collaborators scan_local() calls internally.
 
     Allows tests to control what the pipeline returns without touching the DB,
     Fernet crypto, or ``build_user_llm_client``.
@@ -118,6 +118,12 @@ def _patch_scan_deps(mock_pipeline, monkeypatch, *, provider="anthropic"):
     monkeypatch.setattr(
         "security_scanner.agent.local_scan._load_user_llm_settings",
         AsyncMock(return_value=_mock_user_llm_settings(provider)),
+    )
+    # Admin model lookup: return None (provider uses its own default) so
+    # existing tests don't need to worry about model selection.
+    monkeypatch.setattr(
+        "security_scanner.agent.local_scan._load_active_org_settings",
+        AsyncMock(return_value=None),
     )
     monkeypatch.setattr(
         "security_scanner.tokens.crypto.decrypt",

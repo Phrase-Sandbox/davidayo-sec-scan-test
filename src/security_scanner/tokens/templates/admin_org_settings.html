@@ -4,7 +4,7 @@
 <div class="card">
   <h2>Org Settings</h2>
   <p class="muted">
-    LLM keys saved here are encrypted at rest and loaded on every CI scan request.
+    LLM keys and models saved here are encrypted at rest and loaded on every scan request.
     Changes take effect immediately — no restart required.
   </p>
   <p>
@@ -18,8 +18,9 @@
 <div class="card">
   <h2>Current configuration</h2>
   <dl>
-    <dt>Default provider</dt><dd>{{ current_provider }}</dd>
-    <dt>Default model</dt><dd>{{ current_model or "(provider default)" }}</dd>
+    <dt>Default provider (CI)</dt><dd>{{ current_provider }}</dd>
+    <dt>Anthropic model</dt><dd><code>{{ current_anthropic_model or "(provider default)" }}</code></dd>
+    <dt>Google model</dt><dd><code>{{ current_google_model or "(provider default)" }}</code></dd>
     <dt>Anthropic key</dt>
     <dd>
       {% if masked_anthropic %}<code>{{ masked_anthropic }}</code> <span class="ok">✓ set</span>
@@ -35,6 +36,10 @@
 
 <div class="card">
   <h2>Update settings</h2>
+  <p class="muted" style="font-size: 0.88rem;">
+    Models set here apply to <strong>all</strong> scans — both CLI users and CI.
+    Blank = provider uses its own default.
+  </p>
   <form method="post" action="/admin/org-settings" autocomplete="off">
 
     <fieldset style="border: none; padding: 0; margin: 0 0 1.25rem;">
@@ -52,15 +57,41 @@
     </fieldset>
 
     <div style="margin-bottom: 1rem;">
-      <label style="display: block; font-weight: 600; margin-bottom: 0.4rem;" for="default_model">
-        Default model <span class="muted" style="font-weight: normal;">(blank = provider default)</span>
+      <label style="display: block; font-weight: 600; margin-bottom: 0.4rem;" for="anthropic_model">
+        Anthropic model <span class="muted" style="font-weight: normal;">(blank = provider default)</span>
       </label>
-      <input type="text" name="default_model" id="default_model"
-             value="{{ current_model or '' }}"
-             placeholder="e.g. claude-sonnet-4-6"
-             style="font: 14px/1 ui-monospace, 'SF Mono', Menlo, monospace;
-                    padding: 0.45rem 0.65rem; border: 1px solid var(--border);
-                    border-radius: 6px; background: var(--card); color: var(--fg); width: 100%; max-width: 320px;">
+      <select name="anthropic_model" id="anthropic_model"
+              style="font: inherit; padding: 0.4rem 0.6rem; border: 1px solid var(--border);
+                     border-radius: 6px; background: var(--card); color: var(--fg); width: 100%; max-width: 340px;">
+        <option value="">(provider default)</option>
+        {% for m in known_models.get("anthropic", []) %}
+          <option value="{{ m }}" {{ 'selected' if m == current_anthropic_model else '' }}>
+            {{ m }}{% if loop.first %} (recommended){% endif %}
+          </option>
+        {% endfor %}
+        {% if current_anthropic_model and current_anthropic_model not in known_models.get("anthropic", []) %}
+          <option value="{{ current_anthropic_model }}" selected>{{ current_anthropic_model }} (custom)</option>
+        {% endif %}
+      </select>
+    </div>
+
+    <div style="margin-bottom: 1.5rem;">
+      <label style="display: block; font-weight: 600; margin-bottom: 0.4rem;" for="google_model">
+        Google model <span class="muted" style="font-weight: normal;">(blank = provider default)</span>
+      </label>
+      <select name="google_model" id="google_model"
+              style="font: inherit; padding: 0.4rem 0.6rem; border: 1px solid var(--border);
+                     border-radius: 6px; background: var(--card); color: var(--fg); width: 100%; max-width: 340px;">
+        <option value="">(provider default)</option>
+        {% for m in known_models.get("google", []) %}
+          <option value="{{ m }}" {{ 'selected' if m == current_google_model else '' }}>
+            {{ m }}{% if loop.first %} (recommended){% endif %}
+          </option>
+        {% endfor %}
+        {% if current_google_model and current_google_model not in known_models.get("google", []) %}
+          <option value="{{ current_google_model }}" selected>{{ current_google_model }} (custom)</option>
+        {% endif %}
+      </select>
     </div>
 
     <div style="margin-bottom: 1rem;">
@@ -96,7 +127,7 @@
     <button type="submit" class="btn btn-primary">Save org settings</button>
     <p class="muted" style="margin-top: 0.75rem; font-size: 0.85rem;">
       Saving creates a new versioned row. All previous configs are preserved for audit.
-      The next CI scan will use the new configuration without a server restart.
+      The next scan will use the new configuration without a server restart.
     </p>
   </form>
 </div>

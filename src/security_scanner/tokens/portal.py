@@ -46,6 +46,7 @@ from security_scanner.tokens.models import (
     AuditEventType,
     LLMProvider,
     LLMUsageMonthly,
+    OrgSettings,
     ScanRecord,
     UserLLMSettings,
 )
@@ -68,21 +69,15 @@ _NO_STORE_HEADERS = {
 
 _UserDep = Annotated[PhraseUser, Depends(require_phrase_user)]
 
-# Models surfaced in the /portal/settings dropdown, grouped by provider.
-# The first entry for each provider is the recommended default.
-KNOWN_MODELS: dict[str, list[str]] = {
-    "anthropic": [
-        "claude-sonnet-4-6",
-        "claude-opus-4-7",
-        "claude-haiku-4-5-20251001",
-    ],
-    "google": [
-        "gemini-2.5-flash",
-        "gemini-2.5-pro",
-    ],
-}
-
 _SCANS_PAGE_SIZE = 20
+
+
+async def _load_active_org_settings_for_portal() -> OrgSettings | None:
+    """Return the latest ``OrgSettings`` row for portal display, or ``None``."""
+    factory = get_session_factory()
+    async with factory() as session:
+        stmt = select(OrgSettings).order_by(OrgSettings.id.desc()).limit(1)
+        return (await session.execute(stmt)).scalar_one_or_none()
 
 
 def _valid_callback_port(port: int) -> bool:
@@ -272,7 +267,11 @@ async def cli_login_complete(
 
 @router.get("/settings", response_class=HTMLResponse)
 async def portal_settings_get(request: Request, user: _UserDep) -> HTMLResponse:
-    """Show the LLM provider/model/key settings form."""
+    """Show the LLM provider/key settings form.
+
+    Model selection is controlled by the admin; we show the currently configured
+    admin model for each provider as read-only informational text.
+    """
     factory = get_session_factory()
     async with factory() as session:
         stmt = select(UserLLMSettings).where(UserLLMSettings.user_email == user.email)
@@ -280,7 +279,6 @@ async def portal_settings_get(request: Request, user: _UserDep) -> HTMLResponse:
 
     masked_key: str | None = None
     current_provider: str = "anthropic"
-    current_model: str | None = None
     if settings_row is not None:
         from security_scanner.tokens.crypto import mask_for_display, decrypt  # noqa: PLC0415
         try:
@@ -289,17 +287,21 @@ async def portal_settings_get(request: Request, user: _UserDep) -> HTMLResponse:
         except Exception:  # noqa: BLE001
             masked_key = "…(decryption error)"
         current_provider = settings_row.provider.value
-        current_model = settings_row.model
+
+    # Admin-set model for informational display
+    org_row = await _load_active_org_settings_for_portal()
+    anthropic_model = org_row.anthropic_model if org_row else None
+    google_model = org_row.google_model if org_row else None
 
     return templates.TemplateResponse(
         request,
         "portal_settings.html",
         {
             "user": user,
-            "known_models": KNOWN_MODELS,
             "current_provider": current_provider,
-            "current_model": current_model,
             "masked_key": masked_key,
+            "anthropic_model": anthropic_model or "(admin not yet configured)",
+            "google_model": google_model or "(admin not yet configured)",
             "flash": None,
         },
         headers=_NO_STORE_HEADERS,
@@ -311,11 +313,11 @@ async def portal_settings_post(
     request: Request,
     user: _UserDep,
     provider: Annotated[str, Form()],
-    model: Annotated[str, Form()] = "",
     api_key: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
-    """Save or update the user's LLM settings.
+    """Save or update the user's LLM provider and API key.
 
+    Model is now admin-controlled and not accepted from the form.
     If ``api_key`` is blank the existing key is preserved (the form shows a
     masked hint so the user knows one is already saved).  The key is encrypted
     with Fernet before storage and never logged.
@@ -323,7 +325,6 @@ async def portal_settings_post(
     from security_scanner.tokens.crypto import encrypt, mask_for_display  # noqa: PLC0415
 
     provider = provider.strip().lower()
-    model = model.strip() or None
     api_key = api_key.strip()
 
     if provider not in ("anthropic", "google"):
@@ -331,6 +332,11 @@ async def portal_settings_post(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Unknown provider {provider!r}",
         )
+
+    # Load org model info for the response template
+    org_row = await _load_active_org_settings_for_portal()
+    anthropic_model = org_row.anthropic_model if org_row else None
+    google_model = org_row.google_model if org_row else None
 
     factory = get_session_factory()
     async with factory() as session:
@@ -348,10 +354,10 @@ async def portal_settings_post(
                 "portal_settings.html",
                 {
                     "user": user,
-                    "known_models": KNOWN_MODELS,
                     "current_provider": provider,
-                    "current_model": model,
                     "masked_key": None,
+                    "anthropic_model": anthropic_model or "(admin not yet configured)",
+                    "google_model": google_model or "(admin not yet configured)",
                     "flash": "error:Please enter your API key.",
                 },
                 headers=_NO_STORE_HEADERS,
@@ -366,14 +372,14 @@ async def portal_settings_post(
             row = _ULS(
                 user_email=user.email,
                 provider=provider_enum,
-                model=model,
+                model=None,  # model is admin-controlled; not user-settable
                 encrypted_api_key=encrypted,
                 updated_at=now,
             )
             session.add(row)
         else:
             row.provider = provider_enum
-            row.model = model
+            # Do NOT update row.model — it is admin-controlled
             row.encrypted_api_key = encrypted
             row.updated_at = now
 
@@ -382,22 +388,21 @@ async def portal_settings_post(
             event_type=AuditEventType.user_llm_settings_updated,
             user_email=user.email,
             provider=provider,
-            model=model or "(default)",
         )
         await session.commit()
 
     masked_key = mask_for_display(api_key) if api_key else "…(unchanged)"
-    log.info("portal llm settings saved", user_email=user.email, provider=provider, model=model)
+    log.info("portal llm settings saved", user_email=user.email, provider=provider)
 
     return templates.TemplateResponse(
         request,
         "portal_settings.html",
         {
             "user": user,
-            "known_models": KNOWN_MODELS,
             "current_provider": provider,
-            "current_model": model,
             "masked_key": masked_key,
+            "anthropic_model": anthropic_model or "(admin not yet configured)",
+            "google_model": google_model or "(admin not yet configured)",
             "flash": "ok:Settings saved.",
         },
         headers=_NO_STORE_HEADERS,

@@ -12,9 +12,10 @@
 <div class="card">
   <h2>LLM Provider Settings</h2>
   <p class="muted">
-    Your API key is encrypted at rest and used only to run your scans.
-    It is never logged or shared. Leave the key field blank to keep the
-    currently saved key.
+    Choose your LLM provider and paste your API key.
+    Your key is encrypted at rest and used only to run your scans — it is
+    never logged or shared. Leave the key field blank to keep the currently
+    saved key. Model selection is managed by your org admin.
   </p>
   <form method="post" action="/portal/settings" autocomplete="off">
     <fieldset style="border: none; padding: 0; margin: 0 0 1.25rem;">
@@ -22,34 +23,16 @@
       <label style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; cursor: pointer;">
         <input type="radio" name="provider" value="anthropic"
                {{ 'checked' if current_provider == 'anthropic' else '' }}
-               onchange="updateModels(this.value)">
+               onchange="updateKeyHint(this.value)">
         Anthropic (Claude)
       </label>
       <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
         <input type="radio" name="provider" value="google"
                {{ 'checked' if current_provider == 'google' else '' }}
-               onchange="updateModels(this.value)">
+               onchange="updateKeyHint(this.value)">
         Google (Gemini)
       </label>
     </fieldset>
-
-    <div style="margin-bottom: 1rem;">
-      <label style="display: block; font-weight: 600; margin-bottom: 0.4rem;" for="model">Model</label>
-      <select name="model" id="model"
-              style="font: inherit; padding: 0.4rem 0.6rem; border: 1px solid var(--border);
-                     border-radius: 6px; background: var(--card); color: var(--fg); width: 100%; max-width: 380px;">
-        {% for provider_key, models in known_models.items() %}
-          {% for m in models %}
-            <option value="{{ m }}"
-                    data-provider="{{ provider_key }}"
-                    {{ 'selected' if m == current_model else '' }}
-                    style="{{ 'display:none' if provider_key != current_provider else '' }}">
-              {{ m }}{% if loop.first %} (recommended){% endif %}
-            </option>
-          {% endfor %}
-        {% endfor %}
-      </select>
-    </div>
 
     <div style="margin-bottom: 1.25rem;">
       <label style="display: block; font-weight: 600; margin-bottom: 0.4rem;" for="api_key">
@@ -68,7 +51,7 @@
                padding: 0.45rem 0.65rem; border: 1px solid var(--border);
                border-radius: 6px; background: var(--card); color: var(--fg);
                width: 100%; max-width: 480px;">
-      <p class="muted" style="margin-top: 0.35rem; font-size: 0.82rem;">
+      <p class="muted" id="key-hint" style="margin-top: 0.35rem; font-size: 0.82rem;">
         {% if current_provider == "anthropic" %}
           Find your key at
           <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com/settings/keys</a>.
@@ -84,28 +67,41 @@
 </div>
 
 <div class="card">
+  <h2 style="font-size: 0.95rem;">Model — set by your org admin</h2>
+  <p class="muted" style="font-size: 0.88rem;">
+    Your admin controls which model is used for all scans. You cannot change this.
+    Contact your security administrator to request a different model.
+  </p>
+  <dl>
+    <dt>Anthropic model</dt>
+    <dd>
+      <code>{{ anthropic_model }}</code>
+    </dd>
+    <dt>Google model</dt>
+    <dd>
+      <code>{{ google_model }}</code>
+    </dd>
+  </dl>
+</div>
+
+<div class="card">
   <h2 style="font-size: 0.95rem;">How it works</h2>
   <dl>
     <dt>Storage</dt><dd>Your key is encrypted with AES-256 (Fernet) before being written to the database. The plaintext is held in memory only for the duration of each scan request.</dd>
     <dt>Billing</dt><dd>All LLM calls are made with your key. The provider charges you directly. Visit <a href="/portal/usage">Usage</a> to see a breakdown and verify against your provider dashboard.</dd>
     <dt>Revoke</dt><dd>Delete your key from your provider's console at any time. All future scans will fail with a 401 until you update the key here.</dd>
+    <dt>Model</dt><dd>Your org admin sets the model for each provider in the Admin panel. This ensures consistent results across all users — CLI and CI alike.</dd>
   </dl>
 </div>
 
 <script>
-  const knownModels = {{ known_models | tojson }};
-  function updateModels(provider) {
-    const sel = document.getElementById("model");
-    Array.from(sel.options).forEach(opt => {
-      const show = opt.dataset.provider === provider;
-      opt.style.display = show ? "" : "none";
-      if (!show) opt.selected = false;
-    });
-    // Select first visible option
-    const first = Array.from(sel.options).find(o => o.dataset.provider === provider);
-    if (first) first.selected = true;
-
-    // Update key placeholder hint
+  const keyHints = {
+    anthropic: 'Find your key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com/settings/keys</a>.',
+    google: 'Find your key in <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console → APIs &amp; Services → Credentials</a>.',
+  };
+  function updateKeyHint(provider) {
+    const hint = document.getElementById("key-hint");
+    if (hint) hint.innerHTML = keyHints[provider] || '';
     const keyInput = document.getElementById("api_key");
     if (keyInput) {
       keyInput.placeholder = provider === "anthropic"
@@ -113,10 +109,9 @@
         : "AI… (leave blank to keep existing)";
     }
   }
-  // Initialise on load in case current_provider != first radio
   document.addEventListener("DOMContentLoaded", function() {
     const checked = document.querySelector('input[name="provider"]:checked');
-    if (checked) updateModels(checked.value);
+    if (checked) updateKeyHint(checked.value);
   });
 </script>
 {% endblock %}
