@@ -64,12 +64,18 @@ def _read_parallelism_env(default: int = 2) -> int:
 
 
 def _read_keep_confidences_env() -> frozenset[str]:
-    raw = os.environ.get("VULN_VERIFIER_KEEP_CONFIDENCES", "high")
+    # Default: high AND medium are blocking findings.
+    # Medium-confidence real vulns (e.g. os.system with a parameter, subprocess shell=True)
+    # were previously demoted to advisory_real, causing a significant recall drop.
+    # Env var VULN_VERIFIER_KEEP_CONFIDENCES overrides this for tuning.
+    raw = os.environ.get("VULN_VERIFIER_KEEP_CONFIDENCES", "high,medium")
     return frozenset(v.strip().lower() for v in raw.split(",") if v.strip())
 
 
 def _read_advisory_confidences_env() -> frozenset[str]:
-    raw = os.environ.get("ADVISORY_CONFIDENCES", "medium")
+    # Advisory lane now holds low-confidence real findings only (medium is blocking above).
+    # Env var ADVISORY_CONFIDENCES overrides.
+    raw = os.environ.get("ADVISORY_CONFIDENCES", "low")
     return frozenset(v.strip().lower() for v in raw.split(",") if v.strip())
 
 
@@ -526,6 +532,7 @@ def verify_vuln_candidates(
     claude_client: ClaudeClient,
     *,
     keep_confidences: frozenset[str] | None = None,
+    advisory_confidences: frozenset[str] | None = None,
     bundles: dict[int, ContextBundle] | None = None,
 ) -> list[VulnerabilityFinding]:
     """Run the production-mode binary verifier over all vuln candidates.
@@ -539,7 +546,11 @@ def verify_vuln_candidates(
     claude_client:
         Claude client instance.
     keep_confidences:
-        Set of confidence levels to retain (default: from env or ``{"high"}``).
+        Set of confidence levels to retain as blocking findings
+        (default: from env or ``{"high","medium"}``).
+    advisory_confidences:
+        Set of confidence levels to keep as non-blocking advisory_real findings
+        (default: from env or ``{"low"}``).
     bundles:
         Optional dict mapping ``id(candidate)`` → ``ContextBundle`` produced
         by ``ContextPackager.attach()``.  When present, context sections are
@@ -572,6 +583,7 @@ def verify_vuln_candidates(
                 claude_client,
                 effective_keep,
                 bundles,
+                advisory_confidences,
             ): batch
             for batch in batches
         }

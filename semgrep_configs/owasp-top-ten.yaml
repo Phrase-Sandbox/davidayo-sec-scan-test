@@ -94,3 +94,116 @@ rules:
     metadata:
       vuln_class: xxe
       owasp: A05:2021
+
+  - id: python-exec-input
+    pattern: exec($X)
+    message: >
+      exec() called with potentially untrusted input. This allows arbitrary
+      code execution. Replace with a safe, scoped alternative.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: code_injection
+      owasp: A03:2021
+
+  - id: python-marshal-loads
+    patterns:
+      - pattern: marshal.loads($X)
+      - pattern: marshal.load($X)
+    message: >
+      marshal.loads() deserializes arbitrary Python objects and is not safe
+      for untrusted data. Use a safer serialization format (e.g. JSON).
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: deserialization
+      owasp: A08:2021
+
+  - id: python-lxml-xxe
+    patterns:
+      - pattern: lxml.etree.parse($X)
+      - pattern: lxml.etree.fromstring($X)
+    message: >
+      lxml parsing may be vulnerable to XXE if external entity resolution is
+      enabled. Use lxml.etree.XMLParser(resolve_entities=False) and pass it
+      to the parser call.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      vuln_class: xxe
+      owasp: A05:2021
+
+  - id: python-open-redirect
+    patterns:
+      - pattern: flask.redirect($X)
+      - pattern: redirect($X)
+    message: >
+      Open redirect: redirect() called with a potentially user-controlled URL.
+      Validate the destination against an allowlist before redirecting.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      vuln_class: open_redirect
+      owasp: A01:2021
+
+  - id: js-innerhtml-assignment
+    patterns:
+      - pattern: $X.innerHTML = $Y
+      - pattern: $X.outerHTML = $Y
+    message: >
+      innerHTML/outerHTML assignment with potentially user-controlled data
+      enables cross-site scripting (XSS). Use textContent or DOMPurify.sanitize().
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      vuln_class: xss
+      owasp: A03:2021
+
+  - id: js-document-write
+    patterns:
+      - pattern: document.write($X)
+      - pattern: document.writeln($X)
+    message: >
+      document.write() with user-controlled data enables XSS. Use safe DOM
+      APIs (createElement, textContent) instead.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      vuln_class: xss
+      owasp: A03:2021
+
+  - id: js-eval-input
+    pattern: eval($X)
+    message: >
+      eval() with potentially untrusted input allows arbitrary code execution.
+      Replace with a safe, scoped alternative.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      vuln_class: code_injection
+      owasp: A03:2021
+
+  - id: js-dangerously-set-innerhtml
+    pattern: dangerouslySetInnerHTML={{ __html: $X }}
+    message: >
+      dangerouslySetInnerHTML with user-controlled data enables XSS in React.
+      Sanitize the content with DOMPurify before passing it here.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      vuln_class: xss
+      owasp: A03:2021
+
+  - id: js-child-process-exec-concat
+    patterns:
+      - pattern: require('child_process').exec($X + ...)
+      - pattern: require("child_process").exec($X + ...)
+      - pattern: exec($CMD + ...)
+    message: >
+      child_process.exec() with string concatenation allows command injection.
+      Use execFile() or spawn() with an array argument instead.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      vuln_class: command_injection
+      owasp: A03:2021

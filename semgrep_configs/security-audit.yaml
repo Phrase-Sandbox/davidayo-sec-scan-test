@@ -58,3 +58,86 @@ rules:
     metadata:
       vuln_class: insecure_random
       owasp: A02:2021
+
+  - id: python-ssl-no-verify
+    patterns:
+      - pattern: ssl.create_default_context(..., check_hostname=False, ...)
+      - pattern: ssl._create_unverified_context(...)
+      - pattern: ssl.CERT_NONE
+    message: >
+      TLS certificate verification is disabled. This allows MITM attacks.
+      Use ssl.create_default_context() without disabling verification.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: insecure_tls
+      owasp: A02:2021
+
+  - id: python-requests-no-verify
+    pattern: requests.$METHOD(..., verify=False, ...)
+    message: >
+      TLS certificate verification disabled in requests call (verify=False).
+      This allows MITM attacks. Remove verify=False or pass a CA bundle path.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: insecure_tls
+      owasp: A02:2021
+
+  - id: python-assert-auth
+    pattern: assert $X
+    message: >
+      assert statements are stripped when Python runs with -O (optimized mode).
+      Never use assert for authentication, authorization, or security checks.
+      Use explicit if/raise instead.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      vuln_class: broken_access_control
+      owasp: A01:2021
+
+  - id: python-yaml-load-unsafe
+    patterns:
+      - pattern: yaml.load($X)
+      - pattern: yaml.load($X, Loader=yaml.Loader)
+      - pattern: yaml.load($X, Loader=yaml.UnsafeLoader)
+    message: >
+      yaml.load() with the default or UnsafeLoader can deserialize arbitrary
+      Python objects, allowing remote code execution. Use yaml.safe_load()
+      or yaml.load(..., Loader=yaml.SafeLoader) instead.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: deserialization
+      owasp: A08:2021
+
+  - id: python-tempfile-insecure
+    patterns:
+      - pattern: tempfile.mktemp(...)
+      - pattern: os.tempnam(...)
+    message: >
+      Insecure temporary file creation — race condition between creation and
+      use (TOCTOU). Use tempfile.mkstemp() or tempfile.NamedTemporaryFile()
+      instead.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      vuln_class: insecure_temp_file
+      owasp: A01:2021
+
+  - id: js-localstorage-sensitive
+    patterns:
+      - pattern: localStorage.setItem("token", ...)
+      - pattern: localStorage.setItem("jwt", ...)
+      - pattern: localStorage.setItem("auth", ...)
+      - pattern: localStorage.setItem("password", ...)
+      - pattern: localStorage.setItem("secret", ...)
+    message: >
+      Storing sensitive tokens or credentials in localStorage is insecure —
+      accessible to any JS on the page (XSS risk). Use HttpOnly cookies or
+      sessionStorage with short TTLs for auth tokens.
+    languages: [javascript, typescript]
+    severity: WARNING
+    metadata:
+      vuln_class: insecure_storage
+      owasp: A02:2021

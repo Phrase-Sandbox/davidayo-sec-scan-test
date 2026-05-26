@@ -149,11 +149,30 @@ def test_real_low_dropped_on_normal_path():
 
 
 def test_verify_vuln_candidates_returns_advisory_real():
-    """End-to-end: verify_vuln_candidates returns advisory_real findings."""
+    """End-to-end: verify_vuln_candidates returns advisory_real when explicitly configured.
+
+    The code default is now keep={high,medium}, advisory={low}. To test the advisory_real
+    path we explicitly configure keep={high} and advisory={medium}.
+    """
+    candidates = [_candidate()]
+    files = {"app/views.py": "def get_record(id): return db.query(id)"}
+    client = _mock_client_response("real", "medium")
+
+    results = verify_vuln_candidates(
+        candidates, files, client,
+        keep_confidences=frozenset({"high"}),
+        advisory_confidences=frozenset({"medium"}),
+    )
+    advisory = [f for f in results if f.verification_status == VerificationStatus.advisory_real]
+    assert len(advisory) == 1
+
+
+def test_verify_vuln_candidates_medium_verified_by_default():
+    """With the new default threshold (keep={high,medium}), a real/medium finding is verified."""
     candidates = [_candidate()]
     files = {"app/views.py": "def get_record(id): return db.query(id)"}
     client = _mock_client_response("real", "medium")
 
     results = verify_vuln_candidates(candidates, files, client)
-    advisory = [f for f in results if f.verification_status == VerificationStatus.advisory_real]
-    assert len(advisory) == 1
+    verified = [f for f in results if f.verification_status == VerificationStatus.verified]
+    assert len(verified) == 1

@@ -141,10 +141,11 @@ def test_failsafe_on_unexpected_exception() -> None:
 # ---------------------------------------------------------------------------
 
 def test_threshold_high_only_real_medium_becomes_advisory() -> None:
-    """With KEEP_CONFIDENCES={high}, a real/medium finding becomes advisory_real (not dropped).
+    """With KEEP_CONFIDENCES={high} and ADVISORY_CONFIDENCES={medium},
+    a real/medium finding becomes advisory_real (non-blocking).
 
-    V2 change: the advisory lane keeps real+medium findings with
-    verification_status=advisory_real instead of dropping them.
+    Explicitly passes advisory_confidences because the code default changed
+    to {"low"} when the keep set was widened to {"high","medium"}.
     """
     mock_client = MagicMock()
     mock_client.ask.return_value = (
@@ -153,9 +154,11 @@ def test_threshold_high_only_real_medium_becomes_advisory() -> None:
 
     candidates = [_make_candidate()]
     result = verify_vuln_candidates(
-        candidates, {}, mock_client, keep_confidences=frozenset({"high"})
+        candidates, {}, mock_client,
+        keep_confidences=frozenset({"high"}),
+        advisory_confidences=frozenset({"medium"}),
     )
-    # V2: kept as advisory_real (non-blocking), not dropped.
+    # Kept as advisory_real (non-blocking), not dropped.
     assert len(result) == 1
     assert result[0].verification_status == VerificationStatus.advisory_real
 
