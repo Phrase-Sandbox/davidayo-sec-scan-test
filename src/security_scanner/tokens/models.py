@@ -17,14 +17,14 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Boolean,
-    ForeignKey,
-    Integer,
-    JSON,
-    LargeBinary,
     DateTime,
     Enum,
+    ForeignKey,
+    Integer,
+    LargeBinary,
     String,
     Text,
     Uuid,

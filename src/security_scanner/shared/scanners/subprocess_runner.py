@@ -24,7 +24,6 @@ from __future__ import annotations
 import asyncio
 import os
 import platform
-import sys
 from pathlib import Path
 
 from security_scanner.shared.logging_util import get_logger
@@ -63,7 +62,7 @@ def _set_subprocess_rlimits() -> None:  # pragma: no cover — OS-level, not in 
         resource.setrlimit(resource.RLIMIT_CPU, (120, 120))
         # Open file descriptors.
         resource.setrlimit(resource.RLIMIT_NOFILE, (1024, 1024))
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001, S110
         pass
 
 
@@ -129,7 +128,7 @@ async def run_scanner(
                 timeout=timeout,
             )
             await proc.wait()
-        except asyncio.TimeoutError:
+        except TimeoutError as exc:
             try:
                 proc.kill()
             except ProcessLookupError:
@@ -137,7 +136,7 @@ async def run_scanner(
             await proc.wait()
             raise ScannerTimeout(
                 f"Scanner command timed out after {timeout}s: {cmd[0]!r}"
-            )
+            ) from exc
 
     if len(stdout_bytes) >= max_output_bytes:
         log.warning(

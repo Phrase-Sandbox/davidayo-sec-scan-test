@@ -259,3 +259,31 @@ def test_pipeline_called_with_request_body_values(app):
     assert call.kwargs["base"] == "abc"
     assert call.kwargs["head"] == "def"
     assert call.kwargs["triggered_by"] == body["triggered_by"]
+
+
+# --- GET /agent/config/slack-webhook ---------------------------------------
+
+
+def test_slack_webhook_config_returns_env_fallback(app, monkeypatch):
+    """When no org settings exist, the endpoint returns the env-var webhook."""
+    monkeypatch.setenv("SLACK_WEBHOOK_URL", "https://hooks.slack.com/services/test/env")
+    client = TestClient(app)
+    response = client.get("/agent/config/slack-webhook", headers=_auth_header())
+    assert response.status_code == 200
+    assert response.json()["webhook_url"] == "https://hooks.slack.com/services/test/env"
+
+
+def test_slack_webhook_config_returns_null_when_not_configured(app, monkeypatch):
+    """When neither DB nor env var is set, webhook_url is null."""
+    monkeypatch.delenv("SLACK_WEBHOOK_URL", raising=False)
+    client = TestClient(app)
+    response = client.get("/agent/config/slack-webhook", headers=_auth_header())
+    assert response.status_code == 200
+    assert response.json()["webhook_url"] is None
+
+
+def test_slack_webhook_config_requires_auth(app):
+    """Unauthenticated requests are rejected with 401."""
+    client = TestClient(app)
+    response = client.get("/agent/config/slack-webhook")
+    assert response.status_code == 401

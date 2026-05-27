@@ -376,7 +376,9 @@ async def admin_org_settings_post(
             enc_slack = encrypt(slack_webhook)
 
         now = datetime.now(UTC)
-        provider_enum = LLMProvider.anthropic if default_provider == "anthropic" else LLMProvider.google
+        provider_enum = (
+            LLMProvider.anthropic if default_provider == "anthropic" else LLMProvider.google
+        )
         new_row = OrgSettings(
             encrypted_anthropic_key=enc_anthropic,
             encrypted_google_key=enc_google,
@@ -397,7 +399,9 @@ async def admin_org_settings_post(
             changed_fields.append("google_key")
         if slack_webhook:
             changed_fields.append("slack_webhook")
-        changed_fields.extend(["default_provider", "anthropic_model", "google_model", "bypass_slack_mode"])
+        changed_fields.extend(
+            ["default_provider", "anthropic_model", "google_model", "bypass_slack_mode"]
+        )
 
         await token_audit.record(
             session,
@@ -453,7 +457,9 @@ async def admin_org_settings_post(
             "current_google_model": google_model,
             "current_bypass_slack_mode": bypass_slack_mode,
             "known_models": KNOWN_MODELS,
-            "flash": "ok:Org settings saved. All CI scans will use the new configuration immediately.",
+            "flash": (
+                "ok:Org settings saved. All CI scans will use the new configuration immediately."
+            ),
         },
         headers=_NO_STORE_HEADERS,
     )
@@ -530,7 +536,7 @@ async def admin_test_slack(request: Request, admin: _AdminDep) -> HTMLResponse:
         return templates.TemplateResponse(
             request,
             "admin_org_settings.html",
-            {**ctx, "flash": "error:No Slack webhook configured. Save a webhook URL in the form below first."},
+            {**ctx, "flash": "error:No Slack webhook configured. Save a webhook URL below first."},
             headers=_NO_STORE_HEADERS,
         )
 
@@ -750,7 +756,10 @@ async def admin_ci_token_rotate(request: Request, admin: _AdminDep) -> HTMLRespo
             "user": admin,
             "active": new_row,
             "new_token": new_plaintext,
-            "flash": "ok:CI token rotated. Copy the new token below and update the GitHub Actions secret SCANNER_API_TOKEN immediately.",
+            "flash": (
+                "ok:CI token rotated. Copy the new token below and "
+                "update the GitHub Actions secret SCANNER_API_TOKEN immediately."
+            ),
         },
         headers=_NO_STORE_HEADERS,
     )

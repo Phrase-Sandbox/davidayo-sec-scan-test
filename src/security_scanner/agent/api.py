@@ -76,6 +76,7 @@ async def _load_active_org_settings():
     """
     try:
         from sqlalchemy import select  # noqa: PLC0415
+
         from security_scanner.tokens.db import get_session_factory  # noqa: PLC0415
         from security_scanner.tokens.models import OrgSettings  # noqa: PLC0415
 
@@ -217,6 +218,33 @@ async def scan(
     return result
 
 
+class SlackConfigResponse(BaseModel):
+    """Response from ``GET /agent/config/slack-webhook``."""
+
+    webhook_url: str | None
+
+
+@router.get("/config/slack-webhook", response_model=SlackConfigResponse)
+async def get_slack_webhook_config(
+    _token: _TokenDep,
+    settings: _SettingsDep,
+) -> SlackConfigResponse:
+    """Return the active Slack webhook URL so CI can fetch it at runtime.
+
+    Resolution order:
+    1. Decrypted ``org_settings.encrypted_slack_webhook`` (set via admin portal).
+    2. ``SLACK_WEBHOOK_URL`` environment variable (scanner host config).
+    3. ``null`` — caller should fall back to its own local default.
+
+    The CI pipeline calls this with its scanner bearer token so the webhook
+    URL is managed in one place (the admin portal) rather than hardcoded in
+    ``scanner.yml``.
+    """
+    org_row = await _load_active_org_settings()
+    webhook_url = _resolve_slack_webhook(org_row) or settings.SLACK_WEBHOOK_URL
+    return SlackConfigResponse(webhook_url=webhook_url)
+
+
 class BypassRequest(BaseModel):
     """Body of ``POST /agent/bypass``.
 
@@ -229,7 +257,7 @@ class BypassRequest(BaseModel):
     developer: str
     commit_sha: str
     justification: str | None = None
-    caller_repo: str | None = None  # github.repository from CI context; used to distinguish admin vs dev bypass
+    caller_repo: str | None = None  # github.repository; distinguishes admin vs dev bypass
 
 
 @router.post("/bypass", response_model=ScanResult)

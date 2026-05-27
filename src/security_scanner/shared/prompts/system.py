@@ -102,7 +102,7 @@ Each <finding> object MUST contain:
       Server-Side Request Forgery                              -> A10:2021
       LLM-specific (prompt injection, tool misuse, training
         data poisoning, data exfil via model output)           -> LLM01:2025 … LLM10:2025
-      Hardcoded secret detected by the stripper                -> SECRET-001 (never emit this — set by code)
+      Hardcoded secret detected by the stripper                -> SECRET-001 (never emit this — set by code)  # noqa: E501
 
   When a finding spans more than one category, pick the most specific entry
   (e.g. CSRF -> A01:2021, not A05:2021). Do not invent IDs outside this table.

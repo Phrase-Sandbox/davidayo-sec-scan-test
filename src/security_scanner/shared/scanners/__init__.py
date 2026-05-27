@@ -36,7 +36,7 @@ __all__ = ["run_layer1"]
 # Synthetic candidate generation helpers
 # ---------------------------------------------------------------------------
 
-import re as _re
+import re as _re  # noqa: E402
 
 _SYNTH_TOOL = "upload_synth"
 

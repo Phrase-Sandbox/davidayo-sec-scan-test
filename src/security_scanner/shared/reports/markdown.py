@@ -238,7 +238,7 @@ def _fmt_uuid(value: UUID) -> str:
     return str(value)
 
 
-import re as _re
+import re as _re  # noqa: E402
 
 _UPLOAD_FIELD_RE = _re.compile(
     r"Validation:\s*([^—]+)"

@@ -95,3 +95,11 @@ ignore = ["S101"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S"]
+# Long lines in prompt files are inside triple-quoted strings; noqa directives
+# inside string literals are not processed by ruff.
+"src/security_scanner/shared/prompts/system.py" = ["E501"]
+"src/security_scanner/shared/verification/prompts.py" = ["E501"]
+# Intentionally vulnerable fixtures used as truth-set test data — formatting
+# changes would obscure the deliberate security defects being tested.
+"tests/fixtures/vuln_comprehensive.py" = ["UP031", "UP030", "S608"]
+"tests/integration/truthset/**/*.py" = ["UP031", "UP030", "F841", "S608", "S106"]

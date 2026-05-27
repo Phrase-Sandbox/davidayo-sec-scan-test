@@ -34,7 +34,6 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-
 from sqlalchemy import desc, select
 
 from security_scanner.shared.logging_util import get_logger
@@ -284,7 +283,7 @@ async def portal_settings_get(request: Request, user: _UserDep) -> HTMLResponse:
     masked_key: str | None = None
     current_provider: str = "anthropic"
     if settings_row is not None:
-        from security_scanner.tokens.crypto import mask_for_display, decrypt  # noqa: PLC0415
+        from security_scanner.tokens.crypto import decrypt, mask_for_display  # noqa: PLC0415
         try:
             plaintext = decrypt(settings_row.encrypted_api_key)
             masked_key = mask_for_display(plaintext)
@@ -465,8 +464,10 @@ async def portal_scan_detail(
     import uuid  # noqa: PLC0415
     try:
         scan_uuid = uuid.UUID(scan_id)
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid scan ID.")
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Invalid scan ID."
+        ) from exc
 
     factory = get_session_factory()
     async with factory() as session:
