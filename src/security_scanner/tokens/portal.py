@@ -48,7 +48,9 @@ from security_scanner.tokens.models import (
     LLMUsageMonthly,
     OrgSettings,
     ScanRecord,
+    User,
     UserLLMSettings,
+    UserRole,
 )
 
 log = get_logger(__name__)
@@ -134,17 +136,27 @@ async def portal_index(request: Request, user: _UserDep) -> HTMLResponse:
     """Show the caller's current token status.
 
     Admins are redirected to the admin panel — they have a separate UI.
-    Regular portal users see their token management page.
+    Role is determined by the DB ``User.role`` column (app-managed), not
+    Okta groups. For local dev ``ADMIN_LOCAL_BYPASS=true`` always redirects
+    the bypass user to admin.
     """
-    # Role-based landing: admins belong in the admin panel.
-    if get_settings().ADMIN_GROUP_NAME in user.groups:
+    settings = get_settings()
+
+    # Local dev bypass user is always admin.
+    if settings.ADMIN_LOCAL_BYPASS:
         return RedirectResponse(url="/admin/tokens", status_code=302)
 
     factory = get_session_factory()
     async with factory() as session:
+        # Check DB role first — admins belong in the admin panel.
+        db_user = await session.get(User, user.email)
+        if db_user is not None and db_user.role == UserRole.admin:
+            return RedirectResponse(url="/admin/tokens", status_code=302)
+        # No DB row yet (first visit before token issue) → show portal.
         active = await token_registry.get_active_for_user(
             session, user_email=user.email
         )
+
     return templates.TemplateResponse(
         request,
         "portal_index.html",

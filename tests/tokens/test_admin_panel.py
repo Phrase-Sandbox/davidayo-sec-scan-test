@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+from datetime import UTC, datetime
 
 import pytest
 from fastapi import FastAPI
@@ -14,7 +15,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from security_scanner.tokens import registry as token_registry
 from security_scanner.tokens.admin_panel import router as admin_router
 from security_scanner.tokens.db import Base
-from security_scanner.tokens.models import AuditEvent, AuditEventType, LocalScanToken
+from security_scanner.tokens.models import AuditEvent, AuditEventType, LocalScanToken, User, UserRole
 
 _ADMIN_GROUP = "security-scanner-admins"
 
@@ -42,6 +43,21 @@ async def session_factory(monkeypatch):
     monkeypatch.setattr(
         "security_scanner.tokens.admin_panel.get_session_factory", lambda: factory
     )
+    # require_admin (in auth.py) now checks DB role — patch its factory too so
+    # tests don't try to connect to the fake DATABASE_URL.
+    monkeypatch.setattr(
+        "security_scanner.tokens.auth.get_session_factory", lambda: factory
+    )
+    # Seed the default admin user used by _admin_headers() so require_admin
+    # finds role=admin in the DB (Okta groups are no longer used for auth).
+    async with factory() as session:
+        session.add(User(
+            email="admin@phrase.com",
+            role=UserRole.admin,
+            is_active=True,
+            created_at=datetime.now(UTC),
+        ))
+        await session.commit()
     try:
         yield factory
     finally:
@@ -338,7 +354,7 @@ async def test_org_settings_post_preserves_webhook_when_blank(client, session_fa
     )
 
 
-async def test_org_settings_post_shows_slack_test_button_after_save(client, session_factory, _crypto):
+async def test_org_settings_post_shows_slack_test_button_after_save(client, session_factory, _crypto):  # noqa: E501
     """Once a webhook is saved the test-slack button appears in the response."""
     r = client.post(
         "/admin/org-settings",
@@ -352,7 +368,7 @@ async def test_org_settings_post_shows_slack_test_button_after_save(client, sess
     assert "Send test message" in r.text
 
 
-async def test_org_settings_test_slack_no_webhook_returns_error(client, session_factory, _crypto, monkeypatch):
+async def test_org_settings_test_slack_no_webhook_returns_error(client, session_factory, _crypto, monkeypatch):  # noqa: E501
     """Test-slack with no webhook in DB and no env var renders an error flash."""
     monkeypatch.delenv("SLACK_WEBHOOK_URL", raising=False)
 
@@ -370,7 +386,7 @@ async def test_org_settings_test_slack_no_webhook_returns_error(client, session_
     assert called == []  # _post_to_slack was never invoked
 
 
-async def test_org_settings_test_slack_success_with_db_webhook(client, session_factory, _crypto, monkeypatch):
+async def test_org_settings_test_slack_success_with_db_webhook(client, session_factory, _crypto, monkeypatch):  # noqa: E501
     """Test-slack uses the DB-stored webhook and renders a success flash."""
     # Save a webhook first
     client.post(

@@ -57,6 +57,8 @@ class AuditEventType(enum.StrEnum):
     org_config_changed = "org_config_changed"
     ci_token_rotated = "ci_token_rotated"  # noqa: S105
     slack_webhook_configured = "slack_webhook_configured"  # noqa: S105
+    user_promoted = "user_promoted"    # role user → admin (app-managed)
+    user_demoted = "user_demoted"      # role admin → user (app-managed)
 
 
 class UserRole(enum.StrEnum):

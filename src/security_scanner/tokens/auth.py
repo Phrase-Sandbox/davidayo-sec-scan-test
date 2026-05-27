@@ -31,6 +31,8 @@ from fastapi import HTTPException, Request, status
 
 from security_scanner.shared.config import get_settings
 from security_scanner.shared.logging_util import get_logger
+from security_scanner.tokens.db import get_session_factory
+from security_scanner.tokens.models import User, UserRole
 
 log = get_logger(__name__)
 
@@ -148,19 +150,36 @@ async def require_phrase_user(request: Request) -> PhraseUser:
 
 
 async def require_admin(request: Request) -> PhraseUser:
-    """Same as :func:`require_phrase_user` plus a group membership check."""
+    """Same as :func:`require_phrase_user` plus a DB role check.
+
+    Priority:
+    1. ``ADMIN_LOCAL_BYPASS`` — bypass user is always admin (local dev only).
+    2. ``User.role == UserRole.admin`` in the DB — source of truth in production.
+
+    Okta groups are NOT used for admin determination. Roles are assigned
+    in-app via the ``/admin/users`` promote/demote UI.
+    """
+    settings = get_settings()
     user = await require_phrase_user(request)
-    admin_group = get_settings().ADMIN_GROUP_NAME
-    if admin_group not in user.groups:
-        # Log at info — not error — because this is a legitimate 403 from a
-        # non-admin user, not a system fault.
+
+    # Bypass user is always admin — no DB hit needed.
+    if settings.ADMIN_LOCAL_BYPASS:
+        return user
+
+    # DB role check — single SELECT by primary key.
+    factory = get_session_factory()
+    async with factory() as session:
+        row = await session.get(User, user.email)
+
+    if row is None or row.role != UserRole.admin:
+        # Log at info — this is a legitimate 403, not a system fault.
         log.info(
             "admin route forbidden",
             user_email=user.email,
-            required_group=admin_group,
+            reason="role not admin in DB",
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin group membership required.",
+            detail="Admin role required.",
         )
     return user

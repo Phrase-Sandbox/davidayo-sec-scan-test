@@ -43,6 +43,7 @@ from security_scanner.tokens.models import (
     OrgSettings,
     ScanRecord,
     User,
+    UserRole,
 )
 
 log = get_logger(__name__)
@@ -691,6 +692,76 @@ async def admin_revoke_user_tokens(
         target_email=email,
         revoked=revoked,
     )
+    return await admin_users(request, admin, page=1, q=email)
+
+
+@router.post("/users/{email}/promote", response_class=HTMLResponse)
+async def admin_promote_user(
+    request: Request,
+    admin: _AdminDep,
+    email: str,
+) -> HTMLResponse:
+    """Set ``role=admin``.
+
+    The user will be redirected to ``/admin/tokens`` on their next login.
+    Target email is validated against DB (404 if not found) — prevents IDOR.
+    """
+    factory = get_session_factory()
+    async with factory() as session:
+        stmt = select(User).where(User.email == email)
+        user_row = (await session.execute(stmt)).scalar_one_or_none()
+        if user_row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="User not found."
+            )
+        user_row.role = UserRole.admin
+        await token_audit.record(
+            session,
+            event_type=AuditEventType.user_promoted,
+            user_email=email,
+            actor_email=admin.email,
+        )
+        await session.commit()
+
+    log.info("admin promoted user to admin", actor_email=admin.email, target_email=email)
+    return await admin_users(request, admin, page=1, q=email)
+
+
+@router.post("/users/{email}/demote", response_class=HTMLResponse)
+async def admin_demote_user(
+    request: Request,
+    admin: _AdminDep,
+    email: str,
+) -> HTMLResponse:
+    """Set ``role=user``.
+
+    Blocks self-demotion to prevent admin lockout. Target email is validated
+    against DB (404 if not found) — prevents IDOR.
+    """
+    # Lockout guard: an admin cannot remove their own admin role.
+    if email == admin.email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot remove your own admin role.",
+        )
+    factory = get_session_factory()
+    async with factory() as session:
+        stmt = select(User).where(User.email == email)
+        user_row = (await session.execute(stmt)).scalar_one_or_none()
+        if user_row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="User not found."
+            )
+        user_row.role = UserRole.user
+        await token_audit.record(
+            session,
+            event_type=AuditEventType.user_demoted,
+            user_email=email,
+            actor_email=admin.email,
+        )
+        await session.commit()
+
+    log.info("admin demoted user from admin", actor_email=admin.email, target_email=email)
     return await admin_users(request, admin, page=1, q=email)
 
 
