@@ -27,7 +27,7 @@
 {% set total_out = namespace(v=0) %}
 {% set total_cost = namespace(v=0.0) %}
 {% for entry in this_month_rows %}
-  {% set total_calls.v = total_calls.v + entry.row.n_llm_calls %}
+  {% set total_calls.v = total_calls.v + entry.row.scan_count %}
   {% set total_in.v    = total_in.v    + entry.row.input_tokens %}
   {% set total_out.v   = total_out.v   + entry.row.output_tokens %}
   {% set total_cost.v  = total_cost.v  + entry.est_cost %}
@@ -43,7 +43,7 @@
   <div class="stat-grid" style="margin-bottom: 1.25rem;">
     <div class="stat-card">
       <div class="stat-num">{{ "{:,}".format(total_calls.v) }}</div>
-      <div class="stat-label">LLM calls</div>
+      <div class="stat-label">Scans</div>
     </div>
     <div class="stat-card">
       <div class="stat-num">{{ "{:,}".format(total_in.v) }}</div>
@@ -64,7 +64,7 @@
       <tr>
         <th>Provider</th>
         <th>Model</th>
-        <th style="text-align: right;">LLM calls</th>
+        <th style="text-align: right;">Scans</th>
         <th style="text-align: right;">Input tokens</th>
         <th style="text-align: right;">Output tokens</th>
         <th style="text-align: right;">Est. cost (USD)</th>
@@ -75,7 +75,7 @@
       <tr>
         <td>{{ entry.row.provider }}</td>
         <td class="mono" style="font-size: 0.83rem;">{{ entry.row.model or "—" }}</td>
-        <td style="text-align: right;">{{ "{:,}".format(entry.row.n_llm_calls) }}</td>
+        <td style="text-align: right;">{{ "{:,}".format(entry.row.scan_count) }}</td>
         <td style="text-align: right;">{{ "{:,}".format(entry.row.input_tokens) }}</td>
         <td style="text-align: right;">{{ "{:,}".format(entry.row.output_tokens) }}</td>
         <td style="text-align: right;">
@@ -105,7 +105,7 @@
 {% set lm_out = namespace(v=0) %}
 {% set lm_cost = namespace(v=0.0) %}
 {% for entry in last_month_rows %}
-  {% set lm_calls.v = lm_calls.v + entry.row.n_llm_calls %}
+  {% set lm_calls.v = lm_calls.v + entry.row.scan_count %}
   {% set lm_in.v    = lm_in.v    + entry.row.input_tokens %}
   {% set lm_out.v   = lm_out.v   + entry.row.output_tokens %}
   {% set lm_cost.v  = lm_cost.v  + entry.est_cost %}
@@ -128,7 +128,7 @@
         <tr>
           <th>Provider</th>
           <th>Model</th>
-          <th style="text-align: right;">LLM calls</th>
+          <th style="text-align: right;">Scans</th>
           <th style="text-align: right;">Input tokens</th>
           <th style="text-align: right;">Output tokens</th>
           <th style="text-align: right;">Est. cost (USD)</th>
@@ -139,7 +139,7 @@
         <tr>
           <td>{{ entry.row.provider }}</td>
           <td class="mono" style="font-size: 0.83rem;">{{ entry.row.model or "—" }}</td>
-          <td style="text-align: right;">{{ "{:,}".format(entry.row.n_llm_calls) }}</td>
+          <td style="text-align: right;">{{ "{:,}".format(entry.row.scan_count) }}</td>
           <td style="text-align: right;">{{ "{:,}".format(entry.row.input_tokens) }}</td>
           <td style="text-align: right;">{{ "{:,}".format(entry.row.output_tokens) }}</td>
           <td style="text-align: right;">
