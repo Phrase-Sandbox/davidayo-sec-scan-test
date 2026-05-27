@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import desc, func, select
 
@@ -48,6 +48,13 @@ from security_scanner.tokens.models import (
 log = get_logger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+@router.get("/", include_in_schema=False)
+@router.get("", include_in_schema=False)
+async def admin_root() -> RedirectResponse:
+    """Redirect bare /admin and /admin/ to the token registry."""
+    return RedirectResponse(url="/admin/tokens", status_code=302)
 
 # Admin-managed model options surfaced in the /admin/org-settings dropdowns.
 # First entry per provider is the recommended default.
