@@ -206,6 +206,13 @@ class OrgSettings(Base):
     encrypted_slack_webhook: Mapped[bytes | None] = mapped_column(
         LargeBinary(), nullable=True
     )
+    # Bypass Slack notification mode (migration 0005).
+    # "dev_only" (default) — notify only when a dev repo triggers bypass.
+    # "all"      — notify on every bypass (pre-0005 hard-coded behaviour).
+    # "none"     — never send a Slack alert on bypass.
+    bypass_slack_mode: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default="dev_only"
+    )
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_by_email: Mapped[str] = mapped_column(String(320), nullable=False)
 

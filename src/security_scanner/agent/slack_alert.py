@@ -28,6 +28,11 @@ log = get_logger(__name__)
 
 HTTP_TIMEOUT_SECONDS = 5.0
 
+# The GitHub repo name of the master scanner pipeline.  A bypass originating
+# from this repo is considered an "admin bypass" and is suppressed in
+# "dev_only" mode.  Change this constant if the pipeline repo is ever renamed.
+MASTER_PIPELINE_REPO = "Phrase-Sandbox/master-scanner-pipeline"
+
 
 async def _post_to_slack(
     text: str,
@@ -80,6 +85,8 @@ async def send_bypass_alert(
     commit_sha: str,
     justification: str | None = None,
     *,
+    caller_repo: str | None = None,
+    bypass_slack_mode: str = "all",
     http_client: httpx.AsyncClient | None = None,
     webhook_url: str | None = None,
 ) -> None:
@@ -91,7 +98,32 @@ async def send_bypass_alert(
 
     Pass ``webhook_url`` to override the ``SLACK_WEBHOOK_URL`` env var with a
     DB-stored value (e.g. decrypted from ``OrgSettings.encrypted_slack_webhook``).
+
+    ``bypass_slack_mode`` (from ``OrgSettings.bypass_slack_mode``) controls
+    suppression:
+    - ``"all"``      — always notify (default when caller omits the param,
+                       safest — over-notifies rather than under-notifies).
+    - ``"dev_only"`` — suppress if ``caller_repo`` matches MASTER_PIPELINE_REPO
+                       (i.e. an admin/pipeline-level bypass, not a dev-repo bypass).
+    - ``"none"``     — always suppress.
     """
+    if bypass_slack_mode == "none":
+        log.info(
+            "bypass slack alert suppressed",
+            reason="mode=none",
+            developer=developer,
+            commit_sha=commit_sha,
+        )
+        return
+    if bypass_slack_mode == "dev_only" and caller_repo == MASTER_PIPELINE_REPO:
+        log.info(
+            "bypass slack alert suppressed",
+            reason="admin bypass (mode=dev_only)",
+            caller_repo=caller_repo,
+            developer=developer,
+            commit_sha=commit_sha,
+        )
+        return
     await _post_to_slack(
         _build_message_text(result, developer, commit_sha, justification),
         kind="bypass",

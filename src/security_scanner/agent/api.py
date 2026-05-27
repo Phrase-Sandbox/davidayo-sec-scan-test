@@ -229,6 +229,7 @@ class BypassRequest(BaseModel):
     developer: str
     commit_sha: str
     justification: str | None = None
+    caller_repo: str | None = None  # github.repository from CI context; used to distinguish admin vs dev bypass
 
 
 @router.post("/bypass", response_model=ScanResult)
@@ -272,11 +273,14 @@ async def bypass(body: BypassRequest, _token: _TokenDep) -> ScanResult:
         justification_provided=bool(body.justification),
     )
     org_row = await _load_active_org_settings()
+    bypass_slack_mode = getattr(org_row, "bypass_slack_mode", "dev_only") if org_row else "dev_only"
     await send_bypass_alert(
         bypassed,
         body.developer,
         body.commit_sha,
         body.justification,
+        caller_repo=body.caller_repo,
+        bypass_slack_mode=bypass_slack_mode,
         webhook_url=_resolve_slack_webhook(org_row),
     )
     return bypassed

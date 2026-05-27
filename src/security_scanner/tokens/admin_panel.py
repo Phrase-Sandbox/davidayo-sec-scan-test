@@ -299,6 +299,10 @@ async def admin_org_settings_get(request: Request, admin: _AdminDep) -> HTMLResp
         current_anthropic_model = org_row.anthropic_model
         current_google_model = org_row.google_model
 
+    current_bypass_slack_mode = (
+        getattr(org_row, "bypass_slack_mode", "dev_only") if org_row else "dev_only"
+    )
+
     return templates.TemplateResponse(
         request,
         "admin_org_settings.html",
@@ -310,6 +314,7 @@ async def admin_org_settings_get(request: Request, admin: _AdminDep) -> HTMLResp
             "current_provider": current_provider,
             "current_anthropic_model": current_anthropic_model,
             "current_google_model": current_google_model,
+            "current_bypass_slack_mode": current_bypass_slack_mode,
             "known_models": KNOWN_MODELS,
             "flash": None,
         },
@@ -327,6 +332,7 @@ async def admin_org_settings_post(
     anthropic_key: Annotated[str, Form()] = "",
     google_key: Annotated[str, Form()] = "",
     slack_webhook: Annotated[str, Form()] = "",
+    bypass_slack_mode: Annotated[str, Form()] = "dev_only",
 ) -> HTMLResponse:
     """Save a new org_settings row (version-bumped, immutable history).
 
@@ -340,11 +346,17 @@ async def admin_org_settings_post(
     anthropic_model = anthropic_model.strip() or None
     google_model = google_model.strip() or None
     slack_webhook = slack_webhook.strip()
+    bypass_slack_mode = bypass_slack_mode.strip()
 
     if default_provider not in ("anthropic", "google"):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Unknown provider {default_provider!r}",
+        )
+    if bypass_slack_mode not in ("dev_only", "all", "none"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Unknown bypass_slack_mode {bypass_slack_mode!r}",
         )
 
     factory = get_session_factory()
@@ -372,6 +384,7 @@ async def admin_org_settings_post(
             default_provider=provider_enum,
             anthropic_model=anthropic_model,
             google_model=google_model,
+            bypass_slack_mode=bypass_slack_mode,
             updated_at=now,
             updated_by_email=admin.email,
         )
@@ -384,7 +397,7 @@ async def admin_org_settings_post(
             changed_fields.append("google_key")
         if slack_webhook:
             changed_fields.append("slack_webhook")
-        changed_fields.extend(["default_provider", "anthropic_model", "google_model"])
+        changed_fields.extend(["default_provider", "anthropic_model", "google_model", "bypass_slack_mode"])
 
         await token_audit.record(
             session,
@@ -395,6 +408,7 @@ async def admin_org_settings_post(
             anthropic_model=anthropic_model or "(none)",
             google_model=google_model or "(none)",
             slack_webhook_configured=bool(enc_slack),
+            bypass_slack_mode=bypass_slack_mode,
         )
         await session.commit()
 
@@ -424,6 +438,7 @@ async def admin_org_settings_post(
         anthropic_model=anthropic_model,
         google_model=google_model,
         slack_webhook_set=bool(enc_slack),
+        bypass_slack_mode=bypass_slack_mode,
     )
     return templates.TemplateResponse(
         request,
@@ -436,6 +451,7 @@ async def admin_org_settings_post(
             "current_provider": default_provider,
             "current_anthropic_model": anthropic_model,
             "current_google_model": google_model,
+            "current_bypass_slack_mode": bypass_slack_mode,
             "known_models": KNOWN_MODELS,
             "flash": "ok:Org settings saved. All CI scans will use the new configuration immediately.",
         },
@@ -491,6 +507,10 @@ async def admin_test_slack(request: Request, admin: _AdminDep) -> HTMLResponse:
         current_anthropic_model = org_row.anthropic_model
         current_google_model = org_row.google_model
 
+    current_bypass_slack_mode_ts = (
+        getattr(org_row, "bypass_slack_mode", "dev_only") if org_row else "dev_only"
+    )
+
     if not webhook_url:
         webhook_url = get_settings().SLACK_WEBHOOK_URL
 
@@ -502,6 +522,7 @@ async def admin_test_slack(request: Request, admin: _AdminDep) -> HTMLResponse:
         "current_provider": current_provider,
         "current_anthropic_model": current_anthropic_model,
         "current_google_model": current_google_model,
+        "current_bypass_slack_mode": current_bypass_slack_mode_ts,
         "known_models": KNOWN_MODELS,
     }
 

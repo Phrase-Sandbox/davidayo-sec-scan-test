@@ -37,6 +37,16 @@
       {% if masked_slack %}<code>{{ masked_slack }}</code> <span class="ok">✓ set</span>
       {% else %}<span class="muted">not set</span>{% endif %}
     </dd>
+    <dt>Bypass Slack notifications</dt>
+    <dd>
+      {% if current_bypass_slack_mode == 'dev_only' %}
+        Developer bypasses only <span class="muted">(admin bypasses suppressed)</span>
+      {% elif current_bypass_slack_mode == 'none' %}
+        <span class="muted">Disabled</span>
+      {% else %}
+        All bypasses
+      {% endif %}
+    </dd>
   </dl>
 </div>
 
@@ -147,6 +157,30 @@
              style="font: 14px/1 ui-monospace, 'SF Mono', Menlo, monospace;
                     padding: 0.45rem 0.65rem; border: 1px solid var(--border);
                     border-radius: 6px; background: var(--card); color: var(--fg); width: 100%; max-width: 540px;">
+    </div>
+
+    <div style="margin-bottom: 1.5rem;">
+      <label style="display: block; font-weight: 600; margin-bottom: 0.4rem;" for="bypass_slack_mode">
+        Bypass Slack notifications
+      </label>
+      <p class="muted" style="font-size: 0.85rem; margin: 0 0 0.4rem;">
+        Controls when a Slack alert fires on scanner bypass.
+        <strong>Developer bypasses only</strong> means admin changes to the master pipeline
+        are silently logged but do not ping the team.
+      </p>
+      <select name="bypass_slack_mode" id="bypass_slack_mode"
+              style="font: inherit; padding: 0.4rem 0.6rem; border: 1px solid var(--border);
+                     border-radius: 6px; background: var(--card); color: var(--fg); width: 100%; max-width: 360px;">
+        <option value="dev_only" {{ 'selected' if current_bypass_slack_mode == 'dev_only' else '' }}>
+          Developer bypasses only (recommended)
+        </option>
+        <option value="all" {{ 'selected' if current_bypass_slack_mode == 'all' else '' }}>
+          All bypasses
+        </option>
+        <option value="none" {{ 'selected' if current_bypass_slack_mode == 'none' else '' }}>
+          Never notify
+        </option>
+      </select>
     </div>
 
     <button type="submit" class="btn btn-primary">Save org settings</button>
