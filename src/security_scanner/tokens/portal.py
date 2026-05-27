@@ -36,6 +36,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import desc, select
 
+from security_scanner.shared.config import get_settings
 from security_scanner.shared.logging_util import get_logger
 from security_scanner.tokens import audit as token_audit
 from security_scanner.tokens import registry as token_registry
@@ -92,12 +93,53 @@ def _valid_hostname(hostname: str) -> bool:
     return all(c.isalnum() or c in "-._" for c in hostname)
 
 
+# --- Login / logout (Okta-wired) ---------------------------------------------
+
+
+@router.get("/login", response_class=HTMLResponse, include_in_schema=False)
+async def portal_login_page(
+    request: Request,
+    next: str = "/portal/",
+) -> HTMLResponse:
+    """Login landing page shown to unauthenticated browser requests.
+
+    If ``PORTAL_LOGIN_URL`` is configured (e.g. Okta auth endpoint), the page
+    shows a "Sign in with Okta" button pointing there.  If not set, it shows
+    contact-administrator instructions.  Authentication itself is handled by
+    the Okta ingress — this page is purely informational / a redirect helper.
+    """
+    settings = get_settings()
+    return templates.TemplateResponse(
+        request,
+        "portal_login.html",
+        {"login_url": settings.PORTAL_LOGIN_URL, "next": next},
+    )
+
+
+@router.post("/logout", response_class=HTMLResponse, include_in_schema=False)
+async def portal_logout(request: Request) -> RedirectResponse:
+    """Sign-out: redirect to login page.
+
+    Okta sessions are terminated by the ingress; this route handles the
+    in-app link and ensures the browser lands on the login page.
+    """
+    return RedirectResponse(url="/portal/login", status_code=302)
+
+
 # --- Browser self-service ----------------------------------------------------
 
 
 @router.get("/", response_class=HTMLResponse)
 async def portal_index(request: Request, user: _UserDep) -> HTMLResponse:
-    """Show the caller's current token status."""
+    """Show the caller's current token status.
+
+    Admins are redirected to the admin panel — they have a separate UI.
+    Regular portal users see their token management page.
+    """
+    # Role-based landing: admins belong in the admin panel.
+    if get_settings().ADMIN_GROUP_NAME in user.groups:
+        return RedirectResponse(url="/admin/tokens", status_code=302)
+
     factory = get_session_factory()
     async with factory() as session:
         active = await token_registry.get_active_for_user(

@@ -105,11 +105,13 @@ def test_portal_index_accepts_padding_optional_base64(client, session_factory):
     assert "dave@phrase.com" in r.text
 
 
-def test_admin_local_bypass_injects_fake_user(client, session_factory, monkeypatch):
+def test_admin_local_bypass_redirects_admin_to_admin_panel(client, session_factory, monkeypatch):
+    """Admin users hitting /portal/ should be redirected to /admin/tokens."""
     monkeypatch.setenv("ADMIN_LOCAL_BYPASS", "true")
-    r = client.get("/portal/")
-    assert r.status_code == 200
-    assert "local-admin@phrase.dev" in r.text
+    r = client.get("/portal/", follow_redirects=False)
+    # Admins are redirected to their panel; the bypass user has admin group membership.
+    assert r.status_code == 302
+    assert r.headers["location"] == "/admin/tokens"
 
 
 # --- Self-service flow -------------------------------------------------------

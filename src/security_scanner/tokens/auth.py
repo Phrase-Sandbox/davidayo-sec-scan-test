@@ -25,6 +25,7 @@ import base64
 import binascii
 import json
 from dataclasses import dataclass
+from urllib.parse import quote
 
 from fastapi import HTTPException, Request, status
 
@@ -92,12 +93,29 @@ def _bypass_user() -> PhraseUser:
     )
 
 
+def _browser_login_redirect(request: Request) -> HTTPException:
+    """Return a 302 HTTPException that sends browsers to the login page.
+
+    Preserves the original path as ``?next=`` so the ingress (or the login
+    page) can redirect back after successful Okta authentication.
+    FastAPI's default HTTPException handler forwards the ``Location`` header,
+    so browsers follow the redirect even though the body is JSON.
+    """
+    next_path = quote(str(request.url.path), safe="")
+    return HTTPException(
+        status_code=status.HTTP_302_FOUND,
+        headers={"Location": f"/portal/login?next={next_path}"},
+    )
+
+
 async def require_phrase_user(request: Request) -> PhraseUser:
     """Resolve the calling Phrase user from ``X-Userinfo``.
 
-    401 if the header is missing or undecodable. The platform never lets an
-    unauthenticated request reach the app — a missing header here means the
-    ingress is misconfigured, not that the caller is anonymous.
+    Priority:
+    1. ``ADMIN_LOCAL_BYPASS`` — injects a fake admin (local dev only).
+    2. ``X-Userinfo`` header — injected by the Okta ingress gateway (production).
+    3. Missing header + browser request → 302 redirect to ``/portal/login``.
+    4. Missing header + API request → 401 JSON (CLI / CI callers).
     """
     settings = get_settings()
     if settings.ADMIN_LOCAL_BYPASS:
@@ -105,6 +123,9 @@ async def require_phrase_user(request: Request) -> PhraseUser:
 
     raw = request.headers.get("X-Userinfo") or request.headers.get("x-userinfo")
     if not raw:
+        # Redirect browsers to the login page; return 401 to API/CLI clients.
+        if "text/html" in request.headers.get("accept", ""):
+            raise _browser_login_redirect(request)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing X-Userinfo header.",

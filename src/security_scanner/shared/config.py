@@ -87,6 +87,16 @@ class Settings(BaseSettings):
         ),
     )
 
+    PORTAL_LOGIN_URL: str = Field(
+        default="",
+        description=(
+            "URL to redirect unauthenticated browser users to for Okta login. "
+            "In production this is the Okta authorization URL or the ingress "
+            "login path (e.g. '/_oauth/start?rd=/portal/'). "
+            "Leave blank to show the built-in login page with contact instructions."
+        ),
+    )
+
     GITHUB_APP_ID: str = Field(..., description="GitHub App ID")
     GITHUB_APP_PRIVATE_KEY: str = Field(
         ...,
