@@ -87,9 +87,12 @@
                     border-radius: 6px; background: var(--card); color: var(--fg); width: 100%; max-width: 340px;">
       <datalist id="anthropic-model-list">
         {% for m in known_models.get("anthropic", []) %}
-          <option value="{{ m }}">{% if loop.first %}{{ m }} (recommended){% else %}{{ m }}{% endif %}</option>
+          <option value="{{ m }}"></option>
         {% endfor %}
       </datalist>
+      <small class="muted" style="display: block; margin-top: 0.3rem;">
+        Suggested: {% for m in known_models.get("anthropic", []) %}{{ m }}{% if loop.first %} (recommended){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
+      </small>
     </div>
 
     <div style="margin-bottom: 1.5rem;">
@@ -107,9 +110,12 @@
                     border-radius: 6px; background: var(--card); color: var(--fg); width: 100%; max-width: 340px;">
       <datalist id="google-model-list">
         {% for m in known_models.get("google", []) %}
-          <option value="{{ m }}">{% if loop.first %}{{ m }} (recommended){% else %}{{ m }}{% endif %}</option>
+          <option value="{{ m }}"></option>
         {% endfor %}
       </datalist>
+      <small class="muted" style="display: block; margin-top: 0.3rem;">
+        Suggested: {% for m in known_models.get("google", []) %}{{ m }}{% if loop.first %} (recommended){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
+      </small>
     </div>
 
     <div style="margin-bottom: 1rem;">
