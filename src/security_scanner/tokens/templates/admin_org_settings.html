@@ -76,38 +76,40 @@
       <label style="display: block; font-weight: 600; margin-bottom: 0.4rem;" for="anthropic_model">
         Anthropic model <span class="muted" style="font-weight: normal;">(blank = provider default)</span>
       </label>
-      <select name="anthropic_model" id="anthropic_model"
-              style="font: inherit; padding: 0.4rem 0.6rem; border: 1px solid var(--border);
-                     border-radius: 6px; background: var(--card); color: var(--fg); width: 100%; max-width: 340px;">
-        <option value="">(provider default)</option>
+      <input type="text"
+             name="anthropic_model"
+             id="anthropic_model"
+             list="anthropic-model-list"
+             value="{{ current_anthropic_model or '' }}"
+             placeholder="(provider default)"
+             autocomplete="off"
+             style="font: inherit; padding: 0.4rem 0.6rem; border: 1px solid var(--border);
+                    border-radius: 6px; background: var(--card); color: var(--fg); width: 100%; max-width: 340px;">
+      <datalist id="anthropic-model-list">
         {% for m in known_models.get("anthropic", []) %}
-          <option value="{{ m }}" {{ 'selected' if m == current_anthropic_model else '' }}>
-            {{ m }}{% if loop.first %} (recommended){% endif %}
-          </option>
+          <option value="{{ m }}">{% if loop.first %}{{ m }} (recommended){% else %}{{ m }}{% endif %}</option>
         {% endfor %}
-        {% if current_anthropic_model and current_anthropic_model not in known_models.get("anthropic", []) %}
-          <option value="{{ current_anthropic_model }}" selected>{{ current_anthropic_model }} (custom)</option>
-        {% endif %}
-      </select>
+      </datalist>
     </div>
 
     <div style="margin-bottom: 1.5rem;">
       <label style="display: block; font-weight: 600; margin-bottom: 0.4rem;" for="google_model">
         Google model <span class="muted" style="font-weight: normal;">(blank = provider default)</span>
       </label>
-      <select name="google_model" id="google_model"
-              style="font: inherit; padding: 0.4rem 0.6rem; border: 1px solid var(--border);
-                     border-radius: 6px; background: var(--card); color: var(--fg); width: 100%; max-width: 340px;">
-        <option value="">(provider default)</option>
+      <input type="text"
+             name="google_model"
+             id="google_model"
+             list="google-model-list"
+             value="{{ current_google_model or '' }}"
+             placeholder="(provider default)"
+             autocomplete="off"
+             style="font: inherit; padding: 0.4rem 0.6rem; border: 1px solid var(--border);
+                    border-radius: 6px; background: var(--card); color: var(--fg); width: 100%; max-width: 340px;">
+      <datalist id="google-model-list">
         {% for m in known_models.get("google", []) %}
-          <option value="{{ m }}" {{ 'selected' if m == current_google_model else '' }}>
-            {{ m }}{% if loop.first %} (recommended){% endif %}
-          </option>
+          <option value="{{ m }}">{% if loop.first %}{{ m }} (recommended){% else %}{{ m }}{% endif %}</option>
         {% endfor %}
-        {% if current_google_model and current_google_model not in known_models.get("google", []) %}
-          <option value="{{ current_google_model }}" selected>{{ current_google_model }} (custom)</option>
-        {% endif %}
-      </select>
+      </datalist>
     </div>
 
     <div style="margin-bottom: 1rem;">

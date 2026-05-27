@@ -186,7 +186,7 @@ workflow in `master-scanner-pipeline`:
 ```yaml
 jobs:
   security:
-    uses: Phrase-Sandbox/master-scanner-pipeline/.github/workflows/scanner.yml@v2
+    uses: Phrase-Sandbox/master-scanner-pipeline/.github/workflows/scanner.yml@v1
     # Optional: override the org default LLM provider for this run.
     # with:
     #   provider: gemini
