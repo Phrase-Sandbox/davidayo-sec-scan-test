@@ -41,7 +41,7 @@ from security_scanner.shared.context import ContextPackager
 from security_scanner.shared.filters.file_filter import filter as filter_files
 from security_scanner.shared.filters.post_filter import filter_findings
 from security_scanner.shared.github.client import GitHubAuthError, GitHubClient, GitHubError
-from security_scanner.shared.logging_util import get_logger, get_scan_id, set_scan_id
+from security_scanner.shared.logging_util import get_logger, set_scan_id
 from security_scanner.shared.models.enums import (
     Confidence,
     GateDecision,
@@ -73,7 +73,6 @@ from security_scanner.shared.verification.parallel import (
 )
 from security_scanner.shared.verification.secrets import verify_secret_findings
 from security_scanner.shared.verification.vulns import (
-    candidate_to_finding,
     verify_vuln_candidates,
 )
 
@@ -124,6 +123,7 @@ class ScanPipeline:
         base: str | None = None,
         head: str | None = None,
         directory: str = "",
+        prefetched_files: dict[str, str] | None = None,
     ) -> ScanResult:
         # Set scan_id in the context variable so all log lines for this
         # request carry it, and concurrent scans don't interleave.
@@ -155,19 +155,28 @@ class ScanPipeline:
                 reason="Diff scan requested but base/head not provided",
             )
 
-        # Step 3: fetch files.
-        try:
-            files = self._fetch_files(owner, repo, scan_target, ref, base, head, directory)
-        except GitHubAuthError:
-            # Auth failures are unrecoverable — propagate so the caller surfaces
-            # EC-005 / EC-006 to the developer.
-            raise
-        except GitHubError as exc:
-            log.warning("github fetch failed", reason=str(exc))
-            return _scan_failed(
-                repo_url, scan_target, self._mode, triggered_by,
-                reason=f"GitHub fetch failed: {exc}",
+        # Step 3: fetch files — or use pre-fetched files from the CI runner.
+        # When prefetched_files are provided (e.g. from build-payload action)
+        # we skip the GitHub API call entirely. No GitHub App credentials needed.
+        if prefetched_files is not None:
+            files = prefetched_files
+            log.info(
+                "pipeline.run: using pre-fetched files from caller",
+                file_count=len(files),
             )
+        else:
+            try:
+                files = self._fetch_files(owner, repo, scan_target, ref, base, head, directory)
+            except GitHubAuthError:
+                # Auth failures are unrecoverable — propagate so the caller surfaces
+                # EC-005 / EC-006 to the developer.
+                raise
+            except GitHubError as exc:
+                log.warning("github fetch failed", reason=str(exc))
+                return _scan_failed(
+                    repo_url, scan_target, self._mode, triggered_by,
+                    reason=f"GitHub fetch failed: {exc}",
+                )
 
         # Steps 4–5: empty input handling (EC-007, BR-004 / EC-008).
         if not files:

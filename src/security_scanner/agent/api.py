@@ -62,6 +62,10 @@ class ScanRequest(BaseModel):
     # Selects which org-configured key to use for this scan.
     # None → uses org_settings.default_provider (or env bootstrap fallback).
     provider_choice: str | None = None
+    # Pre-fetched files from the CI runner. When provided the pipeline skips the
+    # GitHub API fetch (no GitHub App credentials required on the scanner host).
+    # Keys are repo-relative paths, values are UTF-8 source content.
+    files: dict[str, str] | None = None
 
 
 _SettingsDep = Annotated[Settings, Depends(get_settings)]
@@ -193,6 +197,7 @@ async def scan(
             base=body.base,
             head=body.head,
             directory=body.directory,
+            prefetched_files=body.files,
         )
     except TokenLimitError as exc:
         log.warning(
