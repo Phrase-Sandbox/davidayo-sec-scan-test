@@ -41,8 +41,16 @@ async def _post_to_slack(
     http_client: httpx.AsyncClient | None,
     webhook_url: str | None = None,
     **log_ctx: object,
-) -> None:
+) -> bool:
     """POST ``text`` to the #security webhook; fail-open.
+
+    Returns ``True`` if Slack confirmed delivery (HTTP 200, body ``"ok"``),
+    ``False`` for any failure — HTTP error, network timeout, or a Slack-level
+    rejection (e.g. ``"no_service"``, ``"channel_not_found"``).
+
+    Slack's incoming-webhook API returns HTTP 200 for some error conditions
+    with the error in the plain-text response body.  We must check the body,
+    not only the status code, to distinguish real delivery from silent failure.
 
     ``kind`` is the alert label used in the log line (e.g. ``"bypass"`` ⇒
     "slack bypass alert failed") so per-alert log assertions stay stable.
@@ -58,7 +66,7 @@ async def _post_to_slack(
     webhook = webhook_url or get_settings().SLACK_WEBHOOK_URL
     if webhook is None:
         log.warning("slack webhook not configured — alert skipped", kind=kind)
-        return
+        return False
 
     owns_client = http_client is None
     client = http_client or httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS)
@@ -66,14 +74,23 @@ async def _post_to_slack(
         try:
             response = await client.post(webhook, json={"text": text})
             response.raise_for_status()
+            # Slack returns plain text "ok" on success and an error string
+            # (e.g. "no_service", "channel_not_found") on rejection — both
+            # over HTTP 200.  Treat anything other than "ok" as a failure.
+            body = response.text.strip()
+            if body != "ok":
+                raise httpx.HTTPError(f"Slack rejected message: {body!r}")
         except httpx.HTTPError as exc:
             log.warning(
                 f"slack {kind} alert failed — proceeding regardless",
                 error=type(exc).__name__,
+                detail=str(exc),
                 **log_ctx,
             )
+            return False
         else:
             log.info(f"{kind} alert sent to slack", **log_ctx)
+            return True
     finally:
         if owns_client:
             await client.aclose()

@@ -545,13 +545,26 @@ async def admin_test_slack(request: Request, admin: _AdminDep) -> HTMLResponse:
         f"• Sent by: {admin.email}\n"
         f"• If you see this, your Slack webhook is working correctly."
     )
-    await _post_to_slack(text, kind="admin-test", http_client=None, webhook_url=webhook_url)
-    log.info("admin slack test message sent", actor_email=admin.email)
+    delivered = await _post_to_slack(
+        text, kind="admin-test", http_client=None, webhook_url=webhook_url
+    )
+
+    if delivered:
+        log.info("admin slack test message sent", actor_email=admin.email)
+        flash = "ok:Test message sent to Slack successfully."
+    else:
+        log.warning("admin slack test message failed", actor_email=admin.email)
+        flash = (
+            "error:Slack did not deliver the message. "
+            "The webhook URL may be invalid or the channel no longer exists. "
+            "Go to api.slack.com/apps → Incoming Webhooks and generate a fresh URL, "
+            "then save it here."
+        )
 
     return templates.TemplateResponse(
         request,
         "admin_org_settings.html",
-        {**ctx, "flash": "ok:Test message sent to Slack successfully."},
+        {**ctx, "flash": flash},
         headers=_NO_STORE_HEADERS,
     )
 

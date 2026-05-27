@@ -97,7 +97,7 @@ def test_message_sent_with_correct_fields_to_webhook_url():
     def handler(request: httpx.Request) -> httpx.Response:
         captured["url"] = str(request.url)
         captured["body"] = json.loads(request.content)
-        return httpx.Response(200)
+        return httpx.Response(200, text="ok")
 
     client = _mock_client(handler)
     result = _result([_finding(Severity.Critical, "A03:2021")])
@@ -125,7 +125,7 @@ def test_critical_high_counts_match_findings_list():
 
     def handler(request: httpx.Request) -> httpx.Response:
         captured["body"] = json.loads(request.content)
-        return httpx.Response(200)
+        return httpx.Response(200, text="ok")
 
     findings = [
         _finding(Severity.Critical, "A03:2021"),
@@ -152,7 +152,7 @@ def test_justification_included_when_provided():
 
     def handler(request: httpx.Request) -> httpx.Response:
         captured["body"] = json.loads(request.content)
-        return httpx.Response(200)
+        return httpx.Response(200, text="ok")
 
     _run(
         send_bypass_alert(
@@ -173,7 +173,7 @@ def test_justification_omitted_when_none():
 
     def handler(request: httpx.Request) -> httpx.Response:
         captured["body"] = json.loads(request.content)
-        return httpx.Response(200)
+        return httpx.Response(200, text="ok")
 
     _run(
         send_bypass_alert(
@@ -198,7 +198,7 @@ def test_no_webhook_url_logs_warning_and_returns_silently(monkeypatch, capsys):
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(request)
-        return httpx.Response(200)
+        return httpx.Response(200, text="ok")
 
     client = _mock_client(handler)
 
@@ -321,7 +321,7 @@ def test_pr_rejected_message_has_who_when_why_findings():
     def handler(request: httpx.Request) -> httpx.Response:
         captured["url"] = str(request.url)
         captured["text"] = json.loads(request.content)["text"]
-        return httpx.Response(200)
+        return httpx.Response(200, text="ok")
 
     _run(send_pr_rejected_alert(**_pr_kwargs(), http_client=_mock_client(handler)))
 
@@ -340,7 +340,7 @@ def test_pr_rejected_flags_missing_reason():
 
     def handler(request: httpx.Request) -> httpx.Response:
         captured["text"] = json.loads(request.content)["text"]
-        return httpx.Response(200)
+        return httpx.Response(200, text="ok")
 
     _run(send_pr_rejected_alert(**_pr_kwargs(reason=None), http_client=_mock_client(handler)))
     assert "REASON MISSING" in captured["text"]
@@ -371,7 +371,7 @@ def test_explicit_webhook_url_overrides_env_var():
 
     def handler(request: httpx.Request) -> httpx.Response:
         captured["url"] = str(request.url)
-        return httpx.Response(200)
+        return httpx.Response(200, text="ok")
 
     _run(
         send_bypass_alert(
@@ -394,7 +394,7 @@ def test_none_webhook_url_falls_back_to_env_var():
 
     def handler(request: httpx.Request) -> httpx.Response:
         captured["url"] = str(request.url)
-        return httpx.Response(200)
+        return httpx.Response(200, text="ok")
 
     # _env fixture sets SLACK_WEBHOOK_URL = _WEBHOOK; webhook_url=None → falls back to env
     _run(
@@ -419,7 +419,7 @@ def test_llm_unavailable_explicit_webhook_url_used():
     def handler(request: httpx.Request) -> httpx.Response:
         captured["url"] = str(request.url)
         captured["text"] = json.loads(request.content)["text"]
-        return httpx.Response(200)
+        return httpx.Response(200, text="ok")
 
     _run(
         send_llm_unavailable_alert(
@@ -451,3 +451,111 @@ def test_webhook_url_none_and_env_missing_skips(monkeypatch, capsys):
     )
 
     assert "slack webhook not configured" in capsys.readouterr().out
+
+
+# --- Slack body-check: HTTP 200 with error body treated as failure -----------
+# Slack returns HTTP 200 for some rejection conditions; the error is in the
+# plain-text response body.  We must distinguish "ok" from error strings.
+
+
+def test_http_200_ok_body_returns_true():
+    """HTTP 200 + body 'ok' → delivery confirmed, returns True."""
+    from security_scanner.agent.slack_alert import _post_to_slack
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="ok")
+
+    result = _run(
+        _post_to_slack(
+            "test",
+            kind="test",
+            http_client=_mock_client(handler),
+            webhook_url=_WEBHOOK,
+        )
+    )
+    assert result is True
+
+
+def test_http_200_no_service_body_returns_false(capsys):
+    """HTTP 200 + body 'no_service' → Slack rejected; returns False, logs warning."""
+    from security_scanner.agent.slack_alert import _post_to_slack
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="no_service")
+
+    result = _run(
+        _post_to_slack(
+            "test",
+            kind="test",
+            http_client=_mock_client(handler),
+            webhook_url=_WEBHOOK,
+        )
+    )
+    assert result is False
+    assert "slack test alert failed" in capsys.readouterr().out
+
+
+def test_http_200_channel_not_found_body_returns_false(capsys):
+    """HTTP 200 + body 'channel_not_found' → Slack rejected; returns False."""
+    from security_scanner.agent.slack_alert import _post_to_slack
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="channel_not_found")
+
+    result = _run(
+        _post_to_slack(
+            "test",
+            kind="test",
+            http_client=_mock_client(handler),
+            webhook_url=_WEBHOOK,
+        )
+    )
+    assert result is False
+
+
+def test_http_200_empty_body_returns_false(capsys):
+    """HTTP 200 + empty body is also treated as a rejection (not 'ok')."""
+    from security_scanner.agent.slack_alert import _post_to_slack
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="")
+
+    result = _run(
+        _post_to_slack(
+            "test",
+            kind="test",
+            http_client=_mock_client(handler),
+            webhook_url=_WEBHOOK,
+        )
+    )
+    assert result is False
+
+
+def test_http_4xx_returns_false(capsys):
+    """HTTP 4xx still returns False (unchanged behaviour)."""
+    from security_scanner.agent.slack_alert import _post_to_slack
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404)
+
+    result = _run(
+        _post_to_slack(
+            "test",
+            kind="test",
+            http_client=_mock_client(handler),
+            webhook_url=_WEBHOOK,
+        )
+    )
+    assert result is False
+
+
+def test_no_webhook_returns_false(monkeypatch):
+    """No webhook configured → returns False immediately."""
+    from security_scanner.agent.slack_alert import _post_to_slack
+
+    monkeypatch.delenv("SLACK_WEBHOOK_URL", raising=False)
+
+    result = _run(
+        _post_to_slack("test", kind="test", http_client=None, webhook_url=None)
+    )
+    assert result is False
