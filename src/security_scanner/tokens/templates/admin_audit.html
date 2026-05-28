@@ -47,10 +47,22 @@
             <td style="padding:0.4rem;">{{ r.user_email or "—" }}</td>
             <td style="padding:0.4rem;"><code>{{ r.token_id or "—" }}</code></td>
             <td style="padding:0.4rem;">{{ r.actor_email or "—" }}</td>
-            <td style="padding:0.4rem;">
+            <td style="padding:0.4rem; max-width:320px;">
               {% if r.event_metadata %}
-                <code style="white-space: pre-wrap;">{{ r.event_metadata }}</code>
-              {% else %}<span class="muted">—</span>{% endif %}
+                <details>
+                  <summary style="cursor:pointer; color:var(--accent); font-size:0.8rem; list-style:none; user-select:none;">
+                    &#9658; {{ r.event_metadata | length }} key{{ '' if r.event_metadata | length == 1 else 's' }}
+                  </summary>
+                  <dl style="margin:0.35rem 0 0; font-size:0.78rem; line-height:1.5;">
+                    {% for k, v in r.event_metadata.items() %}
+                      <dt style="font-weight:600; color:var(--fg); margin-top:0.2rem;">{{ k }}</dt>
+                      <dd style="margin:0 0 0.1rem 0.8rem; color:var(--muted); word-break:break-all;">{{ v }}</dd>
+                    {% endfor %}
+                  </dl>
+                </details>
+              {% else %}
+                <span class="muted">—</span>
+              {% endif %}
             </td>
           </tr>
         {% endfor %}
