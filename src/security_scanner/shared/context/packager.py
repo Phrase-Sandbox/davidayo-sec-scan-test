@@ -187,8 +187,11 @@ class ContextPackager:
             return ""
         lines = content.splitlines()
         if line_start:
-            lo = max(0, line_start - 4)
-            hi = min(len(lines), (line_end or line_start) + 4)
+            # ±8 lines: wide enough to absorb small line-number errors from the
+            # first-pass LLM (off-by-one to off-by-5 is common when multiple
+            # files are in the same chunk), yet still ≤ _MAX_SNIPPET_LINES (30).
+            lo = max(0, line_start - 8)
+            hi = min(len(lines), (line_end or line_start) + 8)
         else:
             lo, hi = 0, min(len(lines), _MAX_SNIPPET_LINES)
         snippet_lines = lines[lo:hi]

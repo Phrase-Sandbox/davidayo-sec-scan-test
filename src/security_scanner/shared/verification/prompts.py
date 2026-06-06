@@ -29,6 +29,9 @@ _AUTHZ_CLASSES: frozenset[str] = frozenset({"auth_bypass", "idor"})
 # Vulnerability classes that trigger the upload-specific rubric.
 _UPLOAD_CLASSES: frozenset[str] = frozenset({"unsafe_file_upload"})
 
+# Vulnerability classes that trigger the weak-crypto rubric.
+_WEAK_CRYPTO_CLASSES: frozenset[str] = frozenset({"weak_crypto", "weak_hash", "insecure_hash"})
+
 
 def build_authz_verifier_rubric() -> str:
     """Return the authz/IDOR-specific rubric appended to the verifier prompt.
@@ -103,6 +106,48 @@ Apply the following additional steps before issuing a verdict:
    If the existing checks (extension allowlist + magic bytes + server-generated
    filename + outside-webroot storage) are all present and correctly applied,
    mark as ``false_positive``.
+"""
+
+
+def build_weak_crypto_verifier_rubric() -> str:
+    """Return the weak-crypto-specific rubric appended to the verifier prompt.
+
+    The returned string contains these LITERAL substrings (tested character-for-character):
+    - "MD5 and SHA-1 are cryptographically broken"
+    - "Answer `real` if a broken algorithm is used for a security-sensitive purpose"
+    - "Answer `false_positive` only if a strong algorithm"
+    """
+    return """\
+
+## Weak cryptography analysis rubric — OVERRIDES the general criteria above
+
+**For this vulnerability class (weak_crypto / weak_hash), the general criteria #1
+and #2 above do NOT apply.** A direct injection data-flow path is NOT required.
+The exploit model is different: if hashes are ever leaked (DB dump, backup, SQLi
+elsewhere), a weak algorithm makes credential recovery trivial. Use the rubric below:
+
+1. MD5 and SHA-1 are cryptographically broken for all security-sensitive uses:
+   password hashing, HMAC signatures, integrity checksums on untrusted data,
+   and session tokens. Using them for non-security purposes (e.g. cache keys,
+   content-addressable filenames where collisions carry no security impact)
+   is NOT a vulnerability.
+
+2. The exploit path for weak password hashing is: attacker obtains the stored
+   hash (database dump, backup leak, or a separate SQL injection); runs it
+   through an online rainbow-table service or GPU cracker; recovers the
+   plaintext password in seconds for common passwords. This is a real,
+   routinely-used attack — it does NOT require a direct injection data-flow.
+
+3. Answer `real` if a broken algorithm is used for a security-sensitive purpose
+   (password hashing, authentication tokens, integrity verification of
+   security-critical data). You do NOT need a direct injection data-flow path
+   — the weakness is the algorithm choice, and the impact is credential exposure
+   if hashes are ever leaked.
+
+4. Answer `false_positive` only if a strong algorithm (bcrypt, argon2, PBKDF2,
+   SHA-256 or better for non-password uses) is confirmed to be in use, or if
+   MD5/SHA-1 is provably used only for non-security caching/deduplication
+   where an attacker-controlled collision carries no security impact.
 """
 
 
@@ -192,6 +237,7 @@ No JSON, no markdown, no preamble. Only the verdict blocks.
     # Class→rubric registry (exclusive):
     # auth_bypass / idor → authz rubric only
     # unsafe_file_upload → upload rubric only
+    # weak_crypto / weak_hash / insecure_hash → weak-crypto rubric only
     # other → no rubric appended
     if vuln_class:
         norm = vuln_class.lower()
@@ -199,4 +245,6 @@ No JSON, no markdown, no preamble. Only the verdict blocks.
             base_prompt += build_authz_verifier_rubric()
         elif norm in _UPLOAD_CLASSES:
             base_prompt += build_upload_verifier_rubric()
+        elif norm in _WEAK_CRYPTO_CLASSES:
+            base_prompt += build_weak_crypto_verifier_rubric()
     return base_prompt
