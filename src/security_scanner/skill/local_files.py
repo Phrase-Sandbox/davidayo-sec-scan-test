@@ -46,6 +46,8 @@ _SKIP_DIRS = frozenset(
         ".vscode",
         "htmlcov",
         "vuln-result",  # our own output directory — never scan it
+        # CI / scanner output directories — contain generated reports, not source
+        "sec-report", "reports", "coverage", "test-results", "artifacts",
     }
 )
 

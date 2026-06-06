@@ -24,6 +24,9 @@ _EXCLUDED_DIR_NAMES: frozenset[str] = frozenset(
     {
         "dist", "build", ".next", "__pycache__", "node_modules", ".venv", "venv",
         "static", "vendor", "vendored", "assets", "third_party", "third-party",
+        # CI / scanner output — never source code worth analysing
+        "sec-report", "reports", "coverage", "test-results", "artifacts",
+        "vuln-result",
     }
 )
 

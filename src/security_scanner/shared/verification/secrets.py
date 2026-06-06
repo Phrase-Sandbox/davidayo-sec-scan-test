@@ -33,8 +33,8 @@ from security_scanner.shared.claude.client import ClaudeClient, ClaudeError
 from security_scanner.shared.logging_util import get_logger
 from security_scanner.shared.models.enums import Severity
 from security_scanner.shared.models.finding import VulnerabilityFinding
-from security_scanner.shared.severity.mapping import severity_to_cvss_band
 from security_scanner.shared.secrets.stripper import SecretHit, _is_template_file
+from security_scanner.shared.severity.mapping import severity_to_cvss_band
 
 log = get_logger(__name__)
 
@@ -584,16 +584,26 @@ def _build_batched_user_message(candidate_blocks: list[str], *, total: int) -> s
     return f"{blocks}\n\n{instruction}"
 
 
+_MAX_SNIPPET_CHARS = 2_000  # ~500 tokens; minified/generated content beyond this has no signal
+
+
 def _context_snippet(content: str, line: int, end_line: int) -> tuple[str, int]:
     """Return ``(snippet, start_line)`` covering N lines before/after the hit.
 
     ``line`` / ``end_line`` are 1-based. ``start_line`` is the 1-based number
     of the first line of the snippet, so the verifier can map relative
     positions back to absolute file lines.
+
+    The snippet is capped at ``_MAX_SNIPPET_CHARS`` characters. Minified JS/CSS
+    is a single line so the raw "7-line window" equals the entire file; beyond
+    2 KB there is zero additional signal for a secret-verification decision.
     """
     lines = content.splitlines()
     start = max(0, line - 1 - _CONTEXT_LINES_BEFORE)
     end = min(len(lines), end_line + _CONTEXT_LINES_AFTER)
-    return "\n".join(lines[start:end]), start + 1
+    snippet = "\n".join(lines[start:end])
+    if len(snippet) > _MAX_SNIPPET_CHARS:
+        snippet = snippet[:_MAX_SNIPPET_CHARS]
+    return snippet, start + 1
 
 
