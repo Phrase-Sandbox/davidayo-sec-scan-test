@@ -162,7 +162,7 @@
             {%- if u.auth_provider != "okta" and not is_protected -%}
             <form method="post" action="/admin/users/{{ u.email | urlencode }}/force-password-reset"
                   style="display:inline"
-                  onsubmit="return confirm('Force {{ u.email }} to change their password on next login?')">
+                  onsubmit="return confirm('Force ' + {{ u.email | tojson }} + ' to change their password on next login?')">
               <button type="submit" class="btn btn-sm" style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);color:#92400e;">Force pwd reset</button>
             </form>
             {%- endif -%}

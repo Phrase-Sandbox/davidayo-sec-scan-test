@@ -281,6 +281,16 @@ async def _check_account_active(user: PhraseUser, request: Request) -> None:
     if not _db_user.is_active:
         log.info("portal access denied — account deactivated", user_email=user.email)
         _raise_login_required(request)
+    if _db_user.must_change_password and request.url.path != "/portal/change-password":
+        if "text/html" in request.headers.get("accept", ""):
+            raise HTTPException(
+                status_code=status.HTTP_302_FOUND,
+                headers={"Location": "/portal/change-password"},
+            )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Password change required.",
+        )
     # Forced reauth: if the user was reactivated after this session was issued,
     # the old session is no longer valid — the user must log in again.
     # SQLite returns naive datetimes even for timezone=True columns; treat them

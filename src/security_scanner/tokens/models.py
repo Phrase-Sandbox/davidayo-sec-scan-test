@@ -167,7 +167,7 @@ class User(Base):
     password_hash: Mapped[bytes | None] = mapped_column(LargeBinary(), nullable=True)
     # When True, user is redirected to /portal/change-password on next local login.
     must_change_password: Mapped[bool] = mapped_column(
-        Boolean(), nullable=False, server_default="false"
+        Boolean(), nullable=False, default=False, server_default="false"
     )
     # Set to now() by admin on reactivation. Sessions issued before this are rejected.
     last_reactivation_at: Mapped[datetime | None] = mapped_column(
