@@ -95,6 +95,44 @@ jobs:
             --set "ingress.oidc.clientId=${OKTA_CLIENT_ID}" \
             --set "ingress.oidc.clientSecret=${OKTA_CLIENT_SECRET}" \
             --set "ingress.oidc.sessionSecret=${SESSION_SECRET}" \
-            --wait \
-            --timeout 12m \
-            --atomic
+            --timeout 5m
+
+      - name: Wait for rollout
+        id: rollout
+        continue-on-error: true
+        run: |
+          kubectl rollout status deployment/phrase-sec-scan \
+            --namespace launchpad-phrase-sec-scan \
+            --timeout=12m
+
+      - name: Debug pod state
+        if: steps.rollout.outcome == 'failure'
+        run: |
+          echo "=== Pod list ==="
+          kubectl get pods -n launchpad-phrase-sec-scan \
+            -l "app.kubernetes.io/name=phrase-sec-scan" -o wide || true
+          echo ""
+          echo "=== Pod descriptions (last 80 lines) ==="
+          kubectl describe pods -n launchpad-phrase-sec-scan \
+            -l "app.kubernetes.io/name=phrase-sec-scan" 2>&1 | tail -80 || true
+          echo ""
+          echo "=== Current pod logs ==="
+          kubectl logs -n launchpad-phrase-sec-scan \
+            -l "app.kubernetes.io/name=phrase-sec-scan" \
+            --all-containers=true --tail=200 2>&1 || true
+          echo ""
+          echo "=== Previous pod logs (post-crash) ==="
+          kubectl logs -n launchpad-phrase-sec-scan \
+            -l "app.kubernetes.io/name=phrase-sec-scan" \
+            --all-containers=true --tail=200 -p 2>&1 || true
+
+      - name: Cleanup failed release
+        if: steps.rollout.outcome == 'failure'
+        run: |
+          helm uninstall phrase-sec-scan --namespace launchpad-phrase-sec-scan || true
+
+      - name: Fail if rollout failed
+        if: steps.rollout.outcome == 'failure'
+        run: |
+          echo "Rollout failed — see 'Debug pod state' step above for logs"
+          exit 1
