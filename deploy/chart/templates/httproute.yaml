@@ -14,7 +14,8 @@ spec:
     - {{ .Values.ingress.hostname | quote }}
   rules:
     {{- if .Values.ingress.oidc.enabled }}
-    # /portal and /admin are protected — gateway enforces Okta OIDC before forwarding
+    # /portal and /admin are protected; /oauth2 is the OIDC callback path that
+    # apisix intercepts internally — all three must carry the PluginConfig filter.
     - matches:
         - path:
             type: PathPrefix
@@ -22,6 +23,9 @@ spec:
         - path:
             type: PathPrefix
             value: /admin
+        - path:
+            type: PathPrefix
+            value: /oauth2
       filters:
         - type: ExtensionRef
           extensionRef:
