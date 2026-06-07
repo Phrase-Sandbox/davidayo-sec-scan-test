@@ -156,8 +156,9 @@ async def portal_login_submit(
     """Handle local-auth form submission when ``LOCAL_PORTAL_PASSWORD`` is configured.
 
     On success:  issues a Fernet-signed ``portal_session`` cookie and redirects
-                 to ``next``.  The user is auto-provisioned as admin in the DB
-                 (idempotent) — knowing the shared local password = trusted admin.
+                 to ``next``.  New users are provisioned as ``user`` role by default;
+                 emails in ``PROTECTED_ADMIN_EMAILS`` get ``admin`` role.
+                 Existing users keep their current DB role.
     On failure:  re-renders the login page with an error message (no redirect).
     """
     settings = get_settings()
@@ -182,18 +183,24 @@ async def portal_login_submit(
         return _render_error("Invalid credentials.", status.HTTP_401_UNAUTHORIZED)
 
     # Provision user in DB:
-    #   - NEW users: created with role=admin (the shared password implies trust)
+    #   - NEW users: created with role=user by default.
+    #     Exception: emails listed in PROTECTED_ADMIN_EMAILS get role=admin
+    #     so that designated super-admins are provisioned correctly on first login.
     #   - EXISTING users: keep their current role (so admins can demote to regular
-    #     user for testing; re-logging in will not re-promote them)
+    #     user for testing; re-logging in will not re-promote them).
     display_name = email.split("@")[0].replace(".", " ").title()
     now = datetime.now(timezone.utc)
+    protected = frozenset(
+        e.strip() for e in settings.PROTECTED_ADMIN_EMAILS.split(",") if e.strip()
+    )
     factory = get_session_factory()
     async with factory() as sess:
         row = await sess.get(User, email)
         if row is None:
+            initial_role = UserRole.admin if email in protected else UserRole.user
             sess.add(User(
                 email=email,
-                role=UserRole.admin,
+                role=initial_role,
                 is_active=True,
                 created_at=now,
                 last_login_at=now,

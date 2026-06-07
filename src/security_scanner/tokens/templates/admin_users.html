@@ -1,6 +1,35 @@
 {% extends "admin_base.html" %}
 {% block title %}Admin — Users{% endblock %}
 
+{% block extra_styles %}
+<style>
+  .protected-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.14em 0.45em;
+    border-radius: 4px;
+    background: rgba(245,158,11,0.1);
+    border: 1px solid rgba(245,158,11,0.35);
+    color: #92400e;
+    white-space: nowrap;
+    letter-spacing: 0.03em;
+    margin-left: 0.3rem;
+    vertical-align: middle;
+  }
+  .protected-locked {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.78rem;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+</style>
+{% endblock %}
+
 {% block admin_content %}
 
 <div class="card">
@@ -10,6 +39,7 @@
   <p class="muted" style="margin-bottom:1rem;">
     Users are auto-provisioned on first portal login. Deactivating blocks all future
     scans (401) without revoking their token — useful while access is under review.
+    <strong>Protected</strong> accounts cannot be demoted or deactivated via this panel.
   </p>
   <form method="get" action="/admin/users"
         style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
@@ -42,8 +72,21 @@
     </thead>
     <tbody>
       {% for u in users %}
+      {%- set is_protected = u.email in protected_admin_emails -%}
       <tr>
-        <td style="font-weight:500;">{{ u.email }}</td>
+        <td style="font-weight:500;">
+          {{ u.email }}
+          {% if is_protected %}
+            <span class="protected-badge">
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+              protected
+            </span>
+          {% endif %}
+        </td>
         <td style="white-space:nowrap;">
           {% if u.role.value == "admin" %}
             <span class="pill" style="background:rgba(37,99,235,0.1); color:var(--accent);">admin</span>
@@ -56,6 +99,10 @@
                   onsubmit="return confirm('Promote this user to admin?')">
               <button type="submit" class="btn-sm btn-promote">↑ Make Admin</button>
             </form>
+          {% elif is_protected %}
+            {# Protected super-admin — demote is blocked #}
+            <span class="muted" style="font-size:0.75rem; margin-left:0.3rem;"
+                  title="Super-admin — cannot be demoted via this panel">🔒</span>
           {% elif u.email != user.email %}
             <form method="post" action="/admin/users/{{ u.email | urlencode }}/demote"
                   style="display:inline; margin-left:0.3rem;"
@@ -77,22 +124,34 @@
           {{ u.last_login_at.strftime("%Y-%m-%d %H:%M") if u.last_login_at else "—" }}
         </td>
         <td style="white-space:nowrap;">
-          {% if u.is_active %}
-          <form method="post" action="/admin/users/{{ u.email | urlencode }}/deactivate"
-                style="display:inline;"
-                onsubmit="return confirm('Deactivate this user? Their next scan will fail with 401.')">
-            <button type="submit" class="btn btn-sm btn-danger">Deactivate</button>
-          </form>
+          {% if is_protected %}
+            {# Protected — all dangerous actions are locked #}
+            <span class="protected-locked" title="Super-admin — actions locked">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+              Protected account
+            </span>
           {% else %}
-          <form method="post" action="/admin/users/{{ u.email | urlencode }}/reactivate" style="display:inline;">
-            <button type="submit" class="btn btn-sm btn-primary">Reactivate</button>
-          </form>
+            {% if u.is_active %}
+            <form method="post" action="/admin/users/{{ u.email | urlencode }}/deactivate"
+                  style="display:inline;"
+                  onsubmit="return confirm('Deactivate this user? Their next scan will fail with 401.')">
+              <button type="submit" class="btn btn-sm btn-danger">Deactivate</button>
+            </form>
+            {% else %}
+            <form method="post" action="/admin/users/{{ u.email | urlencode }}/reactivate" style="display:inline;">
+              <button type="submit" class="btn btn-sm btn-primary">Reactivate</button>
+            </form>
+            {% endif %}
+            <form method="post" action="/admin/users/{{ u.email | urlencode }}/revoke-tokens"
+                  style="display:inline;"
+                  onsubmit="return confirm('Revoke all active tokens for this user?')">
+              <button type="submit" class="btn btn-sm">Revoke tokens</button>
+            </form>
           {% endif %}
-          <form method="post" action="/admin/users/{{ u.email | urlencode }}/revoke-tokens"
-                style="display:inline;"
-                onsubmit="return confirm('Revoke all active tokens for this user?')">
-            <button type="submit" class="btn btn-sm">Revoke tokens</button>
-          </form>
         </td>
       </tr>
       {% endfor %}

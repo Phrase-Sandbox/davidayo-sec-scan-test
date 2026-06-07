@@ -27,8 +27,9 @@
   </div>
 
   <p class="muted" style="margin:0 0 0.85rem; font-size:0.84rem;">
-    <strong>Revoke</strong> invalidates immediately;
-    <strong>Force rotate</strong> mints a replacement — deliver via 1Password or Signal.
+    <strong>Revoke</strong> immediately invalidates a token.
+    The user must then generate a new one themselves via the
+    <a href="/portal/" style="color:var(--accent);">self-service portal</a>.
     Tokens expire after 30 days.
   </p>
 
@@ -80,29 +81,6 @@
   .status-tab-active.status-tab-danger { color: var(--danger); }
 </style>
 
-{# ── New token shown once ── #}
-{% if issued_token %}
-<div class="card" style="border-color:var(--ok);">
-  <h2 class="ok" style="margin-bottom:0.5rem;">
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         stroke-width="2" style="vertical-align:-2px; margin-right:0.3rem;">
-      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-      <polyline points="22 4 12 14.01 9 11.01"/>
-    </svg>
-    New token for {{ issued_token.user_email }}
-  </h2>
-  <p class="danger" style="margin-bottom:0.85rem;">
-    <strong>Shown once.</strong> Copy it now and deliver via a secure channel.
-  </p>
-  <div class="token-box" id="rotated-token">{{ issued_token.full_token }}</div>
-  <p style="margin-top:0.8rem; margin-bottom:0.5rem;">
-    <button type="button" class="btn btn-primary" id="copy-btn"
-            onclick="copyToken()">Copy to clipboard</button>
-  </p>
-  <p class="muted" style="font-size:0.82rem;">Token ID: <code>{{ issued_token.token_id }}</code></p>
-</div>
-{% endif %}
-
 {# ── Token table ── #}
 <div class="card" style="padding:0; overflow:hidden;">
   <div style="padding:1rem 1.4rem; border-bottom:1px solid var(--border);
@@ -152,13 +130,8 @@
             {% if not r.revoked_at %}
               <form method="post" action="/admin/tokens/{{ r.token_id }}/revoke"
                     style="display:inline;"
-                    onsubmit="return confirm('Revoke this token immediately?')">
+                    onsubmit="return confirm('Revoke this token? The user will need to generate a new one via the portal.')">
                 <button type="submit" class="btn btn-sm btn-danger">Revoke</button>
-              </form>
-              <form method="post" action="/admin/tokens/{{ r.token_id }}/force-rotate"
-                    style="display:inline;"
-                    onsubmit="return confirm('Force-rotate this token? A new plaintext will be shown once.')">
-                <button type="submit" class="btn btn-sm">Force rotate</button>
               </form>
             {% else %}
               <span class="muted">—</span>
@@ -181,16 +154,5 @@
   </div>
   {% endif %}
 </div>
-
-<script>
-  function copyToken() {
-    const text = document.getElementById("rotated-token").innerText.trim();
-    navigator.clipboard.writeText(text).then(() => {
-      const btn = document.getElementById("copy-btn");
-      btn.textContent = "✓ Copied!";
-      setTimeout(() => btn.textContent = "Copy to clipboard", 2000);
-    });
-  }
-</script>
 
 {% endblock %}

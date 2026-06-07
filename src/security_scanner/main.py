@@ -36,6 +36,9 @@ log = get_logger(__name__)
 VERSION = "0.1.0"
 
 
+_LOCAL_DB_HINTS = ("localhost", "postgres", "127.0.0.1", "sqlite")
+
+
 def _check_admin_bypass_safety(settings) -> None:
     """Production safeguard: ADMIN_LOCAL_BYPASS must never be true with a non-local DB.
 
@@ -46,9 +49,28 @@ def _check_admin_bypass_safety(settings) -> None:
     if not settings.ADMIN_LOCAL_BYPASS:
         return
     db_url = settings.DATABASE_URL or ""
-    if not any(host in db_url for host in ("localhost", "postgres", "127.0.0.1")):
+    if not any(host in db_url for host in _LOCAL_DB_HINTS):
         log.error(
             "startup refused: ADMIN_LOCAL_BYPASS=true with non-local DATABASE_URL",
+            database_url_redacted=db_url.split("@")[-1] if "@" in db_url else "(unset)",
+        )
+        sys.exit(1)
+
+
+def _check_local_password_safety(settings) -> None:
+    """Production safeguard: LOCAL_PORTAL_PASSWORD must not be set with a non-local DB.
+
+    The local password auth path is intended for local development only.
+    Setting it in production bypasses Okta and allows anyone who knows the
+    password to authenticate, which is insecure in a multi-tenant environment.
+    """
+    if not settings.LOCAL_PORTAL_PASSWORD:
+        return
+    db_url = settings.DATABASE_URL or ""
+    if db_url and not any(host in db_url for host in _LOCAL_DB_HINTS):
+        log.error(
+            "startup refused: LOCAL_PORTAL_PASSWORD set with non-local DATABASE_URL — "
+            "this env var is for local development only; production uses Okta auth",
             database_url_redacted=db_url.split("@")[-1] if "@" in db_url else "(unset)",
         )
         sys.exit(1)
@@ -84,6 +106,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         sys.exit(1)
 
     _check_admin_bypass_safety(settings)
+    _check_local_password_safety(settings)
 
     try:
         from security_scanner.tokens.crypto import validate_startup_key  # noqa: PLC0415

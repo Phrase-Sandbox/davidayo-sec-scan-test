@@ -1,19 +1,19 @@
 """``/admin/*`` — admin panel for the per-user token registry.
 
-Three capabilities live here:
+Capabilities:
 
 1. ``GET /admin/tokens`` — list/filter all tokens (active + historical).
 2. ``POST /admin/tokens/{token_id}/revoke`` — force-revoke any active token.
-3. ``POST /admin/tokens/{token_id}/force-rotate`` — server generates a new
-   suffix; the admin sees the new plaintext token exactly once and hands it
-   to the user via a secure channel (1Password share, etc.). Used when a
-   user can't SSO themselves (lost laptop, off-network).
-4. ``GET /admin/audit`` — paginated audit log viewer over ``audit_events``.
+   Admins can only revoke; users must self-issue replacement tokens via the
+   portal (/portal/). No plaintext token is ever shown to an admin.
+3. ``GET /admin/audit`` — paginated audit log viewer over ``audit_events``.
 
-Every route is guarded by :func:`require_admin`, which checks
-``ADMIN_GROUP_NAME`` membership in the ``X-Userinfo.groups`` claim. For
-local dev ``ADMIN_LOCAL_BYPASS=true`` injects a synthetic admin (and the
-app refuses to start if that flag is set against a non-local DB).
+Every route is guarded by :func:`require_admin`.  For local dev
+``ADMIN_LOCAL_BYPASS=true`` injects a synthetic admin (the app refuses to
+start if that flag is set against a non-local DB).
+
+Protected super-admins (``PROTECTED_ADMIN_EMAILS``) cannot be demoted,
+deactivated, or have their tokens bulk-revoked via this panel.
 """
 
 from __future__ import annotations
@@ -29,6 +29,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import desc, func, select
 
+from security_scanner.shared.config import get_settings
 from security_scanner.shared.logging_util import get_logger
 from security_scanner.tokens import audit as token_audit
 from security_scanner.tokens import registry as token_registry
@@ -74,8 +75,7 @@ KNOWN_MODELS: dict[str, list[str]] = {
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
-# Force-rotated tokens render the new plaintext once — keep them out of any
-# caching proxy or browser history.
+# No-cache headers applied to sensitive admin responses.
 _NO_STORE_HEADERS = {
     "Cache-Control": "no-store",
     "Pragma": "no-cache",
@@ -83,6 +83,24 @@ _NO_STORE_HEADERS = {
 }
 
 _AdminDep = Annotated[PhraseUser, Depends(require_admin)]
+
+
+def _assert_not_protected(email: str) -> None:
+    """Raise 400 if *email* belongs to a protected super-admin account.
+
+    Protected accounts are configured via ``PROTECTED_ADMIN_EMAILS`` and
+    cannot be demoted, deactivated, or have their tokens bulk-revoked through
+    the admin UI — that requires an infrastructure-level config change.
+    """
+    settings = get_settings()
+    protected = frozenset(
+        e.strip() for e in settings.PROTECTED_ADMIN_EMAILS.split(",") if e.strip()
+    )
+    if email in protected:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This account is a protected super-admin and cannot be modified via the admin UI.",
+        )
 
 
 # --- Token management -------------------------------------------------------
@@ -174,57 +192,6 @@ async def admin_revoke(
             "filter_status": "",
             "issued_token": None,
             "flash": flash,
-        },
-        headers=_NO_STORE_HEADERS,
-    )
-
-
-@router.post("/tokens/{token_id}/force-rotate", response_class=HTMLResponse)
-async def admin_force_rotate(
-    request: Request,
-    admin: _AdminDep,
-    token_id: str,
-) -> HTMLResponse:
-    """Rotate a user's token on their behalf; render the new plaintext once.
-
-    The admin is responsible for delivering the new value to the user via a
-    secure channel (1Password share / Signal). The plaintext is NEVER stored
-    or echoed back on a subsequent page load.
-    """
-    factory = get_session_factory()
-    async with factory() as session:
-        issued = await token_registry.force_rotate_by_token_id(
-            session, token_id=token_id, admin_email=admin.email
-        )
-        if issued is None:
-            await session.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No active token found for {token_id}.",
-            )
-        await session.commit()
-        rows = await token_registry.list_all(session)
-
-    log.info(
-        "admin token force-rotate",
-        actor_email=admin.email,
-        token_id=issued.token_id,
-        user_email=issued.user_email,
-    )
-    return templates.TemplateResponse(
-        request,
-        "admin_tokens.html",
-        {
-            "user": admin,
-            "rows": rows,
-            "filter_user": "",
-            "active_only": False,
-            "filter_status": "",
-            "issued_token": issued,
-            "flash": (
-                f"Rotated token for {issued.user_email}. "
-                "Copy the new plaintext below and hand it over via a secure channel."
-            ),
         },
         headers=_NO_STORE_HEADERS,
     )
@@ -630,6 +597,11 @@ async def admin_users(
     has_next = len(users) > _USERS_PAGE_SIZE
     users = users[:_USERS_PAGE_SIZE]
 
+    settings = get_settings()
+    protected_admin_emails = frozenset(
+        e.strip() for e in settings.PROTECTED_ADMIN_EMAILS.split(",") if e.strip()
+    )
+
     return templates.TemplateResponse(
         request,
         "admin_users.html",
@@ -640,6 +612,7 @@ async def admin_users(
             "has_next": has_next,
             "q": q or "",
             "flash": None,
+            "protected_admin_emails": protected_admin_emails,
         },
     )
 
@@ -651,6 +624,7 @@ async def admin_deactivate_user(
     email: str,
 ) -> HTMLResponse:
     """Set is_active=False. Next scan by this user → 401 Account deactivated."""
+    _assert_not_protected(email)
     factory = get_session_factory()
     async with factory() as session:
         stmt = select(User).where(User.email == email)
@@ -703,6 +677,7 @@ async def admin_revoke_user_tokens(
     email: str,
 ) -> HTMLResponse:
     """Revoke all active tokens for this user without touching is_active."""
+    _assert_not_protected(email)
     factory = get_session_factory()
     async with factory() as session:
         revoked = await token_registry.revoke_active_for_user(
@@ -768,6 +743,8 @@ async def admin_demote_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot remove your own admin role.",
         )
+    # Super-admin guard: protected accounts cannot be demoted by anyone.
+    _assert_not_protected(email)
     factory = get_session_factory()
     async with factory() as session:
         stmt = select(User).where(User.email == email)

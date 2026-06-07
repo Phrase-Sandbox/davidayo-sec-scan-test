@@ -168,48 +168,86 @@ def test_admin_revoke_rejects_malformed_token_id(client, session_factory):
     assert "No active token" in r.text
 
 
-# --- Force-rotate -----------------------------------------------------------
+# --- Force-rotate removed ---------------------------------------------------
+# The admin force-rotate endpoint was removed.  Admins may only revoke tokens;
+# users must self-issue replacement tokens via the portal (/portal/).
+# No plaintext token is ever shown to an admin.
 
 
-async def test_admin_force_rotate_shows_plaintext_once(client, session_factory):
-    async with session_factory() as session:
-        issued = await token_registry.issue_or_rotate_for_user(
-            session, user_email="alice@phrase.com"
-        )
-        await session.commit()
-    original_token_id = issued.token_id
-
-    r = client.post(
-        f"/admin/tokens/{original_token_id}/force-rotate", headers=_admin_headers()
-    )
-    assert r.status_code == 200
-    assert "phs_local_tok-" in r.text
-    # token_id prefix preserved across rotation
-    assert original_token_id in r.text
-
-    async with session_factory() as session:
-        rows = (
-            (
-                await session.execute(
-                    select(LocalScanToken).order_by(LocalScanToken.issued_at)
-                )
-            )
-            .scalars()
-            .all()
-        )
-        events = (await session.execute(select(AuditEvent))).scalars().all()
-    assert len(rows) == 2
-    assert rows[0].revoked_at is not None
-    assert rows[1].revoked_at is None
-    types = {e.event_type for e in events}
-    assert AuditEventType.admin_force_rotate in types
-
-
-async def test_admin_force_rotate_404_for_unknown(client, session_factory):
+def test_admin_force_rotate_route_does_not_exist(client, session_factory):
+    """The /admin/tokens/{id}/force-rotate endpoint must be gone (405/404)."""
     r = client.post(
         "/admin/tokens/tok-deadbeef0000/force-rotate", headers=_admin_headers()
     )
-    assert r.status_code == 404
+    # FastAPI returns 405 for unknown methods on known paths, 404 for fully unknown paths.
+    assert r.status_code in (404, 405)
+
+
+# --- Protected super-admin guards -------------------------------------------
+
+
+async def test_demote_protected_admin_returns_400(client, session_factory):
+    """Demoting a protected super-admin must return 400."""
+    # Ensure the protected user exists in the DB.
+    async with session_factory() as session:
+        from security_scanner.tokens.models import User, UserRole
+        from datetime import UTC, datetime
+        session.add(User(
+            email="david.shoyemi@phrase.com",
+            role=UserRole.admin,
+            is_active=True,
+            created_at=datetime.now(UTC),
+        ))
+        await session.commit()
+
+    r = client.post(
+        "/admin/users/david.shoyemi%40phrase.com/demote",
+        headers=_admin_headers(),
+    )
+    assert r.status_code == 400
+    assert "protected" in r.text.lower() or "protected" in r.json().get("detail", "").lower()
+
+
+async def test_deactivate_protected_admin_returns_400(client, session_factory):
+    """Deactivating a protected super-admin must return 400."""
+    async with session_factory() as session:
+        from security_scanner.tokens.models import User, UserRole
+        from datetime import UTC, datetime
+        session.add(User(
+            email="david.shoyemi@phrase.com",
+            role=UserRole.admin,
+            is_active=True,
+            created_at=datetime.now(UTC),
+        ))
+        await session.commit()
+
+    r = client.post(
+        "/admin/users/david.shoyemi%40phrase.com/deactivate",
+        headers=_admin_headers(),
+    )
+    assert r.status_code == 400
+    assert "protected" in r.text.lower() or "protected" in r.json().get("detail", "").lower()
+
+
+async def test_revoke_tokens_for_protected_admin_returns_400(client, session_factory):
+    """Bulk token revocation for a protected super-admin must return 400."""
+    async with session_factory() as session:
+        from security_scanner.tokens.models import User, UserRole
+        from datetime import UTC, datetime
+        session.add(User(
+            email="david.shoyemi@phrase.com",
+            role=UserRole.admin,
+            is_active=True,
+            created_at=datetime.now(UTC),
+        ))
+        await session.commit()
+
+    r = client.post(
+        "/admin/users/david.shoyemi%40phrase.com/revoke-tokens",
+        headers=_admin_headers(),
+    )
+    assert r.status_code == 400
+    assert "protected" in r.text.lower() or "protected" in r.json().get("detail", "").lower()
 
 
 # --- Audit log viewer -------------------------------------------------------

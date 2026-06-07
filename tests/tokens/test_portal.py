@@ -53,6 +53,11 @@ async def session_factory(monkeypatch):
     monkeypatch.setattr(
         "security_scanner.tokens.portal.get_session_factory", lambda: factory
     )
+    # auth.py's _check_account_active also calls get_session_factory — patch it
+    # so the is_active DB check uses the in-memory SQLite, not the fake postgres URL.
+    monkeypatch.setattr(
+        "security_scanner.tokens.auth.get_session_factory", lambda: factory
+    )
     try:
         yield factory
     finally:

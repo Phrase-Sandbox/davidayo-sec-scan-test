@@ -87,6 +87,16 @@ class Settings(BaseSettings):
         ),
     )
 
+    PROTECTED_ADMIN_EMAILS: str = Field(
+        default="david.shoyemi@phrase.com",
+        description=(
+            "Comma-separated list of admin email addresses that are protected "
+            "super-admins. Protected accounts cannot be demoted, deactivated, "
+            "or have their tokens bulk-revoked via the admin UI. "
+            "Changing this list requires a server restart."
+        ),
+    )
+
     PORTAL_LOGIN_URL: str = Field(
         default="",
         description=(

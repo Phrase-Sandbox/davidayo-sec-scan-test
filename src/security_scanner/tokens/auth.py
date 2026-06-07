@@ -159,6 +159,26 @@ def _browser_login_redirect(request: Request) -> HTTPException:
     )
 
 
+async def _check_account_active(user: PhraseUser, request: Request) -> None:
+    """Raise if the user exists in the DB but has been deactivated.
+
+    Skips the check for users not yet in the DB (Okta new-user / lazy
+    provisioning flow — the DB row is created on first token issue).
+    Never raises for the ``ADMIN_LOCAL_BYPASS`` synthetic user.
+    """
+    factory = get_session_factory()
+    async with factory() as _sess:
+        _db_user = await _sess.get(User, user.email)
+    if _db_user is not None and not _db_user.is_active:
+        log.info("portal access denied — account deactivated", user_email=user.email)
+        if "text/html" in request.headers.get("accept", ""):
+            raise _browser_login_redirect(request)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account deactivated. Contact your administrator.",
+        )
+
+
 async def require_phrase_user(request: Request) -> PhraseUser:
     """Resolve the calling Phrase user from ``X-Userinfo``.
 
@@ -169,6 +189,9 @@ async def require_phrase_user(request: Request) -> PhraseUser:
     3. ``X-Userinfo`` header — injected by the Okta ingress gateway (production).
     4. Missing header + browser request → 302 redirect to ``/portal/login``.
     5. Missing header + API request → 401 JSON (CLI / CI callers).
+
+    After identity is confirmed, verifies the user is not deactivated in the DB.
+    New users not yet provisioned (Okta path, lazy flow) are always allowed through.
     """
     settings = get_settings()
     if settings.ADMIN_LOCAL_BYPASS:
@@ -179,6 +202,7 @@ async def require_phrase_user(request: Request) -> PhraseUser:
     if cookie_val:
         session_user = verify_portal_session(cookie_val)
         if session_user is not None:
+            await _check_account_active(session_user, request)
             return session_user
 
     raw = request.headers.get("X-Userinfo") or request.headers.get("x-userinfo")
@@ -204,6 +228,7 @@ async def require_phrase_user(request: Request) -> PhraseUser:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="X-Userinfo missing required claims.",
         )
+    await _check_account_active(user, request)
     return user
 
 
