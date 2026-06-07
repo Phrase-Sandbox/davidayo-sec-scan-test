@@ -24,15 +24,64 @@ from __future__ import annotations
 import base64
 import binascii
 import json
+import time
 from dataclasses import dataclass
 from urllib.parse import quote
 
+from cryptography.fernet import Fernet, InvalidToken
 from fastapi import HTTPException, Request, status
 
 from security_scanner.shared.config import get_settings
 from security_scanner.shared.logging_util import get_logger
 from security_scanner.tokens.db import get_session_factory
 from security_scanner.tokens.models import User, UserRole
+
+# ---------------------------------------------------------------------------
+# Portal session cookie (local-auth path, complements Okta X-Userinfo).
+# ---------------------------------------------------------------------------
+_SESSION_COOKIE = "portal_session"
+_SESSION_TTL = 8 * 3600  # 8 hours
+
+
+def _get_fernet() -> Fernet:
+    """Return a Fernet cipher using SCANNER_ENCRYPTION_KEY."""
+    key = get_settings().SCANNER_ENCRYPTION_KEY
+    if not key:
+        raise RuntimeError("SCANNER_ENCRYPTION_KEY is required for portal session cookies")
+    return Fernet(key.encode() if isinstance(key, str) else key)
+
+
+def sign_portal_session(email: str, name: str) -> str:
+    """Return a Fernet-encrypted, TTL-bearing session cookie value."""
+    payload = json.dumps({
+        "e": email,
+        "n": name,
+        "x": int(time.time()) + _SESSION_TTL,
+    }).encode()
+    return _get_fernet().encrypt(payload).decode()
+
+
+def verify_portal_session(token: str) -> PhraseUser | None:
+    """Decrypt and validate a ``portal_session`` cookie.
+
+    Returns ``None`` when the token is missing, tampered, malformed, or expired.
+    Never raises — callers treat ``None`` as "no session".
+    """
+    try:
+        raw = _get_fernet().decrypt(token.encode())
+        data = json.loads(raw)
+    except RuntimeError:
+        # SCANNER_ENCRYPTION_KEY not configured — fall through to next auth method.
+        return None
+    except (InvalidToken, json.JSONDecodeError, Exception):  # noqa: BLE001
+        return None
+    if data.get("x", 0) < int(time.time()):
+        return None  # expired
+    email = data.get("e")
+    name = data.get("n") or email
+    if not isinstance(email, str) or not email:
+        return None
+    return PhraseUser(email=email, name=str(name), groups=())
 
 log = get_logger(__name__)
 
@@ -115,13 +164,22 @@ async def require_phrase_user(request: Request) -> PhraseUser:
 
     Priority:
     1. ``ADMIN_LOCAL_BYPASS`` — injects a fake admin (local dev only).
-    2. ``X-Userinfo`` header — injected by the Okta ingress gateway (production).
-    3. Missing header + browser request → 302 redirect to ``/portal/login``.
-    4. Missing header + API request → 401 JSON (CLI / CI callers).
+    2. ``portal_session`` cookie — Fernet-signed, issued by ``POST /portal/login``
+       when ``LOCAL_PORTAL_PASSWORD`` is set.  Works without Okta for local dev.
+    3. ``X-Userinfo`` header — injected by the Okta ingress gateway (production).
+    4. Missing header + browser request → 302 redirect to ``/portal/login``.
+    5. Missing header + API request → 401 JSON (CLI / CI callers).
     """
     settings = get_settings()
     if settings.ADMIN_LOCAL_BYPASS:
         return _bypass_user()
+
+    # Portal session cookie (local password auth path).
+    cookie_val = request.cookies.get(_SESSION_COOKIE)
+    if cookie_val:
+        session_user = verify_portal_session(cookie_val)
+        if session_user is not None:
+            return session_user
 
     raw = request.headers.get("X-Userinfo") or request.headers.get("x-userinfo")
     if not raw:

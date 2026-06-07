@@ -97,6 +97,18 @@ class Settings(BaseSettings):
         ),
     )
 
+    LOCAL_PORTAL_PASSWORD: str = Field(
+        default="",
+        description=(
+            "LOCAL DEVELOPMENT ONLY. When set, enables a simple email + password "
+            "login form on /portal/login. Any user who authenticates with this "
+            "password is auto-provisioned as an admin in the DB. Sessions are "
+            "Fernet-signed cookies (SCANNER_ENCRYPTION_KEY required). "
+            "In production, leave this unset — authentication is handled by the "
+            "Okta ingress gateway via X-Userinfo."
+        ),
+    )
+
     GITHUB_APP_ID: str = Field(..., description="GitHub App ID")
     GITHUB_APP_PRIVATE_KEY: str = Field(
         ...,

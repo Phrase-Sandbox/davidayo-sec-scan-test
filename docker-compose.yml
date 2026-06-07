@@ -60,7 +60,8 @@ services:
       - LOG_LEVEL=DEBUG
       - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg://scanner:scanner@postgres:5432/scanner}
       - ADMIN_GROUP_NAME=${ADMIN_GROUP_NAME:-security-scanner-admins}
-      - ADMIN_LOCAL_BYPASS=${ADMIN_LOCAL_BYPASS:-true}
+      - ADMIN_LOCAL_BYPASS=${ADMIN_LOCAL_BYPASS:-false}
+      - LOCAL_PORTAL_PASSWORD=${LOCAL_PORTAL_PASSWORD:-}
       - USE_TOKEN_REGISTRY=${USE_TOKEN_REGISTRY:-true}
       - RUN_MIGRATIONS_ON_STARTUP=${RUN_MIGRATIONS_ON_STARTUP:-true}
       # Fernet key for encrypting API keys at rest (user + org settings).
@@ -120,7 +121,8 @@ services:
       - LOG_LEVEL=DEBUG
       - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg://scanner:scanner@postgres:5432/scanner}
       - ADMIN_GROUP_NAME=${ADMIN_GROUP_NAME:-security-scanner-admins}
-      - ADMIN_LOCAL_BYPASS=${ADMIN_LOCAL_BYPASS:-true}
+      - ADMIN_LOCAL_BYPASS=${ADMIN_LOCAL_BYPASS:-false}
+      - LOCAL_PORTAL_PASSWORD=${LOCAL_PORTAL_PASSWORD:-}
       - USE_TOKEN_REGISTRY=${USE_TOKEN_REGISTRY:-true}
       - RUN_MIGRATIONS_ON_STARTUP=${RUN_MIGRATIONS_ON_STARTUP:-true}
       - SCANNER_ENCRYPTION_KEY=${SCANNER_ENCRYPTION_KEY}

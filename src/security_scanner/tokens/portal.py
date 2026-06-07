@@ -28,11 +28,13 @@ Trust model: every request MUST come through the Phrase Platform ingress
 
 from __future__ import annotations
 
+import secrets
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import desc, select
 
@@ -40,7 +42,13 @@ from security_scanner.shared.config import get_settings
 from security_scanner.shared.logging_util import get_logger
 from security_scanner.tokens import audit as token_audit
 from security_scanner.tokens import registry as token_registry
-from security_scanner.tokens.auth import PhraseUser, require_phrase_user
+from security_scanner.tokens.auth import (
+    PhraseUser,
+    _SESSION_COOKIE,
+    _SESSION_TTL,
+    require_phrase_user,
+    sign_portal_session,
+)
 from security_scanner.tokens.db import get_session_factory
 from security_scanner.tokens.models import (
     AuditEventType,
@@ -106,26 +114,103 @@ async def portal_login_page(
     """Login landing page shown to unauthenticated browser requests.
 
     If ``PORTAL_LOGIN_URL`` is configured (e.g. Okta auth endpoint), the page
-    shows a "Sign in with Okta" button pointing there.  If not set, it shows
-    contact-administrator instructions.  Authentication itself is handled by
-    the Okta ingress — this page is purely informational / a redirect helper.
+    shows a "Sign in with Okta" button pointing there.  If ``LOCAL_PORTAL_PASSWORD``
+    is set, a local email + password form is also shown (or shown exclusively when
+    no Okta URL is configured).  Otherwise it shows contact-administrator instructions.
     """
     settings = get_settings()
     return templates.TemplateResponse(
         request,
         "portal_login.html",
-        {"login_url": settings.PORTAL_LOGIN_URL, "next": next},
+        {
+            "login_url": settings.PORTAL_LOGIN_URL,
+            "next": next,
+            "local_auth_enabled": bool(settings.LOCAL_PORTAL_PASSWORD),
+        },
     )
+
+
+@router.post("/login", response_class=HTMLResponse, include_in_schema=False)
+async def portal_login_submit(
+    request: Request,
+    email: str = Form(...),
+    password: str = Form(...),
+    next: str = Form(default="/portal/"),
+) -> Response:
+    """Handle local-auth form submission when ``LOCAL_PORTAL_PASSWORD`` is configured.
+
+    On success:  issues a Fernet-signed ``portal_session`` cookie and redirects
+                 to ``next``.  The user is auto-provisioned as admin in the DB
+                 (idempotent) — knowing the shared local password = trusted admin.
+    On failure:  re-renders the login page with an error message (no redirect).
+    """
+    settings = get_settings()
+    local_pw = settings.LOCAL_PORTAL_PASSWORD
+
+    def _render_error(msg: str, code: int) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request,
+            "portal_login.html",
+            {
+                "login_url": settings.PORTAL_LOGIN_URL,
+                "next": next,
+                "local_auth_enabled": True,
+                "error": msg,
+            },
+            status_code=code,
+        )
+
+    # Reject if feature is not configured or password is wrong (constant-time compare).
+    if not local_pw or not secrets.compare_digest(password.encode(), local_pw.encode()):
+        return _render_error("Invalid credentials.", status.HTTP_401_UNAUTHORIZED)
+
+    # Provision user in DB:
+    #   - NEW users: created with role=admin (the shared password implies trust)
+    #   - EXISTING users: keep their current role (so admins can demote to regular
+    #     user for testing; re-logging in will not re-promote them)
+    display_name = email.split("@")[0].replace(".", " ").title()
+    now = datetime.now(timezone.utc)
+    factory = get_session_factory()
+    async with factory() as sess:
+        row = await sess.get(User, email)
+        if row is None:
+            sess.add(User(
+                email=email,
+                role=UserRole.admin,
+                is_active=True,
+                created_at=now,
+                last_login_at=now,
+            ))
+        else:
+            if not row.is_active:
+                return _render_error("Account is deactivated.", status.HTTP_403_FORBIDDEN)
+            row.last_login_at = now  # role unchanged — respect DB as source of truth
+        await sess.commit()
+
+    # Issue a Fernet-signed session cookie and redirect.
+    cookie_val = sign_portal_session(email=email, name=display_name)
+    response = RedirectResponse(url=next, status_code=status.HTTP_302_FOUND)
+    response.set_cookie(
+        key=_SESSION_COOKIE,
+        value=cookie_val,
+        httponly=True,
+        samesite="lax",
+        max_age=_SESSION_TTL,
+        secure=request.url.scheme == "https",
+    )
+    return response
 
 
 @router.post("/logout", response_class=HTMLResponse, include_in_schema=False)
 async def portal_logout(request: Request) -> RedirectResponse:
-    """Sign-out: redirect to login page.
+    """Sign-out: clear the portal session cookie and redirect to login page.
 
-    Okta sessions are terminated by the ingress; this route handles the
-    in-app link and ensures the browser lands on the login page.
+    Okta sessions are terminated by the ingress; this route clears the local
+    Fernet session cookie and ensures the browser lands on the login page.
     """
-    return RedirectResponse(url="/portal/login", status_code=302)
+    response = RedirectResponse(url="/portal/login", status_code=302)
+    response.delete_cookie(_SESSION_COOKIE, httponly=True, samesite="lax")
+    return response
 
 
 # --- Browser self-service ----------------------------------------------------
