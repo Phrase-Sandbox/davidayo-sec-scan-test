@@ -26,11 +26,12 @@ import binascii
 import json
 import time
 from dataclasses import dataclass
-from datetime import UTC, timezone
+from datetime import UTC, datetime, timezone
 from urllib.parse import quote
 
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import HTTPException, Request, status
+from sqlalchemy.exc import IntegrityError
 
 from security_scanner.shared.config import get_settings
 from security_scanner.shared.logging_util import get_logger
@@ -198,19 +199,85 @@ def _check_email_domain(email: str, settings) -> None:
         )
 
 
-async def _check_account_active(user: PhraseUser, request: Request) -> None:
-    """Raise if the user exists in the DB but has been deactivated, or if their
-    session predates a reactivation event (forced reauth).
+async def _jit_provision_user(user: PhraseUser) -> None:
+    """Create a User row on first gateway login (JIT provisioning).
 
-    Skips the check for users not yet in the DB (Okta new-user / lazy
-    provisioning flow — the DB row is created on first token issue).
+    Called by :func:`_check_account_active` when no DB row exists for the
+    authenticated user.  This is the primary onboarding path on Launchpad
+    (gateway-managed Okta, no local login page) and a safe fallback for any
+    auth path where the user has not yet been provisioned.
+
+    Role assignment:
+    1. ``PROTECTED_ADMIN_EMAILS`` → admin (super-admin bootstrap)
+    2. ``ADMIN_GROUP_NAME`` in ``user.groups`` → admin (Okta group access)
+    3. Otherwise → user
+
+    Uses ``add`` + ``commit`` wrapped in ``IntegrityError`` catch to handle
+    the rare concurrent double-provision without raising to the caller.
+    """
+    settings = get_settings()
+    protected = frozenset(
+        e.strip() for e in settings.PROTECTED_ADMIN_EMAILS.split(",") if e.strip()
+    )
+    admin_group = settings.ADMIN_GROUP_NAME
+    is_protected = user.email in protected
+    is_group_admin = bool(admin_group and admin_group in user.groups)
+    role = UserRole.admin if (is_protected or is_group_admin) else UserRole.user
+    # "unknown" is the PhraseUser default — set by _user_from_claims (X-Userinfo
+    # path).  Cookie-auth users already have a concrete provider ("local"/"okta").
+    auth_provider = "okta" if user.auth_provider == "unknown" else user.auth_provider
+    now = datetime.now(UTC)
+    new_user = User(
+        email=user.email,
+        auth_provider=auth_provider,
+        role=role,
+        is_active=True,
+        created_at=now,
+        last_login_at=now,
+        display_name=user.name,
+    )
+    factory = get_session_factory()
+    async with factory() as sess:
+        try:
+            sess.add(new_user)
+            await sess.commit()
+            log.info(
+                "jit user provisioned on gateway login",
+                user_email=user.email,
+                role=role.value,
+                auth_provider=auth_provider,
+                is_protected_admin=is_protected,
+                is_group_admin=is_group_admin,
+            )
+        except IntegrityError:
+            # Race: a concurrent request provisioned the same user first.
+            # Roll back and carry on — the row exists, which is all we need.
+            await sess.rollback()
+            log.debug(
+                "jit provision skipped — already provisioned by concurrent request",
+                user_email=user.email,
+            )
+
+
+async def _check_account_active(user: PhraseUser, request: Request) -> None:
+    """JIT-provision new users, then enforce active/deactivated status.
+
+    On first gateway login (no DB row found): calls :func:`_jit_provision_user`
+    to create a User row so admins can reach ``/admin/`` immediately without
+    having to issue a scanner token first.  Role is set by
+    ``PROTECTED_ADMIN_EMAILS`` and ``ADMIN_GROUP_NAME``.
+
+    For existing users: raises if ``is_active`` is ``False`` or if the
+    session predates a reactivation event (forced reauth after admin reactivate).
+
     Never raises for the ``ADMIN_LOCAL_BYPASS`` synthetic user.
     """
     factory = get_session_factory()
     async with factory() as _sess:
         _db_user = await _sess.get(User, user.email)
     if _db_user is None:
-        return  # new / not-yet-provisioned user — always allowed
+        await _jit_provision_user(user)
+        return
     if not _db_user.is_active:
         log.info("portal access denied — account deactivated", user_email=user.email)
         _raise_login_required(request)
@@ -245,7 +312,9 @@ async def require_phrase_user(request: Request) -> PhraseUser:
     5. Missing header + API request → 401 JSON (CLI / CI callers).
 
     After identity is confirmed, verifies the user is not deactivated in the DB.
-    New users not yet provisioned (Okta path, lazy flow) are always allowed through.
+    New users (no DB row) are JIT-provisioned on first login: protected admin
+    emails and ``ADMIN_GROUP_NAME`` Okta group members get role=admin; everyone
+    else gets role=user.
     """
     settings = get_settings()
     if settings.ADMIN_LOCAL_BYPASS:
@@ -294,8 +363,10 @@ async def require_admin(request: Request) -> PhraseUser:
     1. ``ADMIN_LOCAL_BYPASS`` — bypass user is always admin (local dev only).
     2. ``User.role == UserRole.admin`` in the DB — source of truth in production.
 
-    Okta groups are NOT used for admin determination. Roles are assigned
-    in-app via the ``/admin/users`` promote/demote UI.
+    Initial role is set at JIT provisioning time (first login):
+    ``PROTECTED_ADMIN_EMAILS`` and ``ADMIN_GROUP_NAME`` Okta group members
+    get admin.  After provisioning, roles can be changed via the
+    ``/admin/users`` promote/demote UI.
     """
     settings = get_settings()
     user = await require_phrase_user(request)
