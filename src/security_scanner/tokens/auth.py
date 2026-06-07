@@ -26,6 +26,7 @@ import binascii
 import json
 import time
 from dataclasses import dataclass
+from datetime import UTC, timezone
 from urllib.parse import quote
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -51,12 +52,15 @@ def _get_fernet() -> Fernet:
     return Fernet(key.encode() if isinstance(key, str) else key)
 
 
-def sign_portal_session(email: str, name: str) -> str:
+def sign_portal_session(email: str, name: str, auth_provider: str = "local") -> str:
     """Return a Fernet-encrypted, TTL-bearing session cookie value."""
+    now = int(time.time())
     payload = json.dumps({
         "e": email,
         "n": name,
-        "x": int(time.time()) + _SESSION_TTL,
+        "x": now + _SESSION_TTL,
+        "t": now,            # session_issued_at — used for reactivation reauth
+        "a": auth_provider,  # "okta" or "local"
     }).encode()
     return _get_fernet().encrypt(payload).decode()
 
@@ -81,7 +85,13 @@ def verify_portal_session(token: str) -> PhraseUser | None:
     name = data.get("n") or email
     if not isinstance(email, str) or not email:
         return None
-    return PhraseUser(email=email, name=str(name), groups=())
+    return PhraseUser(
+        email=email,
+        name=str(name),
+        groups=(),
+        auth_provider=data.get("a", "local"),
+        session_issued_at=data.get("t"),  # None for old cookies → reauth check skipped
+    )
 
 log = get_logger(__name__)
 
@@ -91,11 +101,13 @@ _LOCAL_BYPASS_NAME = "Local Admin"
 
 @dataclass(frozen=True)
 class PhraseUser:
-    """Resolved identity from ``X-Userinfo``."""
+    """Resolved identity from ``X-Userinfo`` or portal session cookie."""
 
     email: str
     name: str
     groups: tuple[str, ...]
+    auth_provider: str = "unknown"          # "okta", "local", or "unknown"
+    session_issued_at: float | None = None  # unix timestamp when cookie was minted
 
 
 def _decode_userinfo(raw: str) -> dict | None:
@@ -159,8 +171,36 @@ def _browser_login_redirect(request: Request) -> HTTPException:
     )
 
 
+def _raise_login_required(request: Request) -> None:
+    """Raise a login-redirect (browsers) or 401 (API/CLI callers)."""
+    if "text/html" in request.headers.get("accept", ""):
+        raise _browser_login_redirect(request)
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Session expired. Please re-authenticate.",
+    )
+
+
+def _check_email_domain(email: str, settings) -> None:
+    """Raise 403 if OKTA_EMAIL_DOMAIN is set and the email domain doesn't match.
+
+    Applied to all auth paths when the setting is configured.
+    Set OKTA_EMAIL_DOMAIN='' to disable (for local dev with test emails).
+    """
+    allowed = getattr(settings, "OKTA_EMAIL_DOMAIN", "").strip().lower()
+    if not allowed:
+        return
+    domain = email.split("@")[-1].lower() if "@" in email else ""
+    if domain != allowed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Login restricted to @{allowed} accounts.",
+        )
+
+
 async def _check_account_active(user: PhraseUser, request: Request) -> None:
-    """Raise if the user exists in the DB but has been deactivated.
+    """Raise if the user exists in the DB but has been deactivated, or if their
+    session predates a reactivation event (forced reauth).
 
     Skips the check for users not yet in the DB (Okta new-user / lazy
     provisioning flow — the DB row is created on first token issue).
@@ -169,14 +209,28 @@ async def _check_account_active(user: PhraseUser, request: Request) -> None:
     factory = get_session_factory()
     async with factory() as _sess:
         _db_user = await _sess.get(User, user.email)
-    if _db_user is not None and not _db_user.is_active:
+    if _db_user is None:
+        return  # new / not-yet-provisioned user — always allowed
+    if not _db_user.is_active:
         log.info("portal access denied — account deactivated", user_email=user.email)
-        if "text/html" in request.headers.get("accept", ""):
-            raise _browser_login_redirect(request)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Account deactivated. Contact your administrator.",
+        _raise_login_required(request)
+    # Forced reauth: if the user was reactivated after this session was issued,
+    # the old session is no longer valid — the user must log in again.
+    # SQLite returns naive datetimes even for timezone=True columns; treat them
+    # as UTC so the timestamp() comparison is correct in all environments.
+    _reactivated_at = _db_user.last_reactivation_at
+    if _reactivated_at is not None and _reactivated_at.tzinfo is None:
+        _reactivated_at = _reactivated_at.replace(tzinfo=UTC)
+    if (
+        _reactivated_at is not None
+        and user.session_issued_at is not None
+        and user.session_issued_at < _reactivated_at.timestamp()
+    ):
+        log.info(
+            "portal session expired — reactivation requires fresh login",
+            user_email=user.email,
         )
+        _raise_login_required(request)
 
 
 async def require_phrase_user(request: Request) -> PhraseUser:
@@ -228,6 +282,7 @@ async def require_phrase_user(request: Request) -> PhraseUser:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="X-Userinfo missing required claims.",
         )
+    _check_email_domain(user.email, get_settings())
     await _check_account_active(user, request)
     return user
 

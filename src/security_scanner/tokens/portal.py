@@ -28,6 +28,7 @@ Trust model: every request MUST come through the Phrase Platform ingress
 
 from __future__ import annotations
 
+import bcrypt
 import secrets
 from datetime import datetime, timezone
 from pathlib import Path
@@ -38,7 +39,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import desc, select
 
-from security_scanner.shared.config import get_settings
+from security_scanner.shared.config import get_settings, okta_is_configured
 from security_scanner.shared.logging_util import get_logger
 from security_scanner.tokens import audit as token_audit
 from security_scanner.tokens import registry as token_registry
@@ -46,6 +47,7 @@ from security_scanner.tokens.auth import (
     PhraseUser,
     _SESSION_COOKIE,
     _SESSION_TTL,
+    _check_email_domain,
     require_phrase_user,
     sign_portal_session,
 )
@@ -97,6 +99,16 @@ _UserDep = Annotated[PhraseUser, Depends(require_phrase_user)]
 _SCANS_PAGE_SIZE = 20
 
 
+def _verify_password(candidate: str, stored_hash: bytes) -> bool:
+    """Constant-time bcrypt password verification."""
+    return bcrypt.checkpw(candidate.encode(), stored_hash)
+
+
+def _hash_password(password: str) -> bytes:
+    """Hash a plaintext password with bcrypt (12 rounds)."""
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=12))
+
+
 async def _load_active_org_settings_for_portal() -> OrgSettings | None:
     """Return the latest ``OrgSettings`` row for portal display, or ``None``."""
     factory = get_session_factory()
@@ -142,6 +154,7 @@ async def portal_login_page(
             "login_url": settings.PORTAL_LOGIN_URL,
             "next": next,
             "local_auth_enabled": bool(settings.LOCAL_PORTAL_PASSWORD),
+            "okta_enabled": okta_is_configured(settings),
         },
     )
 
@@ -153,13 +166,13 @@ async def portal_login_submit(
     password: str = Form(...),
     next: str = Form(default="/portal/"),
 ) -> Response:
-    """Handle local-auth form submission when ``LOCAL_PORTAL_PASSWORD`` is configured.
+    """Handle local-auth form submission when LOCAL_PORTAL_PASSWORD is configured.
 
-    On success:  issues a Fernet-signed ``portal_session`` cookie and redirects
-                 to ``next``.  New users are provisioned as ``user`` role by default;
-                 emails in ``PROTECTED_ADMIN_EMAILS`` get ``admin`` role.
-                 Existing users keep their current DB role.
-    On failure:  re-renders the login page with an error message (no redirect).
+    On success: issues a Fernet-signed portal_session cookie and redirects
+                to next. New users are provisioned as user role by default;
+                emails in PROTECTED_ADMIN_EMAILS get admin role.
+                Existing users keep their current DB role.
+    On failure: re-renders the login page with an error message (no redirect).
     """
     settings = get_settings()
     next = _safe_next(next)  # reject external URLs (open-redirect guard)
@@ -173,46 +186,84 @@ async def portal_login_submit(
                 "login_url": settings.PORTAL_LOGIN_URL,
                 "next": next,
                 "local_auth_enabled": True,
+                "okta_enabled": False,
                 "error": msg,
             },
             status_code=code,
         )
 
-    # Reject if feature is not configured or password is wrong (constant-time compare).
-    if not local_pw or not secrets.compare_digest(password.encode(), local_pw.encode()):
-        return _render_error("Invalid credentials.", status.HTTP_401_UNAUTHORIZED)
+    # 1. Domain restriction (when OKTA_EMAIL_DOMAIN is configured).
+    try:
+        _check_email_domain(email, settings)
+    except Exception:  # noqa: BLE001 — HTTPException from _check_email_domain
+        return _render_error(
+            f"Login restricted to @{settings.OKTA_EMAIL_DOMAIN} accounts.",
+            status.HTTP_403_FORBIDDEN,
+        )
 
-    # Provision user in DB:
+    # 2. Local login must be configured.
+    if not local_pw:
+        return _render_error("Local login is not enabled.", status.HTTP_403_FORBIDDEN)
+
+    # 3. Load existing user for per-user password check.
+    factory = get_session_factory()
+    async with factory() as _s:
+        _existing_row = await _s.get(User, email)
+
+    # 4. Credential verification: per-user bcrypt hash takes priority over env var.
+    if _existing_row is not None and getattr(_existing_row, "password_hash", None) is not None:
+        if not _verify_password(password, _existing_row.password_hash):
+            return _render_error("Invalid credentials.", status.HTTP_401_UNAUTHORIZED)
+    else:
+        if not secrets.compare_digest(password.encode(), local_pw.encode()):
+            return _render_error("Invalid credentials.", status.HTTP_401_UNAUTHORIZED)
+
+    # 5. Provision user in DB:
     #   - NEW users: created with role=user by default.
-    #     Exception: emails listed in PROTECTED_ADMIN_EMAILS get role=admin
-    #     so that designated super-admins are provisioned correctly on first login.
-    #   - EXISTING users: keep their current role (so admins can demote to regular
-    #     user for testing; re-logging in will not re-promote them).
+    #     Exception: emails listed in PROTECTED_ADMIN_EMAILS get role=admin.
+    #   - EXISTING users: keep their current role (DB is source of truth).
     display_name = email.split("@")[0].replace(".", " ").title()
     now = datetime.now(timezone.utc)
     protected = frozenset(
         e.strip() for e in settings.PROTECTED_ADMIN_EMAILS.split(",") if e.strip()
     )
-    factory = get_session_factory()
+    must_reset = False
     async with factory() as sess:
         row = await sess.get(User, email)
         if row is None:
             initial_role = UserRole.admin if email in protected else UserRole.user
             sess.add(User(
                 email=email,
+                auth_provider="local",
                 role=initial_role,
                 is_active=True,
                 created_at=now,
                 last_login_at=now,
+                display_name=display_name,
             ))
         else:
             if not row.is_active:
                 return _render_error("Account is deactivated.", status.HTTP_403_FORBIDDEN)
-            row.last_login_at = now  # role unchanged — respect DB as source of truth
+            row.last_login_at = now
+            must_reset = bool(getattr(row, "must_change_password", False))
         await sess.commit()
 
-    # Issue a Fernet-signed session cookie and redirect.
-    cookie_val = sign_portal_session(email=email, name=display_name)
+    # 6. If super-admin forced a password reset → short-lived cookie, redirect to change-password.
+    if must_reset:
+        cookie_val = sign_portal_session(email=email, name=display_name, auth_provider="local")
+        resp = RedirectResponse(url="/portal/change-password", status_code=status.HTTP_302_FOUND)
+        resp.set_cookie(
+            key=_SESSION_COOKIE,
+            value=cookie_val,
+            httponly=True,
+            samesite="lax",
+            max_age=900,  # 15-minute TTL for the change-password flow only
+            secure=request.url.scheme == "https",
+        )
+        return resp
+
+    # 7. Issue a Fernet-signed session cookie and redirect.
+    cookie_val = sign_portal_session(email=email, name=display_name, auth_provider="local")
     response = RedirectResponse(url=next, status_code=status.HTTP_302_FOUND)
     response.set_cookie(
         key=_SESSION_COOKIE,
@@ -235,6 +286,66 @@ async def portal_logout(request: Request) -> RedirectResponse:
     response = RedirectResponse(url="/portal/login", status_code=302)
     response.delete_cookie(_SESSION_COOKIE, httponly=True, samesite="lax")
     return response
+
+
+@router.get("/change-password", response_class=HTMLResponse, include_in_schema=False)
+async def portal_change_password_get(
+    request: Request,
+    user: _UserDep,
+) -> HTMLResponse:
+    """Change-password page. Shown after a super-admin force-resets the user's password."""
+    return templates.TemplateResponse(request, "portal_change_password.html", {})
+
+
+@router.post("/change-password", response_class=HTMLResponse, include_in_schema=False)
+async def portal_change_password_post(
+    request: Request,
+    user: _UserDep,
+    new_password: str = Form(...),
+    confirm_password: str = Form(...),
+) -> Response:
+    """Validate and store the user's new password. Clears must_change_password flag."""
+
+    def _err(msg: str) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request,
+            "portal_change_password.html",
+            {"error": msg},
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
+
+    if len(new_password) < 12:
+        return _err("Password must be at least 12 characters.")
+    if not secrets.compare_digest(new_password.encode(), confirm_password.encode()):
+        return _err("Passwords do not match.")
+
+    factory = get_session_factory()
+    async with factory() as sess:
+        row = await sess.get(User, user.email)
+        if row is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+        row.password_hash = _hash_password(new_password)
+        row.must_change_password = False
+        await token_audit.record(
+            sess,
+            event_type=AuditEventType.user_password_changed,
+            user_email=user.email,
+            actor_email=user.email,
+        )
+        await sess.commit()
+
+    # Issue a fresh full-TTL session cookie now that the password is set.
+    cookie_val = sign_portal_session(email=user.email, name=user.name, auth_provider="local")
+    resp = RedirectResponse(url="/portal/", status_code=status.HTTP_302_FOUND)
+    resp.set_cookie(
+        key=_SESSION_COOKIE,
+        value=cookie_val,
+        httponly=True,
+        samesite="lax",
+        max_age=_SESSION_TTL,
+        secure=request.url.scheme == "https",
+    )
+    return resp
 
 
 # --- Browser self-service ----------------------------------------------------

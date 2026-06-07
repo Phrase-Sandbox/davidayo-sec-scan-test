@@ -29,6 +29,7 @@ from security_scanner.shared.logging_util import get_logger
 from security_scanner.skill.api import router as skill_api_router
 from security_scanner.skill.oauth import router as skill_oauth_router
 from security_scanner.tokens.admin_panel import router as admin_router
+from security_scanner.tokens.okta import router as okta_router
 from security_scanner.tokens.portal import router as portal_router
 
 log = get_logger(__name__)
@@ -278,6 +279,7 @@ app.include_router(local_scan_router)
 # In legacy mode (USE_TOKEN_REGISTRY=false) it is reachable but issuing a
 # token has no effect on /scan/local — there it still consults the env var.
 app.include_router(portal_router)
+app.include_router(okta_router)
 # Admin panel — group-gated (ADMIN_GROUP_NAME). require_admin returns 403 for
 # non-admins, so it is safe to mount unconditionally.
 app.include_router(admin_router)

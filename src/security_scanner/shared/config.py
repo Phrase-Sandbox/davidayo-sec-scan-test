@@ -119,6 +119,37 @@ class Settings(BaseSettings):
         ),
     )
 
+    OKTA_DOMAIN: str = Field(
+        default="",
+        description="Okta domain, e.g. phrase.okta.com. Required for direct OIDC login.",
+    )
+    OKTA_CLIENT_ID: str = Field(
+        default="",
+        description="Okta application client ID.",
+    )
+    OKTA_CLIENT_SECRET: str = Field(
+        default="",
+        description="Okta client secret. NEVER logged (covered by REDACT_FIELDS 'secret').",
+    )
+    OKTA_REDIRECT_URI: str = Field(
+        default="",
+        description=(
+            "Absolute callback URL, e.g. "
+            "https://scanner.phrase.com/portal/oauth/callback"
+        ),
+    )
+    OKTA_SCOPES: str = Field(
+        default="openid profile email",
+        description="Space-separated OIDC scopes. Do not request more than needed.",
+    )
+    OKTA_EMAIL_DOMAIN: str = Field(
+        default="phrase.com",
+        description=(
+            "Restrict logins to this email domain (applied to all auth paths when set). "
+            "Set to '' to disable — use only for local dev with non-phrase.com test emails."
+        ),
+    )
+
     GITHUB_APP_ID: str = Field(..., description="GitHub App ID")
     GITHUB_APP_PRIVATE_KEY: str = Field(
         ...,
@@ -179,3 +210,12 @@ def get_settings() -> Settings:
     static analysis tooling working out of the box.
     """
     return Settings()  # type: ignore[call-arg]
+
+
+def okta_is_configured(settings) -> bool:
+    """Return True only when all three required Okta env vars are set."""
+    return bool(
+        settings.OKTA_DOMAIN
+        and settings.OKTA_CLIENT_ID
+        and settings.OKTA_CLIENT_SECRET
+    )

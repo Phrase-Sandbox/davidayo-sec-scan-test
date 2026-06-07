@@ -59,6 +59,10 @@ class AuditEventType(enum.StrEnum):
     slack_webhook_configured = "slack_webhook_configured"  # noqa: S105
     user_promoted = "user_promoted"    # role user → admin (app-managed)
     user_demoted = "user_demoted"      # role admin → user (app-managed)
+    user_password_force_reset = "user_password_force_reset"
+    user_password_changed = "user_password_changed"
+    user_okta_login = "user_okta_login"
+    user_local_login = "user_local_login"
 
 
 class UserRole(enum.StrEnum):
@@ -148,6 +152,29 @@ class User(Base):
         DateTime(timezone=True), nullable=True
     )
     okta_groups: Mapped[list | None] = mapped_column(_JsonType, nullable=True)
+
+    # Stable Okta user ID (sub claim). Unique — allows lookup across email changes.
+    # NULL for local-only users who have never logged in via Okta.
+    okta_user_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, unique=True, index=True
+    )
+    # "okta" or "local". Determines which credential is verified on login.
+    auth_provider: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default="local"
+    )
+    # Bcrypt hash for local users. NULL = no individual password set yet;
+    # login falls back to LOCAL_PORTAL_PASSWORD env var.
+    password_hash: Mapped[bytes | None] = mapped_column(LargeBinary(), nullable=True)
+    # When True, user is redirected to /portal/change-password on next local login.
+    must_change_password: Mapped[bool] = mapped_column(
+        Boolean(), nullable=False, server_default="false"
+    )
+    # Set to now() by admin on reactivation. Sessions issued before this are rejected.
+    last_reactivation_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Display name from Okta (name claim) or derived from email for local users.
+    display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
 class UserLLMSettings(Base):

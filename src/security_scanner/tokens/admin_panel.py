@@ -664,6 +664,7 @@ async def admin_reactivate_user(
         if user_row is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
         user_row.is_active = True
+        user_row.last_reactivation_at = datetime.now(UTC)
         await token_audit.record(
             session,
             event_type=AuditEventType.user_reactivated,
@@ -697,6 +698,43 @@ async def admin_revoke_user_tokens(
         target_email=email,
         revoked=revoked,
     )
+    return await admin_users(request, admin, page=1, q=email)
+
+
+@router.post("/users/{email}/force-password-reset", response_class=HTMLResponse)
+async def admin_force_password_reset(
+    request: Request,
+    admin: _AdminDep,
+    email: str,
+) -> HTMLResponse:
+    """Set must_change_password=True and clear any stored password hash.
+
+    Only applies to local-auth users. Okta users reset credentials via Okta.
+    The user will be redirected to /portal/change-password on their next login.
+    """
+    factory = get_session_factory()
+    async with factory() as session:
+        row = await session.get(User, email)
+        if row is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+        if getattr(row, "auth_provider", "local") != "local":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Password reset only applies to local-auth users. "
+                    "Okta users reset credentials via Okta."
+                ),
+            )
+        row.must_change_password = True
+        row.password_hash = None  # clear stored hash → falls back to env var on next login
+        await token_audit.record(
+            session,
+            event_type=AuditEventType.user_password_force_reset,
+            user_email=email,
+            actor_email=admin.email,
+        )
+        await session.commit()
+    log.info("admin forced password reset", actor_email=admin.email, target_email=email)
     return await admin_users(request, admin, page=1, q=email)
 
 

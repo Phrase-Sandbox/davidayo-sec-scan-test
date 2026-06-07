@@ -86,6 +86,11 @@
               protected
             </span>
           {% endif %}
+          {% if u.auth_provider == "okta" %}
+          <span style="display:inline-block;font-size:0.72rem;font-weight:600;padding:0.14em 0.45em;border-radius:4px;background:rgba(37,99,235,0.1);border:1px solid rgba(37,99,235,0.3);color:var(--accent);margin-left:0.3rem;" title="Authenticated via Okta SSO">Okta</span>
+          {% else %}
+          <span style="display:inline-block;font-size:0.72rem;font-weight:600;padding:0.14em 0.45em;border-radius:4px;background:rgba(107,114,128,0.1);border:1px solid rgba(107,114,128,0.3);color:var(--muted);margin-left:0.3rem;" title="Local password authentication">Local</span>
+          {% endif %}
         </td>
         <td style="white-space:nowrap;">
           {% if u.role.value == "admin" %}
@@ -119,6 +124,9 @@
           {% else %}
             <span class="pill pill-fail">deactivated</span>
           {% endif %}
+          {% if u.must_change_password %}
+          <span style="display:inline-block;font-size:0.72rem;font-weight:600;padding:0.14em 0.45em;border-radius:4px;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);color:#92400e;margin-left:0.3rem;" title="Password reset required on next login">&#9888; pwd reset</span>
+          {% endif %}
         </td>
         <td class="muted" style="font-size:0.82rem; white-space:nowrap;">
           {{ u.last_login_at.strftime("%Y-%m-%d %H:%M") if u.last_login_at else "—" }}
@@ -151,6 +159,13 @@
                   onsubmit="return confirm('Revoke all active tokens for this user?')">
               <button type="submit" class="btn btn-sm">Revoke tokens</button>
             </form>
+            {%- if u.auth_provider != "okta" and not is_protected -%}
+            <form method="post" action="/admin/users/{{ u.email | urlencode }}/force-password-reset"
+                  style="display:inline"
+                  onsubmit="return confirm('Force {{ u.email }} to change their password on next login?')">
+              <button type="submit" class="btn btn-sm" style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);color:#92400e;">Force pwd reset</button>
+            </form>
+            {%- endif -%}
           {% endif %}
         </td>
       </tr>
