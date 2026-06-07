@@ -1,0 +1,100 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [Build]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (e.g. commit-abc1234, defaults to latest build)"
+        required: false
+
+permissions:
+  id-token: write
+  contents: read
+  actions: read
+
+jobs:
+  deploy:
+    runs-on: core-arc-ondemand-launchpad
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to AWS & configure kubectl
+        uses: Phrase-Engineering/platform-core-reusable-actions/actions/aws-eks-auth@main
+        with:
+          aws-account-map: '{"launchpad": "882466794441"}'
+          env: launchpad
+          eks-cluster: launchpad-eu-west-1-main
+
+      - name: Set image tag
+        id: tag
+        run: |
+          if [ -n "${{ inputs.image_tag }}" ]; then
+            echo "value=${{ inputs.image_tag }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "value=commit-${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
+          else
+            LAST_SHA=$(gh run list --workflow=build.yml --limit=20 --json headSha,conclusion,headBranch \
+              --jq '[.[] | select(.headBranch=="main" and .conclusion=="success")] | .[0].headSha')
+            if [ -z "$LAST_SHA" ] || [ "$LAST_SHA" = "null" ]; then
+              echo "Error: No successful build.yml run found on main." >&2
+              exit 1
+            fi
+            echo "value=commit-${LAST_SHA}" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Retrieve DATABASE_URL from Secrets Manager
+        run: |
+          DB_SECRET=$(aws secretsmanager get-secret-value \
+            --secret-id "github/phrase-sec-scan/database" \
+            --query 'SecretString' --output text)
+          DATABASE_URL=$(echo "$DB_SECRET" | python3 -c "import sys,json; print(json.load(sys.stdin)['database_url'])")
+          echo "::add-mask::$DATABASE_URL"
+          echo "DATABASE_URL=$DATABASE_URL" >> $GITHUB_ENV
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Deploy
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # APP_ prefix strips the GITHUB_ restriction; mapped back to GITHUB_APP_* in the pod
+          GITHUB_APP_ID: ${{ secrets.APP_GITHUB_APP_ID }}
+          GITHUB_APP_PRIVATE_KEY: ${{ secrets.APP_GITHUB_APP_PRIVATE_KEY }}
+          SCANNER_ENCRYPTION_KEY: ${{ secrets.SCANNER_ENCRYPTION_KEY }}
+          PHRASE_SCAN_TOKEN: ${{ secrets.PHRASE_SCAN_TOKEN }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          OKTA_CLIENT_ID: ${{ secrets.DEFAULT_OKTA_CLIENT_ID }}
+          OKTA_CLIENT_SECRET: ${{ secrets.DEFAULT_OKTA_OIDC_SECRET }}
+          SESSION_SECRET: ${{ secrets.DEFAULT_SESSION_SECRET }}
+        run: |
+          helm upgrade --install phrase-sec-scan ./deploy/chart/ \
+            --namespace launchpad-phrase-sec-scan \
+            -f ./deploy/chart/values-ingress.yaml \
+            --set image.tag=${{ steps.tag.outputs.value }} \
+            --set "serviceAccount.annotations.eks\.amazonaws\.com/role-arn=arn:aws:iam::882466794441:role/irsa-launchpad-phrase-sec-scan" \
+            --set "secrets.ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" \
+            --set "secrets.GITHUB_APP_ID=${GITHUB_APP_ID}" \
+            --set "secrets.GITHUB_APP_PRIVATE_KEY=${GITHUB_APP_PRIVATE_KEY}" \
+            --set "secrets.SCANNER_ENCRYPTION_KEY=${SCANNER_ENCRYPTION_KEY}" \
+            --set "secrets.PHRASE_SCAN_TOKEN=${PHRASE_SCAN_TOKEN}" \
+            --set "secrets.GOOGLE_API_KEY=${GOOGLE_API_KEY}" \
+            --set "secrets.SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}" \
+            --set "secrets.DATABASE_URL=${DATABASE_URL}" \
+            --set "ingress.oidc.clientId=${OKTA_CLIENT_ID}" \
+            --set "ingress.oidc.clientSecret=${OKTA_CLIENT_SECRET}" \
+            --set "ingress.oidc.sessionSecret=${SESSION_SECRET}" \
+            --wait \
+            --timeout 5m \
+            --atomic

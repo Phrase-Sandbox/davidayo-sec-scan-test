@@ -1,0 +1,8 @@
+ingress:
+  enabled: true
+  hostname: "phrase-sec-scan.launchpad.phrase-internal.com"
+  gatewayName: "apisix"
+  gatewayNamespace: "new-ingress"
+  servicePort: 80
+  oidc:
+    enabled: true   # OIDC enforced on /portal and /admin routes only (see httproute.yaml)

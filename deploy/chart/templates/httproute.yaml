@@ -1,0 +1,39 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "chart.fullname" . }}
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+spec:
+  parentRefs:
+    - name: {{ .Values.ingress.gatewayName }}
+      namespace: {{ .Values.ingress.gatewayNamespace }}
+      sectionName: https
+  hostnames:
+    - {{ .Values.ingress.hostname | quote }}
+  rules:
+    {{- if .Values.ingress.oidc.enabled }}
+    # /portal and /admin are protected — gateway enforces Okta OIDC before forwarding
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /portal
+        - path:
+            type: PathPrefix
+            value: /admin
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: apisix.apache.org
+            kind: PluginConfig
+            name: {{ include "chart.fullname" . }}-oidc
+      backendRefs:
+        - name: {{ include "chart.fullname" . }}
+          port: {{ .Values.ingress.servicePort }}
+    {{- end }}
+    # All other paths (CI /scan endpoint, /healthz, etc.) pass through unprotected
+    - backendRefs:
+        - name: {{ include "chart.fullname" . }}
+          port: {{ .Values.ingress.servicePort }}
+{{- end }}

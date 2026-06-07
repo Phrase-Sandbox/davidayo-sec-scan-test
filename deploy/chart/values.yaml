@@ -1,0 +1,116 @@
+replicaCount: 1
+
+image:
+  repository: 333070415076.dkr.ecr.eu-west-1.amazonaws.com/image/phrase/phrase-launchpad/phrase-sec-scan/app
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}   # IRSA role ARN set at deploy time via --set
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+# Scanner runs Semgrep + Bandit + ESLint + gosec in parallel plus LLM calls — needs headroom
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+
+# /tmp is required: semgrep writes settings, logs, and version-cache there
+extraVolumes:
+  - name: tmp
+    emptyDir: {}
+
+extraVolumeMounts:
+  - name: tmp
+    mountPath: /tmp
+
+env:
+  - name: PORT
+    value: "8000"
+  - name: LOG_LEVEL
+    value: "INFO"
+  - name: USE_TOKEN_REGISTRY
+    value: "true"
+  - name: RUN_MIGRATIONS_ON_STARTUP
+    value: "true"
+  - name: ADMIN_GROUP_NAME
+    value: "security-scanner-admins"
+  - name: ENABLE_MULTI_SCANNER
+    value: "true"
+  - name: GITHUB_OIDC_ENABLED
+    value: "true"
+  - name: GITHUB_OIDC_AUDIENCE
+    value: "phrase-scanner"
+  - name: GITHUB_OIDC_ALLOWED_WORKFLOW_REFS
+    value: "Phrase-Sandbox/master-scanner-pipeline/.github/workflows/scanner.yml@"
+  # Redirect semgrep temp files to /tmp so readOnlyRootFilesystem: true is not violated
+  - name: SEMGREP_SETTINGS_FILE
+    value: "/tmp/semgrep-settings.yml"
+  - name: SEMGREP_LOG_FILE
+    value: "/tmp/semgrep.log"
+  - name: SEMGREP_VERSION_CACHE_PATH
+    value: "/tmp/semgrep-version-cache"
+  - name: XDG_CACHE_HOME
+    value: "/tmp/xdg-cache"
+
+# Secret env vars — all values injected at deploy time via --set secrets.KEY=
+# Never set real values here
+secrets:
+  ANTHROPIC_API_KEY: ""
+  GITHUB_APP_ID: ""
+  GITHUB_APP_PRIVATE_KEY: ""
+  SCANNER_ENCRYPTION_KEY: ""
+  PHRASE_SCAN_TOKEN: ""
+  GOOGLE_API_KEY: ""
+  SLACK_WEBHOOK_URL: ""
+  DATABASE_URL: ""
+
+networkPolicy:
+  extraEgress:
+    # RDS PostgreSQL in the VPC
+    - ports:
+        - port: 5432
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.0.0.0/8
+    # External HTTPS: Anthropic API, Google API, GitHub API, gosec binary download
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+
+ingress:
+  enabled: false
+  hostname: ""
+  gatewayName: ""
+  gatewayNamespace: ""
+  servicePort: 80
+  oidc:
+    enabled: false
+    clientId: ""
+    clientSecret: ""
+    sessionSecret: ""

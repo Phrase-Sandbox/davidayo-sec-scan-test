@@ -1,0 +1,6 @@
+apiVersion: v2
+name: phrase-sec-scan
+description: Phrase security scanner — static analysis and LLM-assisted vulnerability detection
+type: application
+version: 0.1.0
+appVersion: "latest"

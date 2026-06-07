@@ -1,0 +1,93 @@
+# Environment configuration for Phrase Launchpad (production)
+#
+# This file provides all platform-specific values used by the agent skills.
+# Production environment — services are accessible via Kubernetes Gateway API / APISIX.
+#
+# Values marked as GitHub org variables/secrets at the bottom are NOT included here
+# because they are per-application (Okta OIDC) or sensitive. They must be configured
+# at the GitHub organization level.
+
+environment_name: phrase-launchpad
+
+# --- GitHub ---
+github:
+  # Organization where service repos are created
+  org: "Phrase-Launchpad"
+  # Infrastructure-as-code repo (contains tfvars for provisioning)
+  infra_repo: "platform-launchpad-services"
+  # Organization and repo for reusable GitHub Actions
+  reusable_actions_org: Phrase-Engineering
+  reusable_actions_repo: platform-core-reusable-actions
+  # Self-hosted runner label
+  runner: "core-arc-ondemand-launchpad"
+  # Repo for skill issue reporting (org/repo format)
+  issues_repo: Phrase-Engineering/platform-agent-skills
+
+# --- AWS ---
+aws:
+  region: eu-west-1
+  # AWS account ID used for building and pushing container images
+  build_account_id: "333070415076"
+  # AWS account IDs for deploying, keyed by environment name
+  deploy_accounts:
+    launchpad: "882466794441"
+
+# --- ECR (Container & Helm registries) ---
+ecr:
+  # Full registry hostname (derived from build_account_id + region)
+  registry: "333070415076.dkr.ecr.eu-west-1.amazonaws.com"
+  # Path prefix for container images: {registry}/{image_path_prefix}/<name>/<image-key>
+  image_path_prefix: "image/phrase/phrase-launchpad"
+  # Path prefix for Helm charts: {registry}/{chart_path_prefix}/<name>/<chart-key>
+  chart_path_prefix: "helm/phrase/phrase-launchpad"
+
+# --- Kubernetes ---
+kubernetes:
+  cluster: "launchpad-eu-west-1-main"
+  # Namespace naming convention: {namespace_prefix}-<name>
+  namespace_prefix: launchpad
+  pod_security_standard: restricted
+
+# --- Ingress ---
+ingress:
+  # Type of ingress: "alb" (AWS ALB + Okta OIDC) or "gateway" (Kubernetes Gateway API / APISIX)
+  type: "gateway"
+  # Wildcard domain for service hostnames: <name>.{domain}
+  domain: "launchpad.phrase-internal.com"
+  # ALB-specific config (only used when type=alb, empty for gateway environments)
+  alb_group_name: ""
+  cert_arn: ""
+
+# --- Public Ingress (internet-facing, launchpad only) ---
+public_ingress:
+  # Whether public ingress is available in this environment
+  enabled: true
+  # Wildcard domain for public service hostnames: <name>.{public_ingress.domain}
+  domain: "app.phrase.dev"
+  # Gateway resource name in the new-ingress namespace
+  gateway_name: "apisix-public"
+  # Gateway namespace (same as internal gateway)
+  gateway_namespace: "new-ingress"
+
+# --- Okta ---
+okta:
+  # Okta tenant base URL (production for launchpad)
+  issuer: "https://memsource.okta.com"
+  # OIDC discovery endpoint used in APISIX openid-connect plugin and ALB auth
+  discovery_url: "https://memsource.okta.com/.well-known/openid-configuration"
+
+# --- Networking ---
+network:
+  vpc_cidr: "10.0.0.0/8"
+
+# --- GitHub Org-Level Variables and Secrets ---
+# These remain as GitHub organization variables/secrets because they are
+# per-application (different Okta apps per service) or contain sensitive credentials.
+# They are NOT part of this config — set them in the GitHub org settings.
+#
+# Variables:
+#   DEFAULT_AUTH_IDP_OIDC      - Okta OIDC JSON blob (compact single-line JSON)
+#
+# Secrets:
+#   DEFAULT_OKTA_CLIENT_ID     - Okta OIDC client ID
+#   DEFAULT_OKTA_OIDC_SECRET   - Okta OIDC client secret

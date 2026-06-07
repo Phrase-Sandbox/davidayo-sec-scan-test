@@ -1,0 +1,20 @@
+{{- if and .Values.ingress.enabled .Values.ingress.oidc.enabled }}
+apiVersion: apisix.apache.org/v1alpha1
+kind: PluginConfig
+metadata:
+  name: {{ include "chart.fullname" . }}-oidc
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+spec:
+  plugins:
+    - name: openid-connect
+      config:
+        client_id: {{ .Values.ingress.oidc.clientId | quote }}
+        client_secret: {{ .Values.ingress.oidc.clientSecret | quote }}
+        discovery: "https://memsource.okta.com/.well-known/openid-configuration"
+        redirect_uri: "https://{{ .Values.ingress.hostname }}/oauth2/idpresponse"
+        bearer_only: false
+        scope: "openid email profile groups"
+        session:
+          secret: {{ .Values.ingress.oidc.sessionSecret | quote }}
+{{- end }}
