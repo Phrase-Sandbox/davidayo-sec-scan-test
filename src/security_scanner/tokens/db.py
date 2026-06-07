@@ -35,6 +35,12 @@ def _build_engine() -> AsyncEngine:
             "DATABASE_URL is not set; the token registry requires Postgres. "
             "Set USE_TOKEN_REGISTRY=false to keep the legacy single-token path."
         )
+    # DATABASE_URL from Secrets Manager / RDS arrives as postgresql:// (no driver
+    # suffix). SQLAlchemy would route that to psycopg2, which is not installed —
+    # we ship psycopg3 (psycopg[binary]). Normalise to postgresql+psycopg:// so
+    # the async engine uses the psycopg3 async driver.
+    if url.startswith("postgresql://"):
+        url = "postgresql+psycopg://" + url[len("postgresql://"):]
     # echo=False — we do not want SQL in stdout (would leak token hashes in
     # query bind params during audit DEBUG sessions). pool_pre_ping handles
     # idle-connection recycling so a Postgres restart doesn't strand the app.

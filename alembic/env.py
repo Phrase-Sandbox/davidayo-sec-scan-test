@@ -29,10 +29,12 @@ def _resolve_db_url() -> str:
     url = get_settings().DATABASE_URL
     if not url:
         raise RuntimeError("DATABASE_URL is required to run migrations.")
-    # Alembic uses the synchronous driver; strip the +psycopg async marker
-    # if it's present (psycopg3 is happy either way for the sync side).
-    if url.startswith("postgresql+psycopg://"):
-        return url.replace("postgresql+psycopg://", "postgresql+psycopg://", 1)
+    # DATABASE_URL from Secrets Manager / RDS arrives as postgresql:// (no driver
+    # suffix). SQLAlchemy would route that to psycopg2, which is not installed —
+    # we ship psycopg3 (psycopg[binary]). Normalise to postgresql+psycopg:// so
+    # psycopg3 is used for both migrations (sync) and the runtime engine (async).
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + url[len("postgresql://"):]
     return url
 
 
