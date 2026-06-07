@@ -65,6 +65,21 @@ log = get_logger(__name__)
 
 router = APIRouter(prefix="/portal", tags=["portal"])
 
+
+def _safe_next(url: str) -> str:
+    """Return *url* only when it is a server-relative path.
+
+    Rejects absolute URLs (scheme://, //host, ...) to prevent open-redirect
+    abuse via the ``next`` login parameter.  Falls back to the portal home.
+    """
+    from urllib.parse import urlparse  # noqa: PLC0415
+    if not url:
+        return "/portal/"
+    parsed = urlparse(url)
+    if parsed.scheme or parsed.netloc or url.startswith("//"):
+        return "/portal/"
+    return url
+
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
@@ -119,6 +134,7 @@ async def portal_login_page(
     no Okta URL is configured).  Otherwise it shows contact-administrator instructions.
     """
     settings = get_settings()
+    next = _safe_next(next)  # reject external URLs (open-redirect guard)
     return templates.TemplateResponse(
         request,
         "portal_login.html",
@@ -145,6 +161,7 @@ async def portal_login_submit(
     On failure:  re-renders the login page with an error message (no redirect).
     """
     settings = get_settings()
+    next = _safe_next(next)  # reject external URLs (open-redirect guard)
     local_pw = settings.LOCAL_PORTAL_PASSWORD
 
     def _render_error(msg: str, code: int) -> HTMLResponse:

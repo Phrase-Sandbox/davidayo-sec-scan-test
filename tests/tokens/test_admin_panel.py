@@ -100,7 +100,7 @@ def test_admin_tokens_403_without_group(client, session_factory):
 def test_admin_tokens_200_for_admin(client, session_factory):
     r = client.get("/admin/tokens", headers=_admin_headers())
     assert r.status_code == 200
-    assert "Token registry" in r.text
+    assert "Token Registry" in r.text
 
 
 # --- List / filter ----------------------------------------------------------

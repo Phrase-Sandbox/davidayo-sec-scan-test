@@ -1,83 +1,118 @@
-{% extends "base.html" %}
-{% block title %}Admin &mdash; audit log{% endblock %}
-{% block content %}
+{% extends "admin_base.html" %}
+{% block title %}Admin — Audit Log{% endblock %}
+
+{% block admin_content %}
+
 <div class="card">
-  <h2>Audit log</h2>
-  <p class="muted">
-    Security-relevant events on the token registry and the local-advisory scan
-    path. The DB row is the source of truth; the structured stdout log line is
-    for ops scrape.
+  <h2>Audit Log</h2>
+  <p class="muted" style="margin-bottom:1rem;">
+    Security-relevant events on the token registry and the local-advisory scan path.
+    The DB row is the source of truth; the structured stdout line is for ops scraping.
   </p>
-  <form method="get" action="/admin/audit">
-    <input type="text" name="user" placeholder="filter by email substring" value="{{ filter_user }}">
-    <select name="event_type">
+  <form method="get" action="/admin/audit"
+        style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
+    <input type="text" name="user" placeholder="Filter by email…"
+           value="{{ filter_user }}" style="width:200px;">
+    <select name="event_type"
+            style="font:inherit; padding:0.44rem 0.7rem; border:1px solid var(--border-2);
+                   border-radius:var(--radius-s); background:var(--card); color:var(--fg);">
       <option value="">(any event)</option>
       {% for e in event_types %}
         <option value="{{ e }}" {% if e == filter_event_type %}selected{% endif %}>{{ e }}</option>
       {% endfor %}
     </select>
     <button type="submit" class="btn">Apply</button>
-    <a href="/admin/tokens" class="btn">&larr; Tokens</a>
-    <a href="/admin/users" class="btn">Users</a>
-    <a href="/admin/ci-token" class="btn">CI Token</a>
-    <a href="/admin/org-settings" class="btn">Org settings</a>
-    <a href="/admin/usage" class="btn">Usage</a>
+    {% if filter_user or filter_event_type %}
+      <a href="/admin/audit" class="btn">Clear</a>
+    {% endif %}
   </form>
 </div>
 
-<div class="card">
-  <h2>Page {{ page }} &mdash; {{ rows|length }} event{{ '' if rows|length == 1 else 's' }}</h2>
+<div class="card" style="padding:0; overflow:hidden;">
+  <div style="padding:1rem 1.4rem; border-bottom:1px solid var(--border);
+              display:flex; align-items:baseline; justify-content:space-between;">
+    <h2 style="margin:0;">
+      Page {{ page }} &mdash;
+      {{ rows|length }} event{{ '' if rows|length == 1 else 's' }}
+    </h2>
+  </div>
+
   {% if rows %}
-    <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+  <div style="overflow-x:auto;">
+    <table style="font-size:0.85rem; min-width:750px;">
       <thead>
-        <tr style="text-align:left; border-bottom:1px solid var(--border);">
-          <th style="padding:0.4rem;">When</th>
-          <th style="padding:0.4rem;">Event</th>
-          <th style="padding:0.4rem;">User</th>
-          <th style="padding:0.4rem;">Token ID</th>
-          <th style="padding:0.4rem;">Actor</th>
-          <th style="padding:0.4rem;">Metadata</th>
+        <tr>
+          <th style="white-space:nowrap;">When</th>
+          <th>Event</th>
+          <th>User</th>
+          <th>Token ID</th>
+          <th>Actor</th>
+          <th>Details</th>
         </tr>
       </thead>
       <tbody>
         {% for r in rows %}
-          <tr style="border-bottom:1px solid var(--border); vertical-align: top;">
-            <td style="padding:0.4rem;">{{ r.at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
-            <td style="padding:0.4rem;"><code>{{ r.event_type.value }}</code></td>
-            <td style="padding:0.4rem;">{{ r.user_email or "—" }}</td>
-            <td style="padding:0.4rem;"><code>{{ r.token_id or "—" }}</code></td>
-            <td style="padding:0.4rem;">{{ r.actor_email or "—" }}</td>
-            <td style="padding:0.4rem; max-width:320px;">
-              {% if r.event_metadata %}
-                <details>
-                  <summary style="cursor:pointer; color:var(--accent); font-size:0.8rem; list-style:none; user-select:none;">
-                    &#9658; {{ r.event_metadata | length }} key{{ '' if r.event_metadata | length == 1 else 's' }}
-                  </summary>
-                  <dl style="margin:0.35rem 0 0; font-size:0.78rem; line-height:1.5;">
-                    {% for k, v in r.event_metadata.items() %}
-                      <dt style="font-weight:600; color:var(--fg); margin-top:0.2rem;">{{ k }}</dt>
-                      <dd style="margin:0 0 0.1rem 0.8rem; color:var(--muted); word-break:break-all;">{{ v }}</dd>
-                    {% endfor %}
-                  </dl>
-                </details>
-              {% else %}
-                <span class="muted">—</span>
-              {% endif %}
-            </td>
-          </tr>
+        <tr style="vertical-align:top;">
+          <td class="muted" style="white-space:nowrap; font-size:0.81rem;">
+            {{ r.at.strftime("%Y-%m-%d %H:%M:%S") }}
+          </td>
+          <td style="white-space:nowrap;">
+            <code style="font-size:0.77rem; background:var(--bg); border:1px solid var(--border);
+                         border-radius:4px; padding:0.1em 0.4em;">
+              {{ r.event_type.value }}
+            </code>
+          </td>
+          <td style="font-size:0.83rem; white-space:nowrap;">{{ r.user_email or "—" }}</td>
+          <td>
+            {% if r.token_id %}
+              <code style="font-size:0.75rem;">{{ r.token_id }}</code>
+            {% else %}—{% endif %}
+          </td>
+          <td style="font-size:0.83rem; white-space:nowrap;">{{ r.actor_email or "—" }}</td>
+          <td style="max-width:300px; min-width:120px;">
+            {% if r.event_metadata %}
+            <details>
+              <summary style="cursor:pointer; color:var(--accent); font-size:0.79rem;
+                              list-style:none; user-select:none; white-space:nowrap;">
+                ▸ {{ r.event_metadata | length }} field{{ '' if r.event_metadata | length == 1 else 's' }}
+              </summary>
+              <dl style="margin:0.4rem 0 0; font-size:0.77rem; line-height:1.55;">
+                {% for k, v in r.event_metadata.items() %}
+                  <dt style="font-weight:600; color:var(--fg); margin-top:0.2rem;">{{ k }}</dt>
+                  <dd style="margin:0 0 0.1rem 0.8rem; color:var(--muted); word-break:break-all;">{{ v }}</dd>
+                {% endfor %}
+              </dl>
+            </details>
+            {% else %}
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
+  </div>
+
+  <div style="display:flex; justify-content:space-between; align-items:center;
+              padding:0.7rem 1rem; border-top:1px solid var(--border);">
+    <span class="muted" style="font-size:0.82rem;">Page {{ page }}</span>
+    <div>
+      {% if page > 1 %}
+        <a href="/admin/audit?page={{ page - 1 }}{% if filter_user %}&amp;user={{ filter_user | urlencode }}{% endif %}{% if filter_event_type %}&amp;event_type={{ filter_event_type | urlencode }}{% endif %}"
+           class="btn" style="font-size:0.82rem;">← Prev</a>
+      {% endif %}
+      {% if has_next %}
+        <a href="/admin/audit?page={{ page + 1 }}{% if filter_user %}&amp;user={{ filter_user | urlencode }}{% endif %}{% if filter_event_type %}&amp;event_type={{ filter_event_type | urlencode }}{% endif %}"
+           class="btn" style="font-size:0.82rem;">Next →</a>
+      {% endif %}
+    </div>
+  </div>
+
   {% else %}
-    <p class="muted">No audit events match the current filter.</p>
+  <div style="padding:2.5rem 1.5rem; text-align:center; color:var(--muted);">
+    <p>No audit events match the current filter.</p>
+  </div>
   {% endif %}
-  <p style="margin-top: 1rem;">
-    {% if page > 1 %}
-      <a class="btn" href="/admin/audit?page={{ page - 1 }}{% if filter_user %}&user={{ filter_user }}{% endif %}{% if filter_event_type %}&event_type={{ filter_event_type }}{% endif %}">&larr; Prev</a>
-    {% endif %}
-    {% if has_next %}
-      <a class="btn" href="/admin/audit?page={{ page + 1 }}{% if filter_user %}&user={{ filter_user }}{% endif %}{% if filter_event_type %}&event_type={{ filter_event_type }}{% endif %}">Next &rarr;</a>
-    {% endif %}
-  </p>
 </div>
+
 {% endblock %}

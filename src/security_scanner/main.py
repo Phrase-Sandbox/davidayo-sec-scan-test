@@ -19,6 +19,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Response, status
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from security_scanner.agent.api import router as agent_router
 from security_scanner.agent.local_scan import router as local_scan_router
@@ -134,6 +135,34 @@ app = FastAPI(
     version=VERSION,
     lifespan=lifespan,
 )
+
+
+class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Append OWASP-recommended security headers to every HTTP response.
+
+    These are last-resort defences; the primary controls are authn/authz deps,
+    Fernet-signed cookies with httponly+SameSite=Lax, and Jinja2 auto-escaping.
+
+    X-Frame-Options:      prevent clickjacking (OWASP A05).
+    X-Content-Type-Options: stop MIME-sniffing (OWASP A05).
+    X-XSS-Protection:    disabled — modern browsers rely on CSP; the legacy
+                          filter introduces its own XSS surface.
+    Referrer-Policy:      default for non-sensitive routes; sensitive routes
+                          override with "no-referrer" via _NO_STORE_HEADERS.
+    """
+
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-XSS-Protection", "0")
+        response.headers.setdefault(
+            "Referrer-Policy", "strict-origin-when-cross-origin"
+        )
+        return response
+
+
+app.add_middleware(_SecurityHeadersMiddleware)
 
 
 # --- Health probes (§11 MANDATORY) ----------------------------------------

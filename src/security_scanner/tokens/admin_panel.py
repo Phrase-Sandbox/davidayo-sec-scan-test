@@ -94,14 +94,35 @@ async def admin_tokens(
     admin: _AdminDep,
     user: Annotated[str | None, Query(max_length=320)] = None,
     active_only: Annotated[bool, Query()] = False,
+    status: Annotated[str | None, Query(max_length=10)] = None,
 ) -> HTMLResponse:
+    """Token registry view.
+
+    ``status`` query param: "active" | "revoked" | "" (all).
+    Legacy ``active_only=true`` is treated as status=active for back-compat.
+    """
+    if status not in (None, "", "active", "revoked"):
+        status = None  # reject unknown values silently
+
+    revoked_only = status == "revoked"
+    effective_active = active_only or status == "active"
+
     factory = get_session_factory()
     async with factory() as session:
         rows = await token_registry.list_all(
             session,
-            active_only=active_only,
+            active_only=effective_active,
+            revoked_only=revoked_only,
             user_email_contains=user or None,
         )
+
+    if revoked_only:
+        filter_status = "revoked"
+    elif effective_active:
+        filter_status = "active"
+    else:
+        filter_status = ""
+
     return templates.TemplateResponse(
         request,
         "admin_tokens.html",
@@ -109,7 +130,8 @@ async def admin_tokens(
             "user": admin,
             "rows": rows,
             "filter_user": user or "",
-            "active_only": active_only,
+            "active_only": effective_active,
+            "filter_status": filter_status,
             "issued_token": None,
         },
         headers=_NO_STORE_HEADERS,
@@ -149,6 +171,7 @@ async def admin_revoke(
             "rows": rows,
             "filter_user": "",
             "active_only": False,
+            "filter_status": "",
             "issued_token": None,
             "flash": flash,
         },
@@ -196,6 +219,7 @@ async def admin_force_rotate(
             "rows": rows,
             "filter_user": "",
             "active_only": False,
+            "filter_status": "",
             "issued_token": issued,
             "flash": (
                 f"Rotated token for {issued.user_email}. "

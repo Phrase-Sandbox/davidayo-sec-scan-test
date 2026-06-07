@@ -1,92 +1,196 @@
-{% extends "base.html" %}
-{% block title %}Admin &mdash; tokens{% endblock %}
-{% block content %}
+{% extends "admin_base.html" %}
+{% block title %}Admin — Tokens{% endblock %}
+
+{% block admin_content %}
+
+{# ── Filter card ── #}
 <div class="card">
-  <h2>Token registry</h2>
-  <p class="muted">
-    All issued tokens, newest first. Use <strong>Revoke</strong> to invalidate an
-    active token immediately, or <strong>Force rotate</strong> to mint a new one
-    on the user's behalf (you'll see the plaintext once &mdash; hand it over via
-    1Password or Signal).
+  <div style="display:flex; align-items:center; justify-content:space-between;
+              flex-wrap:wrap; gap:0.75rem; margin-bottom:0.85rem;">
+    <h2 style="margin:0;">Token Registry</h2>
+
+    {# Quick-status toggle: All / Active / Revoked — single click, no form submit needed #}
+    <div class="status-tabs">
+      <a href="/admin/tokens{% if filter_user %}?user={{ filter_user | urlencode }}{% endif %}"
+         class="status-tab {{ 'status-tab-active' if filter_status == '' else '' }}">
+        All
+      </a>
+      <a href="/admin/tokens?status=active{% if filter_user %}&amp;user={{ filter_user | urlencode }}{% endif %}"
+         class="status-tab {{ 'status-tab-active status-tab-ok' if filter_status == 'active' else '' }}">
+        Active
+      </a>
+      <a href="/admin/tokens?status=revoked{% if filter_user %}&amp;user={{ filter_user | urlencode }}{% endif %}"
+         class="status-tab {{ 'status-tab-active status-tab-danger' if filter_status == 'revoked' else '' }}">
+        Revoked
+      </a>
+    </div>
+  </div>
+
+  <p class="muted" style="margin:0 0 0.85rem; font-size:0.84rem;">
+    <strong>Revoke</strong> invalidates immediately;
+    <strong>Force rotate</strong> mints a replacement — deliver via 1Password or Signal.
+    Tokens expire after 30 days.
   </p>
-  <form method="get" action="/admin/tokens">
-    <input type="text" name="user" placeholder="filter by email substring" value="{{ filter_user }}">
-    <label class="muted">
-      <input type="checkbox" name="active_only" value="true" {% if active_only %}checked{% endif %}>
-      active only
-    </label>
-    <button type="submit" class="btn">Apply</button>
-    <a href="/admin/audit" class="btn">Audit log &rarr;</a>
-    <a href="/admin/usage" class="btn">Usage</a>
+
+  {# Email search (preserves status tab) #}
+  <form method="get" action="/admin/tokens"
+        style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
+    {% if filter_status %}
+      <input type="hidden" name="status" value="{{ filter_status }}">
+    {% endif %}
+    <input type="text" name="user" placeholder="Filter by email…"
+           value="{{ filter_user }}" style="width:240px;" autocomplete="off">
+    <button type="submit" class="btn">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      Search
+    </button>
+    {% if filter_user or filter_status %}
+      <a href="/admin/tokens" class="btn">Clear all filters</a>
+    {% endif %}
   </form>
 </div>
 
+<style>
+  .status-tabs {
+    display: flex;
+    gap: 0;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-s);
+    padding: 0.2rem;
+  }
+  .status-tab {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.28rem 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    border-radius: 4px;
+    text-decoration: none;
+    color: var(--muted);
+    transition: background 0.12s, color 0.12s;
+    white-space: nowrap;
+  }
+  .status-tab:hover { background: var(--card); color: var(--fg); text-decoration: none; }
+  .status-tab-active { background: var(--card); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+  .status-tab-active.status-tab-ok { color: var(--ok); }
+  .status-tab-active.status-tab-danger { color: var(--danger); }
+</style>
+
+{# ── New token shown once ── #}
 {% if issued_token %}
-<div class="card">
-  <h2 class="ok">New token for {{ issued_token.user_email }}</h2>
-  <p class="danger">
-    Shown <strong>once</strong>. It will NEVER be displayed again. Copy it now and
-    deliver it via a secure channel.
+<div class="card" style="border-color:var(--ok);">
+  <h2 class="ok" style="margin-bottom:0.5rem;">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" style="vertical-align:-2px; margin-right:0.3rem;">
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+      <polyline points="22 4 12 14.01 9 11.01"/>
+    </svg>
+    New token for {{ issued_token.user_email }}
+  </h2>
+  <p class="danger" style="margin-bottom:0.85rem;">
+    <strong>Shown once.</strong> Copy it now and deliver via a secure channel.
   </p>
   <div class="token-box" id="rotated-token">{{ issued_token.full_token }}</div>
-  <p>
-    <button type="button" class="btn" onclick="navigator.clipboard.writeText(document.getElementById('rotated-token').innerText)">
-      Copy to clipboard
-    </button>
+  <p style="margin-top:0.8rem; margin-bottom:0.5rem;">
+    <button type="button" class="btn btn-primary" id="copy-btn"
+            onclick="copyToken()">Copy to clipboard</button>
   </p>
-  <p class="muted">Token ID: <code>{{ issued_token.token_id }}</code></p>
+  <p class="muted" style="font-size:0.82rem;">Token ID: <code>{{ issued_token.token_id }}</code></p>
 </div>
 {% endif %}
 
-<div class="card">
-  <h2>{{ rows|length }} token{{ '' if rows|length == 1 else 's' }}</h2>
+{# ── Token table ── #}
+<div class="card" style="padding:0; overflow:hidden;">
+  <div style="padding:1rem 1.4rem; border-bottom:1px solid var(--border);
+              display:flex; align-items:baseline; justify-content:space-between;">
+    <h2 style="margin:0;">
+      {{ rows|length }} token{{ '' if rows|length == 1 else 's' }}
+      {% if filter_status == 'active' %}<span class="muted" style="font-weight:400; font-size:0.83rem;"> — active only</span>
+      {% elif filter_status == 'revoked' %}<span class="muted" style="font-weight:400; font-size:0.83rem;"> — revoked only</span>
+      {% endif %}
+      {% if filter_user %}<span class="muted" style="font-weight:400; font-size:0.83rem;"> for "{{ filter_user }}"</span>{% endif %}
+    </h2>
+  </div>
+
   {% if rows %}
-    <table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
+  <div style="overflow-x:auto;">
+    <table style="min-width:680px;">
       <thead>
-        <tr style="text-align:left; border-bottom:1px solid var(--border);">
-          <th style="padding:0.4rem;">User</th>
-          <th style="padding:0.4rem;">Token ID</th>
-          <th style="padding:0.4rem;">Issued</th>
-          <th style="padding:0.4rem;">Last used</th>
-          <th style="padding:0.4rem;">Status</th>
-          <th style="padding:0.4rem;">Actions</th>
+        <tr>
+          <th>User</th>
+          <th>Token ID</th>
+          <th style="white-space:nowrap;">Issued</th>
+          <th style="white-space:nowrap;">Last used</th>
+          <th>Status</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
         {% for r in rows %}
-          <tr style="border-bottom:1px solid var(--border);">
-            <td style="padding:0.4rem;">{{ r.user_email }}</td>
-            <td style="padding:0.4rem;"><code>{{ r.token_id }}</code></td>
-            <td style="padding:0.4rem;">{{ r.issued_at.strftime("%Y-%m-%d %H:%M") }}</td>
-            <td style="padding:0.4rem;">
-              {% if r.last_used_at %}{{ r.last_used_at.strftime("%Y-%m-%d %H:%M") }}{% else %}<span class="muted">&mdash;</span>{% endif %}
-            </td>
-            <td style="padding:0.4rem;">
-              {% if r.revoked_at %}
-                <span class="danger">revoked</span>
-                <span class="muted">by {{ r.revoked_by or "?" }}</span>
-              {% else %}
-                <span class="ok">active</span>
-              {% endif %}
-            </td>
-            <td style="padding:0.4rem;">
-              {% if not r.revoked_at %}
-                <form method="post" action="/admin/tokens/{{ r.token_id }}/revoke">
-                  <button type="submit" class="btn btn-danger">Revoke</button>
-                </form>
-                <form method="post" action="/admin/tokens/{{ r.token_id }}/force-rotate">
-                  <button type="submit" class="btn">Force rotate</button>
-                </form>
-              {% else %}
-                <span class="muted">&mdash;</span>
-              {% endif %}
-            </td>
-          </tr>
+        <tr>
+          <td style="font-size:0.85rem;">{{ r.user_email }}</td>
+          <td><code style="font-size:0.77rem;">{{ r.token_id }}</code></td>
+          <td class="muted" style="font-size:0.82rem; white-space:nowrap;">
+            {{ r.issued_at.strftime("%Y-%m-%d %H:%M") }}
+          </td>
+          <td class="muted" style="font-size:0.82rem; white-space:nowrap;">
+            {% if r.last_used_at %}{{ r.last_used_at.strftime("%Y-%m-%d %H:%M") }}
+            {% else %}<span>—</span>{% endif %}
+          </td>
+          <td>
+            {% if r.revoked_at %}
+              <span class="pill pill-fail">revoked</span>
+            {% else %}
+              <span class="pill pill-ok">active</span>
+            {% endif %}
+          </td>
+          <td style="white-space:nowrap;">
+            {% if not r.revoked_at %}
+              <form method="post" action="/admin/tokens/{{ r.token_id }}/revoke"
+                    style="display:inline;"
+                    onsubmit="return confirm('Revoke this token immediately?')">
+                <button type="submit" class="btn btn-sm btn-danger">Revoke</button>
+              </form>
+              <form method="post" action="/admin/tokens/{{ r.token_id }}/force-rotate"
+                    style="display:inline;"
+                    onsubmit="return confirm('Force-rotate this token? A new plaintext will be shown once.')">
+                <button type="submit" class="btn btn-sm">Force rotate</button>
+              </form>
+            {% else %}
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
+  </div>
+
   {% else %}
-    <p class="muted">No tokens match the current filter.</p>
+  <div style="padding:2.5rem 1.5rem; text-align:center; color:var(--muted);">
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.5" style="margin-bottom:0.75rem; opacity:0.35;">
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+    </svg>
+    <p style="margin:0;">No tokens match the current filter.</p>
+  </div>
   {% endif %}
 </div>
+
+<script>
+  function copyToken() {
+    const text = document.getElementById("rotated-token").innerText.trim();
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.getElementById("copy-btn");
+      btn.textContent = "✓ Copied!";
+      setTimeout(() => btn.textContent = "Copy to clipboard", 2000);
+    });
+  }
+</script>
+
 {% endblock %}

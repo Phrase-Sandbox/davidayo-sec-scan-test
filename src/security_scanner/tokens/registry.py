@@ -388,13 +388,20 @@ async def list_all(
     session: AsyncSession,
     *,
     active_only: bool = False,
+    revoked_only: bool = False,
     user_email_contains: str | None = None,
     limit: int = 500,
 ) -> list[LocalScanToken]:
-    """Admin view: list tokens with optional filters."""
+    """Admin view: list tokens with optional filters.
+
+    ``active_only`` and ``revoked_only`` are mutually exclusive.  Passing both
+    returns nothing (treated as impossible intersection); the UI prevents this.
+    """
     stmt = select(LocalScanToken).order_by(LocalScanToken.issued_at.desc()).limit(limit)
     if active_only:
         stmt = stmt.where(LocalScanToken.revoked_at.is_(None))
+    elif revoked_only:
+        stmt = stmt.where(LocalScanToken.revoked_at.isnot(None))
     if user_email_contains:
         like = f"%{user_email_contains}%"
         stmt = stmt.where(LocalScanToken.user_email.ilike(like))
