@@ -1,102 +1,218 @@
 {% extends "admin_base.html" %}
 {% block title %}Admin — Audit Log{% endblock %}
 
+{% block extra_styles %}
+<style>
+  /* ── Audit-specific overrides ─────────────────────────────────────── */
+  .audit-row { transition: background 0.1s; }
+  .audit-row.has-meta { cursor: pointer; }
+  .audit-row.has-meta:hover td { background: rgba(37,99,235,0.04); }
+
+  .audit-meta-row td {
+    background: var(--bg);
+    padding: 0.55rem 1rem 0.55rem 2rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .meta-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.9rem;
+    font-size: 0.78rem;
+  }
+  .meta-chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.25rem;
+  }
+  .meta-chip-key {
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .meta-chip-val {
+    color: var(--fg);
+    word-break: break-all;
+    max-width: 280px;
+  }
+
+  .meta-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: var(--accent);
+    font-size: 0.79rem;
+    font-weight: 500;
+    white-space: nowrap;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    border: 1px solid rgba(37,99,235,0.2);
+    background: rgba(37,99,235,0.04);
+    transition: background 0.12s;
+    user-select: none;
+  }
+  .meta-toggle .chevron { font-style: normal; font-size: 0.7rem; transition: transform 0.15s; }
+  .meta-toggle.open .chevron { transform: rotate(90deg); }
+
+  /* Event badge */
+  .event-badge {
+    display: inline-block;
+    font: 11px/1 ui-monospace, "SF Mono", Menlo, monospace;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.18em 0.45em;
+    white-space: nowrap;
+    letter-spacing: 0.01em;
+  }
+  /* Colour-code the most important events */
+  .event-badge.ev-ok     { background: rgba(5,150,105,0.07);  border-color: rgba(5,150,105,0.25);  color: #065f46; }
+  .event-badge.ev-danger { background: rgba(220,38,38,0.07);  border-color: rgba(220,38,38,0.25);  color: #7f1d1d; }
+  .event-badge.ev-warn   { background: rgba(245,158,11,0.09); border-color: rgba(245,158,11,0.3);  color: #78350f; }
+  .event-badge.ev-info   { background: rgba(37,99,235,0.06);  border-color: rgba(37,99,235,0.2);   color: #1e3a8a; }
+
+  /* Truncate long emails */
+  .email-cell {
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.82rem;
+  }
+</style>
+{% endblock %}
+
 {% block admin_content %}
 
+{# ── Filter card ── #}
 <div class="card">
-  <h2>Audit Log</h2>
-  <p class="muted" style="margin-bottom:1rem;">
-    Security-relevant events on the token registry and the local-advisory scan path.
-    The DB row is the source of truth; the structured stdout line is for ops scraping.
+  <div style="display:flex; align-items:center; justify-content:space-between;
+              flex-wrap:wrap; gap:0.6rem; margin-bottom:0.85rem;">
+    <h2 style="margin:0;">Audit Log</h2>
+    <span class="muted" style="font-size:0.82rem;">
+      Page {{ page }} &mdash; {{ rows|length }} event{{ '' if rows|length == 1 else 's' }}
+    </span>
+  </div>
+  <p class="muted" style="margin:0 0 0.9rem; font-size:0.83rem;">
+    Security-relevant events on the token registry and scan path.
+    Click any row with metadata to expand details.
   </p>
   <form method="get" action="/admin/audit"
         style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
     <input type="text" name="user" placeholder="Filter by email…"
-           value="{{ filter_user }}" style="width:200px;">
-    <select name="event_type"
-            style="font:inherit; padding:0.44rem 0.7rem; border:1px solid var(--border-2);
-                   border-radius:var(--radius-s); background:var(--card); color:var(--fg);">
+           value="{{ filter_user }}" style="width:210px;" autocomplete="off">
+    <select name="event_type">
       <option value="">(any event)</option>
       {% for e in event_types %}
         <option value="{{ e }}" {% if e == filter_event_type %}selected{% endif %}>{{ e }}</option>
       {% endfor %}
     </select>
-    <button type="submit" class="btn">Apply</button>
+    <button type="submit" class="btn">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      Apply
+    </button>
     {% if filter_user or filter_event_type %}
       <a href="/admin/audit" class="btn">Clear</a>
     {% endif %}
   </form>
 </div>
 
+{# ── Events table ── #}
 <div class="card" style="padding:0; overflow:hidden;">
-  <div style="padding:1rem 1.4rem; border-bottom:1px solid var(--border);
-              display:flex; align-items:baseline; justify-content:space-between;">
-    <h2 style="margin:0;">
-      Page {{ page }} &mdash;
-      {{ rows|length }} event{{ '' if rows|length == 1 else 's' }}
-    </h2>
-  </div>
 
   {% if rows %}
   <div style="overflow-x:auto;">
-    <table style="font-size:0.85rem; min-width:750px;">
+    <table style="min-width:700px;">
       <thead>
         <tr>
-          <th style="white-space:nowrap;">When</th>
-          <th>Event</th>
+          <th style="white-space:nowrap; width:155px;">When (UTC)</th>
+          <th style="width:160px;">Event</th>
           <th>User</th>
-          <th>Token ID</th>
+          <th style="width:115px;">Token ID</th>
           <th>Actor</th>
-          <th>Details</th>
+          <th style="width:90px;">Details</th>
         </tr>
       </thead>
       <tbody>
         {% for r in rows %}
-        <tr style="vertical-align:top;">
-          <td class="muted" style="white-space:nowrap; font-size:0.81rem;">
-            {{ r.at.strftime("%Y-%m-%d %H:%M:%S") }}
+
+        {# Determine badge class from event type name #}
+        {%- set ev = r.event_type.value -%}
+        {%- if 'issued' in ev or 'ok' in ev or 'activated' in ev -%}
+          {%- set badge_cls = 'ev-ok' -%}
+        {%- elif 'revoked' in ev or 'deactivated' in ev or 'rotated' in ev -%}
+          {%- set badge_cls = 'ev-danger' -%}
+        {%- elif 'config' in ev or 'settings' in ev or 'promoted' in ev or 'demoted' in ev -%}
+          {%- set badge_cls = 'ev-warn' -%}
+        {%- else -%}
+          {%- set badge_cls = 'ev-info' -%}
+        {%- endif -%}
+
+        <tr class="audit-row {% if r.event_metadata %}has-meta{% endif %}"
+            {% if r.event_metadata %}onclick="toggleMeta({{ loop.index }})"{% endif %}>
+          <td style="white-space:nowrap; font-size:0.8rem; color:var(--muted); font-variant-numeric:tabular-nums;">
+            {{ r.at.strftime("%Y-%m-%d") }}<br>
+            <span style="font-size:0.75rem; opacity:0.8;">{{ r.at.strftime("%H:%M:%S") }}</span>
           </td>
-          <td style="white-space:nowrap;">
-            <code style="font-size:0.77rem; background:var(--bg); border:1px solid var(--border);
-                         border-radius:4px; padding:0.1em 0.4em;">
-              {{ r.event_type.value }}
-            </code>
+          <td>
+            <span class="event-badge {{ badge_cls }}">{{ ev }}</span>
           </td>
-          <td style="font-size:0.83rem; white-space:nowrap;">{{ r.user_email or "—" }}</td>
+          <td>
+            <span class="email-cell" title="{{ r.user_email or '' }}">{{ r.user_email or "—" }}</span>
+          </td>
           <td>
             {% if r.token_id %}
-              <code style="font-size:0.75rem;">{{ r.token_id }}</code>
-            {% else %}—{% endif %}
-          </td>
-          <td style="font-size:0.83rem; white-space:nowrap;">{{ r.actor_email or "—" }}</td>
-          <td style="max-width:300px; min-width:120px;">
-            {% if r.event_metadata %}
-            <details>
-              <summary style="cursor:pointer; color:var(--accent); font-size:0.79rem;
-                              list-style:none; user-select:none; white-space:nowrap;">
-                ▸ {{ r.event_metadata | length }} field{{ '' if r.event_metadata | length == 1 else 's' }}
-              </summary>
-              <dl style="margin:0.4rem 0 0; font-size:0.77rem; line-height:1.55;">
-                {% for k, v in r.event_metadata.items() %}
-                  <dt style="font-weight:600; color:var(--fg); margin-top:0.2rem;">{{ k }}</dt>
-                  <dd style="margin:0 0 0.1rem 0.8rem; color:var(--muted); word-break:break-all;">{{ v }}</dd>
-                {% endfor %}
-              </dl>
-            </details>
+              <code style="font-size:0.74rem;">{{ r.token_id }}</code>
             {% else %}
               <span class="muted">—</span>
             {% endif %}
           </td>
+          <td>
+            <span class="email-cell" title="{{ r.actor_email or '' }}">{{ r.actor_email or "—" }}</span>
+          </td>
+          <td>
+            {% if r.event_metadata %}
+              <span class="meta-toggle" id="toggle-{{ loop.index }}">
+                <em class="chevron">▶</em>
+                {{ r.event_metadata | length }} field{{ '' if r.event_metadata | length == 1 else 's' }}
+              </span>
+            {% else %}
+              <span class="muted" style="font-size:0.82rem;">—</span>
+            {% endif %}
+          </td>
         </tr>
+
+        {# Expandable metadata row — hidden until the parent row is clicked #}
+        {% if r.event_metadata %}
+        <tr id="meta-{{ loop.index }}" class="audit-meta-row" style="display:none;">
+          <td colspan="6">
+            <div class="meta-chips">
+              {% for k, v in r.event_metadata.items() %}
+              <div class="meta-chip">
+                <span class="meta-chip-key">{{ k }}</span>
+                <span class="meta-chip-val">{{ v if v is not none else "—" }}</span>
+              </div>
+              {% endfor %}
+            </div>
+          </td>
+        </tr>
+        {% endif %}
+
         {% endfor %}
       </tbody>
     </table>
   </div>
 
+  {# Pagination #}
   <div style="display:flex; justify-content:space-between; align-items:center;
-              padding:0.7rem 1rem; border-top:1px solid var(--border);">
-    <span class="muted" style="font-size:0.82rem;">Page {{ page }}</span>
-    <div>
+              padding:0.65rem 1rem; border-top:1px solid var(--border);">
+    <span class="muted" style="font-size:0.81rem;">Page {{ page }}</span>
+    <div style="display:flex; gap:0.3rem;">
       {% if page > 1 %}
         <a href="/admin/audit?page={{ page - 1 }}{% if filter_user %}&amp;user={{ filter_user | urlencode }}{% endif %}{% if filter_event_type %}&amp;event_type={{ filter_event_type | urlencode }}{% endif %}"
            class="btn" style="font-size:0.82rem;">← Prev</a>
@@ -109,10 +225,35 @@
   </div>
 
   {% else %}
-  <div style="padding:2.5rem 1.5rem; text-align:center; color:var(--muted);">
-    <p>No audit events match the current filter.</p>
+  <div style="padding:3rem 1.5rem; text-align:center; color:var(--muted);">
+    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.5" style="margin-bottom:0.85rem; opacity:0.3;">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+      <line x1="16" y1="13" x2="8" y2="13"/>
+      <line x1="16" y1="17" x2="8" y2="17"/>
+    </svg>
+    <p style="margin:0; font-size:0.9rem;">No audit events match the current filter.</p>
+    {% if filter_user or filter_event_type %}
+    <p style="margin:0.4rem 0 0;"><a href="/admin/audit" class="btn" style="font-size:0.82rem;">Clear filters</a></p>
+    {% endif %}
   </div>
   {% endif %}
 </div>
+
+<script>
+  function toggleMeta(idx) {
+    const metaRow   = document.getElementById('meta-'   + idx);
+    const toggleBtn = document.getElementById('toggle-' + idx);
+    if (!metaRow) return;
+
+    const isHidden = metaRow.style.display === 'none';
+    metaRow.style.display = isHidden ? 'table-row' : 'none';
+
+    if (toggleBtn) {
+      toggleBtn.classList.toggle('open', isHidden);
+    }
+  }
+</script>
 
 {% endblock %}
