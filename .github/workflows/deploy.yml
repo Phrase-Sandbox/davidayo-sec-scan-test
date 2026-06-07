@@ -96,5 +96,5 @@ jobs:
             --set "ingress.oidc.clientSecret=${OKTA_CLIENT_SECRET}" \
             --set "ingress.oidc.sessionSecret=${SESSION_SECRET}" \
             --wait \
-            --timeout 5m \
+            --timeout 12m \
             --atomic
