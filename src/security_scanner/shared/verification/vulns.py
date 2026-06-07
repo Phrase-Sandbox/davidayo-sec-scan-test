@@ -352,7 +352,9 @@ def _verify_batch(
     - ``None`` if dropped (false_positive or confidence below threshold).
     - Original finding (unverified) if LLM error or no verdict (fail-safe).
     """
-    effective_advisory = advisory_confidences if advisory_confidences is not None else _ADVISORY_CONFIDENCES
+    effective_advisory = (
+        advisory_confidences if advisory_confidences is not None else _ADVISORY_CONFIDENCES
+    )
 
     blocks = [
         _build_candidate_block(
@@ -514,11 +516,18 @@ def candidate_to_finding(
         cvss_band=cvss_band,
         affected_file=candidate.file,
         affected_lines=lines_text,
-        description=candidate.description or candidate.scanner_message or f"{candidate.vuln_class} detected",
-        suggested_fix=candidate.suggested_fix or "Review and remediate the identified vulnerability.",
+        description=(
+            candidate.description or candidate.scanner_message or f"{candidate.vuln_class} detected"
+        ),
+        suggested_fix=(
+            candidate.suggested_fix or "Review and remediate the identified vulnerability."
+        ),
         owasp_reference=candidate.owasp_reference or "",
         patch_file_path="",
-        exploit_scenario=candidate.exploit_scenario or f"Attacker exploits {candidate.vuln_class} in {candidate.file}.",
+        exploit_scenario=(
+            candidate.exploit_scenario
+            or f"Attacker exploits {candidate.vuln_class} in {candidate.file}."
+        ),
         verification_status=verification_status,
         sources=candidate.sources,
         consensus_score=candidate.consensus_score,
@@ -599,7 +608,9 @@ def verify_vuln_candidates(
                     error_message=str(exc),
                 )
                 batch_results = [
-                    candidate_to_finding(candidates[i], verification_status=VerificationStatus.unverified)
+                    candidate_to_finding(
+                        candidates[i], verification_status=VerificationStatus.unverified
+                    )
                     for i in batch
                 ]
             for slot_idx, result in zip(batch, batch_results, strict=True):

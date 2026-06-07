@@ -99,7 +99,7 @@ def _assert_not_protected(email: str) -> None:
     if email in protected:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This account is a protected super-admin and cannot be modified via the admin UI.",
+            detail="This account is a protected super-admin and cannot be modified via the admin UI.",  # noqa: E501
         )
 
 

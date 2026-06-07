@@ -171,7 +171,9 @@ async def test_registry_ok_returns_200_and_audits_scan_ok(
     session_factory, client, mock_pipeline, monkeypatch
 ):
     """Registry token → 200 + scan_ok audit row + last_used_at bumped."""
-    from unittest.mock import AsyncMock as _AsyncMock, MagicMock as _MagicMock
+    from unittest.mock import AsyncMock as _AsyncMock
+    from unittest.mock import MagicMock as _MagicMock
+
     from security_scanner.tokens.models import LLMProvider
 
     # Patch the three internal deps scan_local() now calls instead of factory.

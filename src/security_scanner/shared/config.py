@@ -156,9 +156,6 @@ class Settings(BaseSettings):
         description="GitHub App PEM private key (newlines escaped in env)",
     )
 
-    GITHUB_OAUTH_CLIENT_ID: str = Field(..., description="GitHub OAuth client ID for skill flow")
-    GITHUB_OAUTH_CLIENT_SECRET: str = Field(..., description="GitHub OAuth client secret")
-
     SLACK_WEBHOOK_URL: str | None = Field(
         default=None,
         description="Slack #security webhook for bypass alerts; None disables Slack",

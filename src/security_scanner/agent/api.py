@@ -20,10 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from security_scanner.agent.auth import verify_scan_token
-from security_scanner.agent.slack_alert import (
-    send_bypass_alert,
-    send_pr_rejected_alert,
-)
+from security_scanner.agent.slack_alert import send_bypass_alert
 from security_scanner.pipeline import ScanPipeline, TokenLimitError
 from security_scanner.shared.config import Settings, get_settings
 from security_scanner.shared.github.client import GitHubClient
@@ -318,83 +315,6 @@ async def bypass(body: BypassRequest, _token: _TokenDep) -> ScanResult:
     )
     return bypassed
 
-
-class PrEventRequest(BaseModel):
-    """Body of ``POST /agent/pr-event`` — a closed bot auto-fix PR (D-16).
-
-    Posted by the centrally-hosted PR-rejection reusable workflow when a
-    ``security/issues/*`` PR is closed. Severity counts come from the D-14
-    audit trail (``security_findings/security-scan-report.<n>.json``) on the
-    bot branch; ``reason`` is the closer's closing comment (may be empty).
-    """
-
-    repo_url: str
-    pr_number: int
-    pr_url: str
-    head_ref: str
-    merged: bool
-    closed_by: str
-    closed_at: str
-    reason: str | None = None
-    critical: int = 0
-    high: int = 0
-
-
-@router.post("/pr-event")
-async def pr_event(body: PrEventRequest, _token: _TokenDep) -> dict[str, bool]:
-    """A developer rejected (closed unmerged) the bot's auto-fix PR (D-16).
-
-    Always audit-logs the rejection (who / when / why / severity) — every
-    severity. Sends the #security Slack alert **only when High/Critical**
-    findings were involved (the user's rule); Medium/Low is logged but not
-    alerted. Defensive guards mirror the reusable workflow's filter.
-    Fail-open: a Slack error never fails the caller (BR-006 spirit).
-    """
-    if not body.head_ref.startswith("security/issues/") or body.merged:
-        log.info(
-            "pr-event ignored (not a rejected bot auto-fix PR)",
-            repo=body.repo_url,
-            pr_number=body.pr_number,
-            head_ref=body.head_ref,
-            merged=body.merged,
-        )
-        return {"ignored": True, "logged": False, "alerted": False}
-
-    # Mandatory audit log — every severity, reason INCLUDED. D-16: the user
-    # explicitly requires who/when/why recorded; this is a deliberate
-    # difference from the bypass justification-redaction rule.
-    log.warning(
-        "security auto-fix PR rejected",
-        repo=body.repo_url,
-        pr_number=body.pr_number,
-        closed_by=body.closed_by,
-        closed_at=body.closed_at,
-        critical=body.critical,
-        high=body.high,
-        reason=(body.reason or "").strip() or "(none provided)",
-    )
-
-    if body.critical <= 0 and body.high <= 0:
-        log.info(
-            "pr-rejected alert suppressed (no High/Critical) — logged only",
-            repo=body.repo_url,
-            pr_number=body.pr_number,
-        )
-        return {"ignored": False, "logged": True, "alerted": False}
-
-    org_row = await _load_active_org_settings()
-    await send_pr_rejected_alert(
-        repo_url=body.repo_url,
-        pr_number=body.pr_number,
-        pr_url=body.pr_url,
-        closed_by=body.closed_by,
-        closed_at=body.closed_at,
-        reason=body.reason,
-        critical=body.critical,
-        high=body.high,
-        webhook_url=_resolve_slack_webhook(org_row),
-    )
-    return {"ignored": False, "logged": True, "alerted": True}
 
 
 def _token_limit_advisory(body: ScanRequest, exc: TokenLimitError) -> ScanResult:

@@ -279,7 +279,7 @@ class ClaudeClient:
         raw_findings: list[dict] = []
         partial_files: list[str] = []
 
-        for chunk, result in zip(chunks, results):
+        for chunk, result in zip(chunks, results, strict=False):
             if isinstance(result, ClaudeTimeoutError):
                 log.warning(
                     "claude chunk timeout — files marked partial",
@@ -354,7 +354,7 @@ class ClaudeClient:
                 if isinstance(result, ClaudeResponseError):
                     still_failed += 1
                 elif isinstance(result, Exception):
-                    raise result
+                    raise result from result
                 else:
                     findings.extend(result)
             if still_failed == 2:

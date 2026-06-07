@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0006"
-down_revision = "0005"
+down_revision = "0005_bypass_slack_mode"
 branch_labels = None
 depends_on = None
 

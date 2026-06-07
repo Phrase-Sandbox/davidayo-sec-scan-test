@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from security_scanner.shared.context.route_extractors import (
     extract_aiohttp_routes,
     extract_django_routes,

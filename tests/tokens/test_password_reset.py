@@ -8,14 +8,14 @@ from datetime import UTC, datetime
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from security_scanner.tokens.admin_panel import router as admin_router
 from security_scanner.tokens.auth import _SESSION_COOKIE, sign_portal_session
 from security_scanner.tokens.db import Base
-from security_scanner.tokens.models import AuditEventType, AuditEvent, User, UserRole
-from security_scanner.tokens.portal import router as portal_router, _hash_password
+from security_scanner.tokens.models import User, UserRole
+from security_scanner.tokens.portal import _hash_password
+from security_scanner.tokens.portal import router as portal_router
 
 
 @pytest.fixture(autouse=True)

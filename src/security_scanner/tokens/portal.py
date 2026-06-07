@@ -28,12 +28,12 @@ Trust model: every request MUST come through the Phrase Platform ingress
 
 from __future__ import annotations
 
-import bcrypt
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
+import bcrypt
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
@@ -44,9 +44,9 @@ from security_scanner.shared.logging_util import get_logger
 from security_scanner.tokens import audit as token_audit
 from security_scanner.tokens import registry as token_registry
 from security_scanner.tokens.auth import (
-    PhraseUser,
     _SESSION_COOKIE,
     _SESSION_TTL,
+    PhraseUser,
     _check_email_domain,
     require_phrase_user,
     sign_portal_session,
@@ -223,7 +223,7 @@ async def portal_login_submit(
     #     Exception: emails listed in PROTECTED_ADMIN_EMAILS get role=admin.
     #   - EXISTING users: keep their current role (DB is source of truth).
     display_name = email.split("@")[0].replace(".", " ").title()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     protected = frozenset(
         e.strip() for e in settings.PROTECTED_ADMIN_EMAILS.split(",") if e.strip()
     )

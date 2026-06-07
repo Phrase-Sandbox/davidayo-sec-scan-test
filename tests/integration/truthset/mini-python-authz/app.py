@@ -4,7 +4,7 @@ Vulnerabilities are annotated in truth.yaml. This file is intentionally
 vulnerable for testing purposes — never deploy this code.
 """
 
-from flask import Flask, request, jsonify, abort, g, session
+from flask import Flask, abort, jsonify, request, session
 
 app = Flask(__name__)
 app.secret_key = "test-secret"

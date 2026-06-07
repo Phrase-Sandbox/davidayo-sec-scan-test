@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from security_scanner.shared.context.ownership_checks import scan_ownership_checks
 
 # ---------------------------------------------------------------------------

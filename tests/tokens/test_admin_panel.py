@@ -15,7 +15,11 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from security_scanner.tokens import registry as token_registry
 from security_scanner.tokens.admin_panel import router as admin_router
 from security_scanner.tokens.db import Base
-from security_scanner.tokens.models import AuditEvent, AuditEventType, LocalScanToken, User, UserRole
+from security_scanner.tokens.models import (
+    LocalScanToken,
+    User,
+    UserRole,
+)
 
 _ADMIN_GROUP = "security-scanner-admins"
 
@@ -190,8 +194,9 @@ async def test_demote_protected_admin_returns_400(client, session_factory):
     """Demoting a protected super-admin must return 400."""
     # Ensure the protected user exists in the DB.
     async with session_factory() as session:
-        from security_scanner.tokens.models import User, UserRole
         from datetime import UTC, datetime
+
+        from security_scanner.tokens.models import User, UserRole
         session.add(User(
             email="david.shoyemi@phrase.com",
             role=UserRole.admin,
@@ -211,8 +216,9 @@ async def test_demote_protected_admin_returns_400(client, session_factory):
 async def test_deactivate_protected_admin_returns_400(client, session_factory):
     """Deactivating a protected super-admin must return 400."""
     async with session_factory() as session:
-        from security_scanner.tokens.models import User, UserRole
         from datetime import UTC, datetime
+
+        from security_scanner.tokens.models import User, UserRole
         session.add(User(
             email="david.shoyemi@phrase.com",
             role=UserRole.admin,
@@ -232,8 +238,9 @@ async def test_deactivate_protected_admin_returns_400(client, session_factory):
 async def test_revoke_tokens_for_protected_admin_returns_400(client, session_factory):
     """Bulk token revocation for a protected super-admin must return 400."""
     async with session_factory() as session:
-        from security_scanner.tokens.models import User, UserRole
         from datetime import UTC, datetime
+
+        from security_scanner.tokens.models import User, UserRole
         session.add(User(
             email="david.shoyemi@phrase.com",
             role=UserRole.admin,

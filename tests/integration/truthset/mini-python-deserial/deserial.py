@@ -3,9 +3,10 @@
 Intentionally vulnerable — never deploy this code.
 """
 
-import pickle
-import yaml
 import base64
+import pickle
+
+import yaml
 from flask import Flask, request
 
 app = Flask(__name__)

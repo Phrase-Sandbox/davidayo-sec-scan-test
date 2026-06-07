@@ -11,8 +11,8 @@ from typing import NamedTuple
 
 # Patterns for interesting callees.
 _DB_QUERY_RE = re.compile(
-    r"""\b(execute|query|fetchone|fetchall|cursor|find_by|get_or_404|get_object_or_404|
-        filter_by|select|insert|update|delete|raw|execute_query)\s*\(""".replace("\n", "").replace(" ", ""),
+    r"\b(execute|query|fetchone|fetchall|cursor|find_by|get_or_404|get_object_or_404"
+    r"|filter_by|select|insert|update|delete|raw|execute_query)\s*\(",
     re.IGNORECASE,
 )
 _OWNERSHIP_HELPER_RE = re.compile(

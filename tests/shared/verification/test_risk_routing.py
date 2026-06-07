@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from security_scanner.shared.context.packager import is_high_risk_path
 from security_scanner.shared.models.enums import VerificationStatus
 from security_scanner.shared.scanners.types import CandidateForVerification

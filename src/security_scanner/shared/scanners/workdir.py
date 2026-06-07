@@ -46,7 +46,7 @@ class ScannerWorkspace:
         self._root: Path | None = None
         self._bytes_written = 0
 
-    async def __aenter__(self) -> "ScannerWorkspace":
+    async def __aenter__(self) -> ScannerWorkspace:
         self._root = Path(
             tempfile.mkdtemp(prefix=f"sec-scan-{self._scan_id}-")
         ).resolve()
@@ -110,7 +110,8 @@ class ScannerWorkspace:
         # Resolve-based traversal check.
         if not self._is_under_root(target):
             raise WorkspaceError(
-                f"Path traversal detected: {rel!r} resolves outside workspace (possible symlink escape)"
+                f"Path traversal detected: {rel!r} resolves outside workspace"
+                " (possible symlink escape)"
             )
 
         encoded = content.encode("utf-8", errors="replace")

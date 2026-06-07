@@ -8,11 +8,8 @@ Covers:
 
 from __future__ import annotations
 
-import pytest
-
 from security_scanner.shared.context.upload_finder import find_upload_handlers
 from security_scanner.shared.context.upload_models import UploadHandler
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

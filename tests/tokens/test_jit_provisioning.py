@@ -172,7 +172,7 @@ async def test_jit_provision_is_idempotent(client, session_factory):
     assert r2.status_code in (200, 302)
 
     # Exactly one DB row
-    from sqlalchemy import select, func
+    from sqlalchemy import func, select
     async with session_factory() as sess:
         count = (
             await sess.execute(

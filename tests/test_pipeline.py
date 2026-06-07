@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -500,7 +500,7 @@ def test_filter_runs_before_llm_input_not_after():
     1. analyse_async is NOT called with vendor.min.js (it's filtered out).
     2. The stripper IS called with both files (via the strip() function).
     """
-    from unittest.mock import call as mock_call, patch as mock_patch
+    from unittest.mock import patch as mock_patch
 
     py_content = "def login(u):\n    return db.query(u)\n"
     min_js_content = "!function(){var a=1;}();"  # typical minified JS

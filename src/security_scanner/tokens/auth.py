@@ -26,7 +26,7 @@ import binascii
 import json
 import time
 from dataclasses import dataclass
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import quote
 
 from cryptography.fernet import Fernet, InvalidToken

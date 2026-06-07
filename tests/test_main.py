@@ -90,29 +90,6 @@ def test_agent_router_is_mounted(client):
     assert response.status_code in (401, 422)
 
 
-def test_skill_api_is_mounted(client):
-    # Phase 4.3 has landed: /skill/scan is a real endpoint guarded by
-    # verify_oauth_token. POSTing without a session cookie or body returns
-    # 401 (no OAuth session) or 422 (validation) — anything but 404 proves
-    # the route is mounted.
-    response = client.post("/skill/scan", json={})
-    assert response.status_code in (401, 422)
-
-
-def test_skill_oauth_callback_is_mounted(client):
-    # Phase 4.1 has landed: the callback is a real OAuth endpoint that
-    # requires `code` + `state` query params. Calling without them returns
-    # 422 (FastAPI param validation), which proves the route is mounted.
-    response = client.get("/skill/oauth/callback")
-    assert response.status_code == 422
-
-
-def test_skill_oauth_init_is_mounted_and_redirects_to_github(client):
-    response = client.get("/skill/oauth/init", follow_redirects=False)
-    assert response.status_code == 302
-    assert "github.com/login/oauth/authorize" in response.headers["location"]
-
-
 # --- OpenAPI / schema sanity ----------------------------------------------
 
 
@@ -123,6 +100,7 @@ def test_openapi_schema_lists_all_routers(client):
     assert "/readyz" in paths
     assert "/metrics" in paths
     assert "/agent/scan" in paths
-    assert "/skill/scan" in paths
-    assert "/skill/oauth/callback" in paths
-    assert "/skill/oauth/init" in paths
+    assert "/skill/scan" not in paths
+    assert "/skill/oauth/callback" not in paths
+    assert "/skill/oauth/init" not in paths
+    assert "/agent/pr-event" not in paths

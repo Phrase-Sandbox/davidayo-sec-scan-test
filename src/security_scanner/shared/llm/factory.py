@@ -49,17 +49,19 @@ _DATA_GOVERNANCE_WARNING = (
 )
 
 
-def _make_claude(api_key: str, model: str | None) -> "LLMClient":
+def _make_claude(api_key: str, model: str | None) -> LLMClient:
     from security_scanner.shared.claude.client import ClaudeClient
     if model:
         return ClaudeClient(api_key=api_key, model=model)
     return ClaudeClient(api_key=api_key)
 
 
-def _make_gemini(api_key: str, model: str | None) -> "LLMClient":
+def _make_gemini(api_key: str, model: str | None) -> LLMClient:
     log.warning("llm_provider_override", provider="gemini", notice=_DATA_GOVERNANCE_WARNING)
     from security_scanner.shared.llm.gemini_client import (
         DEFAULT_MODEL as GEMINI_DEFAULT,
+    )
+    from security_scanner.shared.llm.gemini_client import (
         GeminiClient,
     )
     return GeminiClient(api_key=api_key, model=model or GEMINI_DEFAULT)
@@ -69,7 +71,7 @@ def build_user_llm_client(
     provider: str,
     api_key: str,
     model: str | None = None,
-) -> "LLMClient":
+) -> LLMClient:
     """Build an LLM client from the user's stored BYO API key.
 
     The caller (``/scan/local`` handler) decrypts the key from
@@ -98,9 +100,9 @@ def build_user_llm_client(
 
 
 def _get_model_for_provider(
-    org_row: "OrgSettings | None",
+    org_row: OrgSettings | None,
     provider: str,
-) -> "str | None":
+) -> str | None:
     """Return the admin-configured model for *provider* from *org_row*.
 
     Returns ``None`` when:
@@ -122,11 +124,11 @@ def _get_model_for_provider(
 
 
 def build_org_llm_client_from_settings(
-    org_row: "OrgSettings",
+    org_row: OrgSettings,
     provider_choice: str | None = None,
     *,
-    settings: "Settings | None" = None,
-) -> "LLMClient":
+    settings: Settings | None = None,
+) -> LLMClient:
     """Build the org-channel LLM client from a decrypted ``OrgSettings`` row.
 
     ``provider_choice`` is the per-run CI override (e.g. workflow input
@@ -173,7 +175,7 @@ def build_org_llm_client_from_settings(
     )
 
 
-def build_llm_client(settings: "Settings") -> "LLMClient":
+def build_llm_client(settings: Settings) -> LLMClient:
     """Bootstrap fallback: build from env vars when org_settings has no rows.
 
     This is the pre-two-channel code path kept alive only for the initial

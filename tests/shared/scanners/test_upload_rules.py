@@ -71,8 +71,9 @@ class TestSemgrepUploadRulesExecution:
 
     def test_upload_security_yaml_is_valid_yaml(self) -> None:
         """The config must be valid YAML."""
-        import yaml
         from pathlib import Path
+
+        import yaml
         config = (
             Path(__file__).parents[3]
             / "semgrep_configs"
@@ -85,8 +86,9 @@ class TestSemgrepUploadRulesExecution:
 
     def test_upload_rules_have_required_metadata(self) -> None:
         """Each rule must declare vuln_class in metadata."""
-        import yaml
         from pathlib import Path
+
+        import yaml
         config = (
             Path(__file__).parents[3]
             / "semgrep_configs"

@@ -133,7 +133,6 @@ def _build_mock_client(truth_entries: list[dict[str, Any]]) -> MagicMock:
     client = MagicMock()
 
     # analyse_async returns the mock findings list.
-    import asyncio
 
     async def _async_analyse(files):
         return mock_findings
@@ -176,7 +175,6 @@ def _run_pipeline_sync(
     """Run the verifier directly on mocked candidates to avoid async complexity."""
     from security_scanner.shared.scanners.types import CandidateForVerification
     from security_scanner.shared.verification.vulns import verify_vuln_candidates
-    from security_scanner.shared.models.enums import VerificationStatus
 
     mandatory = [e for e in truth_entries if e.get("mandatory", False)]
 

@@ -11,16 +11,15 @@ Covers:
 
 from __future__ import annotations
 
-import hashlib
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from security_scanner.tokens import registry
 from security_scanner.tokens.models import (
-    AuditEventType,
     CIToken,
     LLMProvider,
     LLMUsageMonthly,
@@ -31,8 +30,6 @@ from security_scanner.tokens.models import (
     User,
     UserRole,
 )
-from sqlalchemy import select
-
 
 # ---------------------------------------------------------------------------
 # Fernet crypto
@@ -40,7 +37,6 @@ from sqlalchemy import select
 
 def _make_settings(key: str | None):
     """Return a minimal settings-like mock with SCANNER_ENCRYPTION_KEY set."""
-    from unittest.mock import MagicMock
     s = MagicMock()
     s.SCANNER_ENCRYPTION_KEY = key
     return s
@@ -49,7 +45,8 @@ def _make_settings(key: str | None):
 def test_fernet_round_trip():
     """encrypt → decrypt round-trips without data loss."""
     from cryptography.fernet import Fernet
-    from security_scanner.tokens.crypto import encrypt, decrypt
+
+    from security_scanner.tokens.crypto import decrypt, encrypt
 
     key = Fernet.generate_key().decode()
     settings = _make_settings(key)
@@ -63,6 +60,7 @@ def test_fernet_round_trip():
 def test_fernet_ciphertext_is_not_plaintext():
     """Stored bytes should not contain the raw secret."""
     from cryptography.fernet import Fernet
+
     from security_scanner.tokens.crypto import encrypt
 
     key = Fernet.generate_key().decode()
@@ -87,7 +85,7 @@ def test_mask_for_display():
 
 def test_missing_encryption_key_raises_on_encrypt():
     """encrypt() raises EncryptionKeyMissing when SCANNER_ENCRYPTION_KEY is None."""
-    from security_scanner.tokens.crypto import encrypt, EncryptionKeyMissing
+    from security_scanner.tokens.crypto import EncryptionKeyMissing, encrypt
 
     settings = _make_settings(None)
     with pytest.raises(EncryptionKeyMissing, match="SCANNER_ENCRYPTION_KEY"):
@@ -96,7 +94,7 @@ def test_missing_encryption_key_raises_on_encrypt():
 
 def test_invalid_fernet_key_raises_on_encrypt():
     """encrypt() raises EncryptionKeyInvalid when the key is not valid Fernet."""
-    from security_scanner.tokens.crypto import encrypt, EncryptionKeyInvalid
+    from security_scanner.tokens.crypto import EncryptionKeyInvalid, encrypt
 
     settings = _make_settings("not-a-valid-fernet-key")
     with pytest.raises(EncryptionKeyInvalid):
@@ -115,6 +113,7 @@ async def test_expired_token_returns_expired_outcome(session: AsyncSession):
     )
     # Backdate the expires_at to 31 days ago.
     from sqlalchemy import select
+
     from security_scanner.tokens.models import LocalScanToken
     row = (await session.execute(
         select(LocalScanToken).where(LocalScanToken.token_id == issued.token_id)
@@ -325,8 +324,8 @@ async def test_llm_usage_monthly_upsert(session: AsyncSession):
 
 async def test_ci_token_rotation_marks_old_revoked(session: AsyncSession):
     """Rotating a CI token: old row gets revoked_at, new row is inserted."""
-    import secrets as sec
     import hashlib as hl
+    import secrets as sec
 
     now = datetime.now(UTC)
 

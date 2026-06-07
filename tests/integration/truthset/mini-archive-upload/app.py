@@ -1,10 +1,11 @@
 """Mini archive-upload app — planted archive/parser vulnerabilities for truth-set."""
 
-from flask import Flask, request, abort
-import zipfile
-import tarfile
-import yaml
 import os
+import tarfile
+import zipfile
+
+import yaml
+from flask import Flask, abort, request
 
 app = Flask(__name__)
 

@@ -12,16 +12,13 @@ Verifies that:
 
 from __future__ import annotations
 
-import pytest
-
+from security_scanner.shared.context.upload_models import UploadHandler
 from security_scanner.shared.scanners import (
     _count_weak_signals,
     _synthesise_candidates,
 )
-from security_scanner.shared.scanners.models import ScannerCandidate
 from security_scanner.shared.scanners.consensus import aggregate
-from security_scanner.shared.context.upload_models import UploadHandler
-
+from security_scanner.shared.scanners.models import ScannerCandidate
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -1,9 +1,10 @@
 """Mini Python upload app — planted upload vulnerabilities for truth-set."""
 
-from flask import Flask, request, abort
 import os
-import uuid
 import secrets
+import uuid
+
+from flask import Flask, abort, request
 
 app = Flask(__name__)
 

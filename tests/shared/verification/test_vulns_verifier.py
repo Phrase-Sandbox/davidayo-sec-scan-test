@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from security_scanner.shared.models.enums import VerificationStatus
 from security_scanner.shared.scanners.types import CandidateForVerification
 from security_scanner.shared.verification.prompts import build_vuln_verifier_system_prompt
@@ -201,7 +199,9 @@ def test_false_positive_always_dropped() -> None:
 def test_bundle_routes_rendered_in_user_message() -> None:
     """When a bundle is provided, ROUTES section appears in the user message."""
     from security_scanner.shared.context.models import (
-        ContextBundle, RouteInfo, MiddlewareInfo, CallerInfo, CalleeInfo, OwnershipCheckInfo,
+        ContextBundle,
+        MiddlewareInfo,
+        RouteInfo,
     )
     from security_scanner.shared.verification.vulns import _build_candidate_block
 

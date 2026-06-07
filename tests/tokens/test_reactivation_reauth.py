@@ -9,7 +9,7 @@ from __future__ import annotations
 import base64
 import json
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import pytest
 from fastapi import FastAPI
@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from security_scanner.tokens.admin_panel import router as admin_router
-from security_scanner.tokens.auth import sign_portal_session, _SESSION_COOKIE
+from security_scanner.tokens.auth import _SESSION_COOKIE, sign_portal_session
 from security_scanner.tokens.db import Base
 from security_scanner.tokens.models import User, UserRole
 from security_scanner.tokens.portal import router as portal_router
@@ -130,7 +130,7 @@ async def test_old_session_rejected_after_reactivation(client, session_factory):
 
     # Create a session cookie that was issued 10 seconds ago (before reactivation)
     # We need to manually craft the payload with the old timestamp
-    from security_scanner.tokens.auth import _get_fernet, _SESSION_TTL
+    from security_scanner.tokens.auth import _SESSION_TTL, _get_fernet
     old_payload = json.dumps({
         "e": "bob@example.com",
         "n": "Bob",

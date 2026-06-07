@@ -170,7 +170,6 @@ async def test_pipeline_minimum_findings_with_mock_llm() -> None:
 
     No external binaries required — entirely self-contained.
     """
-    import asyncio
     from unittest.mock import AsyncMock, MagicMock
 
     from security_scanner.pipeline import ScanPipeline

@@ -128,7 +128,7 @@ class ContextBundle:
     ownership_checks: tuple[OwnershipCheckInfo, ...] = field(default_factory=tuple)
     """Ownership / permission checks found near the candidate."""
 
-    upload_context: "UploadContext | None" = field(default=None, hash=False, compare=False)
+    upload_context: UploadContext | None = field(default=None, hash=False, compare=False)
     """Upload-flow context when the candidate involves file uploads.
     ``None`` means not applicable or extraction failed.
     Excluded from hash/compare because UploadContext fields are mutable lists."""

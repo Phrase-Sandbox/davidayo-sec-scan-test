@@ -314,6 +314,7 @@ def test_verifier_prompt_warns_against_todo_comment_fp():
 def test_max_parallelism_default_is_2(monkeypatch):
     monkeypatch.delenv("SECRET_VERIFIER_PARALLELISM", raising=False)
     import importlib
+
     import security_scanner.shared.verification.secrets as secrets_mod
     importlib.reload(secrets_mod)
     assert secrets_mod._MAX_PARALLELISM == 2
@@ -322,6 +323,7 @@ def test_max_parallelism_default_is_2(monkeypatch):
 def test_max_parallelism_env_var_override(monkeypatch):
     monkeypatch.setenv("SECRET_VERIFIER_PARALLELISM", "6")
     import importlib
+
     import security_scanner.shared.verification.secrets as secrets_mod
     importlib.reload(secrets_mod)
     assert secrets_mod._MAX_PARALLELISM == 6
@@ -329,6 +331,7 @@ def test_max_parallelism_env_var_override(monkeypatch):
 
 def test_max_parallelism_env_var_clamped_and_validated(monkeypatch):
     import importlib
+
     import security_scanner.shared.verification.secrets as secrets_mod
 
     monkeypatch.setenv("SECRET_VERIFIER_PARALLELISM", "99")

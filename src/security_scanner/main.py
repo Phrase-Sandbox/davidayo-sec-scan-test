@@ -26,8 +26,6 @@ from security_scanner.agent.local_scan import router as local_scan_router
 from security_scanner.observability.metrics import metrics_endpoint
 from security_scanner.shared.config import get_settings
 from security_scanner.shared.logging_util import get_logger
-from security_scanner.skill.api import router as skill_api_router
-from security_scanner.skill.oauth import router as skill_oauth_router
 from security_scanner.tokens.admin_panel import router as admin_router
 from security_scanner.tokens.okta import router as okta_router
 from security_scanner.tokens.portal import router as portal_router
@@ -269,8 +267,6 @@ async def metrics() -> Response:
 # --- Routers --------------------------------------------------------------
 
 app.include_router(agent_router)
-app.include_router(skill_api_router)
-app.include_router(skill_oauth_router)
 # Local-advisory jurisdiction (Appendix D-12). Always mounted but
 # self-disabling: every call 401s unless LOCAL_SCAN_TOKEN is configured, and
 # it can never gate a deploy or open a PR (separate token, no gate_decision).

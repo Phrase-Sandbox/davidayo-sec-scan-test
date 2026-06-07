@@ -18,8 +18,10 @@ from security_scanner.agent.api import get_pipeline
 from security_scanner.agent.api import router as agent_router
 from security_scanner.agent.local_scan import (
     AuthenticatedLocalCaller,
-    router as local_router,
     verify_local_scan_token,
+)
+from security_scanner.agent.local_scan import (
+    router as local_router,
 )
 from security_scanner.pipeline import ScanPipeline
 from security_scanner.shared.models.enums import (

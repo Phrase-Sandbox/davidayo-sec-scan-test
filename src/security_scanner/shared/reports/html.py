@@ -850,7 +850,8 @@ def _finding_card(
         parts.append(
             '<details class="code-toggle">'
             "<summary>Cross-file context</summary>"
-            f"<pre style=\"white-space:pre-wrap;font-size:0.85em\">{escape(f.context_summary)}</pre>"
+            f'<pre style="white-space:pre-wrap;font-size:0.85em">'
+            f"{escape(f.context_summary)}</pre>"
             "</details>"
         )
     snippet = _code_snippet_block(files, f.affected_file, f.affected_lines)

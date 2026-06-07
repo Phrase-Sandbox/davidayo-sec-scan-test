@@ -12,14 +12,12 @@ Mocks both ``ClaudeClient`` (to avoid real API calls) and the file-fetcher
 from __future__ import annotations
 
 import asyncio
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from security_scanner.shared.models.enums import GateDecision, ScanTarget, ScanType
-from security_scanner.shared.models.finding import VulnerabilityFinding
 from security_scanner.pipeline import ScanPipeline
+from security_scanner.shared.models.enums import GateDecision, ScanTarget, ScanType
 
 
 def _make_mock_claude(scan_index: int) -> MagicMock:

@@ -16,7 +16,6 @@ import pytest
 
 from security_scanner.shared.llm.factory import _get_model_for_provider
 
-
 # ---------------------------------------------------------------------------
 # Unit tests for _get_model_for_provider
 # ---------------------------------------------------------------------------
@@ -115,15 +114,16 @@ class TestCLIScanUsesAdminModel:
 
     def _run_scan(self, monkeypatch, *, user_provider="anthropic", org_settings, pipeline_result):
         """Set up the full mock stack and POST to /scan/local."""
+
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
-        from uuid import uuid4
-        from datetime import UTC, datetime
 
         from security_scanner.agent.local_scan import (
             AuthenticatedLocalCaller,
-            router as local_router,
             verify_local_scan_token,
+        )
+        from security_scanner.agent.local_scan import (
+            router as local_router,
         )
 
         captured_llm_calls: list[tuple] = []
@@ -179,8 +179,11 @@ class TestCLIScanUsesAdminModel:
 
     def _scan_result(self):
         from uuid import uuid4
+
         from security_scanner.shared.models.enums import (
-            GateDecision, ScanTarget, ScanType,
+            GateDecision,
+            ScanTarget,
+            ScanType,
         )
         from security_scanner.shared.models.scan_result import ScanResult
         return ScanResult(

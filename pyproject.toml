@@ -95,7 +95,7 @@ select = ["E", "F", "W", "I", "B", "UP", "S"]
 ignore = ["S101"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["S"]
+"tests/**/*.py" = ["S", "E501"]
 # Long lines in prompt files are inside triple-quoted strings; noqa directives
 # inside string literals are not processed by ruff.
 "src/security_scanner/shared/prompts/system.py" = ["E501"]

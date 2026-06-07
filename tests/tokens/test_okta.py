@@ -1,8 +1,6 @@
 """Tests for the Okta OIDC SSO routes (/portal/oauth/init and /portal/oauth/callback)."""
 from __future__ import annotations
 
-import json
-import time
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -14,7 +12,6 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from security_scanner.tokens.db import Base
 from security_scanner.tokens.models import User, UserRole
 from security_scanner.tokens.okta import router as okta_router
-
 
 _ADMIN_GROUP = "security-scanner-admins"
 
@@ -168,6 +165,7 @@ async def test_okta_callback_protected_admin_provisioned_as_admin(client, sessio
 
 async def test_okta_callback_updates_existing_okta_user(client, session_factory):
     from datetime import UTC, datetime
+
     from security_scanner.tokens.okta import _pack_state
 
     # Pre-create an existing Okta user
@@ -220,6 +218,7 @@ def test_okta_callback_rejects_wrong_domain(client, session_factory):
 
 async def test_okta_callback_rejects_local_account_conflict(client, session_factory):
     from datetime import UTC, datetime
+
     from security_scanner.tokens.okta import _pack_state
 
     # Pre-create a LOCAL user with the same email

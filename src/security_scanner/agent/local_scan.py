@@ -33,9 +33,9 @@ import asyncio
 import hmac
 import os
 import re
-from html import escape
 from dataclasses import dataclass
-from typing import Annotated, Literal
+from html import escape
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -43,9 +43,9 @@ from pydantic import BaseModel, Field
 from security_scanner.agent.test_endpoint import _MockGitHubClient
 from security_scanner.observability.metrics import local_scan_auth_outcomes_total
 from security_scanner.pipeline import ScanPipeline, TokenLimitError
-from security_scanner.shared.config import Settings, get_settings
+from security_scanner.shared.config import get_settings
 from security_scanner.shared.llm.base import LLMConfigError
-from security_scanner.shared.llm.factory import build_user_llm_client, _get_model_for_provider
+from security_scanner.shared.llm.factory import _get_model_for_provider, build_user_llm_client
 from security_scanner.shared.logging_util import get_logger
 from security_scanner.shared.models.enums import GateDecision, ScanTarget, ScanType, Severity
 from security_scanner.shared.models.finding import VulnerabilityFinding
@@ -267,6 +267,7 @@ async def _load_active_org_settings():
     its own default model.
     """
     from sqlalchemy import select as _select  # noqa: PLC0415
+
     from security_scanner.tokens.models import OrgSettings  # noqa: PLC0415
 
     _factory = get_session_factory()
@@ -322,7 +323,7 @@ async def _persist_scan_data(
         return
 
     from datetime import UTC, datetime  # noqa: PLC0415 — local to keep module clean
-    from sqlalchemy.dialects.postgresql import insert as pg_insert  # noqa: PLC0415
+
 
     factory = get_session_factory()
     now = datetime.now(UTC)
@@ -339,7 +340,11 @@ async def _persist_scan_data(
             finished_at=now,
             repo_url=result.repo_url,
             scan_target=result.scan_target.value if result.scan_target else None,
-            status=ScanStatus.ok if result.gate_decision.value not in ("scan_failed",) else ScanStatus.failed,
+            status=(
+                ScanStatus.ok
+                if result.gate_decision.value not in ("scan_failed",)
+                else ScanStatus.failed
+            ),
             findings_count=result.findings_count,
             critical=severity_counts.get("critical", 0),
             high=severity_counts.get("high", 0),
@@ -475,6 +480,7 @@ async def scan_local(
     ``/portal/scans``.
     """
     from datetime import UTC, datetime  # noqa: PLC0415 — local import keeps top-level clean
+
     from security_scanner.tokens import crypto  # noqa: PLC0415
 
     # Registry mode is required — legacy tokens carry no user_email and

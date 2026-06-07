@@ -25,7 +25,6 @@ Go:
 from __future__ import annotations
 
 import re
-from typing import NamedTuple
 
 from security_scanner.shared.context.upload_models import UploadHandler
 from security_scanner.shared.logging_util import get_logger
@@ -58,7 +57,7 @@ _JS_UPLOAD_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\breq\.file\b", re.IGNORECASE), "express"),
     (re.compile(r"\breq\.files\b", re.IGNORECASE), "express"),
     (re.compile(r"\bnew\s+Busboy\b|\bbusboy\s*\(", re.IGNORECASE), "busboy"),
-    (re.compile(r"\bnew\s+(?:formidable\.)?(?:IncomingForm|Formidable)\s*\(", re.IGNORECASE), "formidable"),
+    (re.compile(r"\bnew\s+(?:formidable\.)?(?:IncomingForm|Formidable)\s*\(", re.IGNORECASE), "formidable"),  # noqa: E501
     (re.compile(r"\bformidable\.parse\b", re.IGNORECASE), "formidable"),
 ]
 
@@ -79,7 +78,9 @@ _GO_UPLOAD_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 # ---------------------------------------------------------------------------
 
 _PY_FUNC_RE = re.compile(r"(?:async\s+)?def\s+(\w+)\s*\(")
-_JS_FUNC_RE = re.compile(r"(?:function\s+(\w+)|(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?(?:function|\())")
+_JS_FUNC_RE = re.compile(
+    r"(?:function\s+(\w+)|(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?(?:function|\())"
+)
 _GO_FUNC_RE = re.compile(r"^func\s+(?:\(\s*\w+\s+\*?\w+\s*\)\s+)?(\w+)\s*\(")
 
 

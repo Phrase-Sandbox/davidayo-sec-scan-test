@@ -17,21 +17,17 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
-
+from security_scanner.shared.claude.client import ClaudeError
+from security_scanner.shared.models.enums import VerificationStatus
+from security_scanner.shared.scanners.types import CandidateForVerification
 from security_scanner.shared.verification.prompts import (
-    build_authz_verifier_rubric,
     build_upload_verifier_rubric,
     build_vuln_verifier_system_prompt,
 )
 from security_scanner.shared.verification.vulns import (
     _parse_verifier_response,
-    candidate_to_finding,
     verify_vuln_candidates,
 )
-from security_scanner.shared.scanners.types import CandidateForVerification
-from security_scanner.shared.models.enums import VerificationStatus
-from security_scanner.shared.claude.client import ClaudeError
 
 # ---------------------------------------------------------------------------
 # The 5 mandatory literal phrases from plan §verifier-rubric

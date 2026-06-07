@@ -11,8 +11,6 @@ Covers positive + negative cases for each UploadContext field:
 
 from __future__ import annotations
 
-import pytest
-
 from security_scanner.shared.context.upload_context import extract_upload_context
 from security_scanner.shared.context.upload_models import UploadContext, UploadHandler
 

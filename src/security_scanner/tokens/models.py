@@ -59,8 +59,8 @@ class AuditEventType(enum.StrEnum):
     slack_webhook_configured = "slack_webhook_configured"  # noqa: S105
     user_promoted = "user_promoted"    # role user → admin (app-managed)
     user_demoted = "user_demoted"      # role admin → user (app-managed)
-    user_password_force_reset = "user_password_force_reset"
-    user_password_changed = "user_password_changed"
+    user_password_force_reset = "user_password_force_reset"  # noqa: S105
+    user_password_changed = "user_password_changed"  # noqa: S105
     user_okta_login = "user_okta_login"
     user_local_login = "user_local_login"
 

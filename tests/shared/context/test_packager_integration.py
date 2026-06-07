@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
-
-from security_scanner.shared.context.packager import ContextPackager, is_high_risk_path
 from security_scanner.shared.context.models import ContextBundle
+from security_scanner.shared.context.packager import ContextPackager, is_high_risk_path
 from security_scanner.shared.scanners.types import CandidateForVerification
 
 

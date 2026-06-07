@@ -9,7 +9,6 @@ no real HTTP is made.
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock
 
 from security_scanner.skill import local_cli
 from security_scanner.skill.local_files import LocalFilesClient

@@ -4,18 +4,14 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
-
-from security_scanner.shared.models.enums import VerificationStatus
+from security_scanner.shared.models.enums import Confidence, Severity, VerificationStatus
+from security_scanner.shared.models.finding import VulnerabilityFinding
 from security_scanner.shared.scanners.types import CandidateForVerification
 from security_scanner.shared.severity.mapping import is_advisory_only, should_block
 from security_scanner.shared.verification.vulns import (
     _verify_batch,
     verify_vuln_candidates,
 )
-from security_scanner.shared.models.enums import Confidence, Severity
-from security_scanner.shared.models.finding import VulnerabilityFinding
-
 
 # ---------------------------------------------------------------------------
 # Helpers
