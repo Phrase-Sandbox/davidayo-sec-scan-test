@@ -38,7 +38,22 @@ def _build_engine() -> AsyncEngine:
     # echo=False — we do not want SQL in stdout (would leak token hashes in
     # query bind params during audit DEBUG sessions). pool_pre_ping handles
     # idle-connection recycling so a Postgres restart doesn't strand the app.
-    return create_async_engine(url, echo=False, pool_pre_ping=True, future=True)
+    # Explicit pool limits prevent unbounded connection growth under load:
+    #   pool_size=5    — base pool, always kept open.
+    #   max_overflow=10 — burst headroom on top of pool_size.
+    #   pool_timeout=30 — seconds to wait for a connection before raising.
+    #   pool_recycle=1800 — discard and re-open connections older than 30 min
+    #                       (avoids stale TCP on long-idle deployments).
+    return create_async_engine(
+        url,
+        echo=False,
+        pool_pre_ping=True,
+        future=True,
+        pool_size=5,
+        max_overflow=10,
+        pool_timeout=30,
+        pool_recycle=1800,
+    )
 
 
 def get_engine() -> AsyncEngine:

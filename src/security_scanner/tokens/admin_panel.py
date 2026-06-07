@@ -372,6 +372,12 @@ async def admin_org_settings_post(
         if google_key.strip():
             enc_google = encrypt(google_key.strip())
         if slack_webhook:
+            slack_webhook = slack_webhook.strip()
+            if not slack_webhook.startswith("https://"):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Slack webhook URL must start with https://",
+                )
             enc_slack = encrypt(slack_webhook)
 
         now = datetime.now(UTC)

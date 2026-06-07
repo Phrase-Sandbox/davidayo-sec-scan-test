@@ -31,7 +31,7 @@ from typing import Annotated
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, Cookie, Depends, HTTPException, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 
 from security_scanner.shared.config import Settings, get_settings
@@ -162,6 +162,7 @@ _ExchangerDep = Annotated[TokenExchanger, Depends(get_token_exchanger)]
 
 @router.get("/init")
 async def oauth_init(
+    request: Request,
     store: _StoreDep,
     settings: _SettingsDep,
 ) -> RedirectResponse:
@@ -186,6 +187,7 @@ async def oauth_init(
         httponly=True,
         samesite="lax",
         max_age=int(SESSION_TTL_SECONDS),
+        secure=request.url.scheme == "https",
     )
     return redirect
 

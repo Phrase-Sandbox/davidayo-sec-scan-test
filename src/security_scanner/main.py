@@ -76,6 +76,33 @@ def _check_local_password_safety(settings) -> None:
         sys.exit(1)
 
 
+def _check_db_ssl_safety(settings) -> None:
+    """Warn if DATABASE_URL points at a remote host with no SSL directive.
+
+    This is a *warning* only — not a hard exit — because some deployments
+    use mutual TLS at the network layer (sidecar, VPN) that is not reflected
+    in the connection string.  The warning prompts operators to investigate
+    without rejecting valid configurations.
+
+    SSL indicators checked: ``sslmode=``, ``ssl=true``, ``ssl_ca=``, ``tls=``.
+    """
+    url = settings.DATABASE_URL or ""
+    if not url:
+        return
+    is_remote = not any(h in url for h in _LOCAL_DB_HINTS)
+    has_ssl = any(s in url.lower() for s in ("sslmode=", "ssl=true", "ssl_ca=", "tls="))
+    if is_remote and not has_ssl:
+        log.warning(
+            "DATABASE_URL appears to use a remote host without an explicit SSL "
+            "directive (sslmode=require not found). Token hashes and encrypted "
+            "keys may transit the network unencrypted. "
+            "Add ?sslmode=require to DATABASE_URL to silence this warning.",
+            database_url_host=(
+                url.split("@")[-1].split("/")[0] if "@" in url else "(unparseable)"
+            ),
+        )
+
+
 def _run_migrations() -> None:
     """Run Alembic upgrade to head. Called at startup when RUN_MIGRATIONS_ON_STARTUP=true."""
     from alembic.config import Config
@@ -107,6 +134,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     _check_admin_bypass_safety(settings)
     _check_local_password_safety(settings)
+    _check_db_ssl_safety(settings)
 
     try:
         from security_scanner.tokens.crypto import validate_startup_key  # noqa: PLC0415
@@ -182,6 +210,11 @@ class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault(
             "Referrer-Policy", "strict-origin-when-cross-origin"
         )
+        if request.url.scheme == "https":
+            response.headers.setdefault(
+                "Strict-Transport-Security",
+                "max-age=31536000; includeSubDomains",
+            )
         return response
 
 
