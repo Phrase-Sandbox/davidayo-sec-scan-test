@@ -31,7 +31,7 @@ from collections.abc import Iterator
 
 from security_scanner.shared.claude.client import ClaudeClient, ClaudeError
 from security_scanner.shared.logging_util import get_logger
-from security_scanner.shared.models.enums import Severity
+from security_scanner.shared.models.enums import Severity, VerificationStatus
 from security_scanner.shared.models.finding import VulnerabilityFinding
 from security_scanner.shared.secrets.stripper import SecretHit, _is_template_file
 from security_scanner.shared.severity.mapping import severity_to_cvss_band
@@ -304,7 +304,12 @@ def verify_secret_findings(
         if h.detector not in _AUTO_VERIFIED_DETECTORS or _is_template_file(h.filename)
     ]
     if not llm_indices:
-        return findings
+        # All findings were auto-verified by shape alone (high-precision vendor
+        # regexes). Mark them verified so should_block treats them as confirmed.
+        return [
+            f.model_copy(update={"verification_status": VerificationStatus.verified})
+            for f in findings
+        ]
 
     batches: list[list[int]] = list(_chunk(llm_indices, _BATCH_SIZE))
     workers = min(_MAX_PARALLELISM, len(batches))
@@ -499,10 +504,10 @@ def _apply_verdict(
         file=hit.filename,
         line=hit.line,
     )
+    updates: dict = {"verification_status": VerificationStatus.verified}
     if reasoning:
-        new_desc = f"{finding.description}\n\nLLM verification: {reasoning}"
-        return finding.model_copy(update={"description": new_desc})
-    return finding
+        updates["description"] = f"{finding.description}\n\nLLM verification: {reasoning}"
+    return finding.model_copy(update=updates)
 
 
 def _parse_batched_verdicts(
