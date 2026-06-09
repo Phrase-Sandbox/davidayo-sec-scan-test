@@ -147,21 +147,25 @@ _PipelineDep = Annotated[ScanPipeline, Depends(get_pipeline)]
 
 
 async def _persist_ci_scan(result: ScanResult, started_at: datetime) -> None:
-    """Write a row to ci_scan_records after a successful /agent/scan."""
+    """Write a row to ci_scan_records + bump llm_usage_monthly after /agent/scan."""
     def _count(sev: Severity) -> int:
         return sum(1 for f in result.findings if f.severity == sev)
 
-    provider = model = None
-    if result.llm_usage is not None:
-        provider = getattr(result.llm_usage, "provider", None)
-        model = getattr(result.llm_usage, "model", None)
+    # Resolve provider/model from the same org_settings row the pipeline used.
+    from security_scanner.shared.llm.factory import _get_model_for_provider  # noqa: PLC0415
+    org_row = await _load_active_org_settings()
+    provider = org_row.default_provider.value if org_row is not None else "anthropic"
+    model = _get_model_for_provider(org_row, provider) or ""
+
+    now = datetime.now(UTC)
+    year_month = now.strftime("%Y-%m")
 
     record = CiScanRecord(
         scan_id=result.scan_id,
         triggered_by=result.triggered_by,
         repo_url=result.repo_url,
         started_at=started_at,
-        finished_at=datetime.now(UTC),
+        finished_at=now,
         scan_target=result.scan_target.value if result.scan_target else None,
         status=ScanStatus.ok,
         findings_count=result.findings_count,
@@ -172,9 +176,46 @@ async def _persist_ci_scan(result: ScanResult, started_at: datetime) -> None:
         provider=provider,
         model=model,
     )
+
+    usage = result.llm_usage
     factory = get_session_factory()
     async with factory() as session:
         session.add(record)
+
+        # Upsert llm_usage_monthly so CI scans appear in the /admin/usage token spend table.
+        if usage is not None:
+            from sqlalchemy import select as sa_select  # noqa: PLC0415
+            from security_scanner.tokens.models import LLMUsageMonthly  # noqa: PLC0415
+
+            stmt = sa_select(LLMUsageMonthly).where(
+                LLMUsageMonthly.user_email == result.triggered_by,
+                LLMUsageMonthly.year_month == year_month,
+                LLMUsageMonthly.provider == provider,
+                LLMUsageMonthly.model == model,
+            )
+            monthly = (await session.execute(stmt)).scalar_one_or_none()
+            if monthly is None:
+                monthly = LLMUsageMonthly(
+                    user_email=result.triggered_by,
+                    year_month=year_month,
+                    provider=provider,
+                    model=model,
+                    input_tokens=usage.input_tokens,
+                    output_tokens=usage.output_tokens,
+                    cache_creation_input_tokens=usage.cache_creation_input_tokens,
+                    cache_read_input_tokens=usage.cache_read_input_tokens,
+                    scan_count=1,
+                    last_updated=now,
+                )
+                session.add(monthly)
+            else:
+                monthly.input_tokens += usage.input_tokens
+                monthly.output_tokens += usage.output_tokens
+                monthly.cache_creation_input_tokens += usage.cache_creation_input_tokens
+                monthly.cache_read_input_tokens += usage.cache_read_input_tokens
+                monthly.scan_count += 1
+                monthly.last_updated = now
+
         await session.commit()
 
 

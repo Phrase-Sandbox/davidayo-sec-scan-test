@@ -56,6 +56,8 @@ env:
     value: "true"
   - name: CLAUDE_MAX_TOKENS
     value: "8192"
+  - name: CLAUDE_TIMEOUT_SECONDS
+    value: "55"
   - name: GITHUB_OIDC_ENABLED
     value: "true"
   - name: GITHUB_OIDC_AUDIENCE
