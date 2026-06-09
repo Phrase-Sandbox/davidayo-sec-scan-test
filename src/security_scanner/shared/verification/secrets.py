@@ -34,6 +34,7 @@ from security_scanner.shared.logging_util import get_logger
 from security_scanner.shared.models.enums import VerificationStatus
 from security_scanner.shared.models.finding import VulnerabilityFinding
 from security_scanner.shared.secrets.stripper import SecretHit, _is_template_file
+
 log = get_logger(__name__)
 
 
