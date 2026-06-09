@@ -28,7 +28,7 @@ from security_scanner.shared.scanners.types import CandidateForVerification
 
 log = logging.getLogger(__name__)
 
-_OVERLAP_TOLERANCE = 2
+_OVERLAP_TOLERANCE = 5
 
 # A03:2021 covers multiple injection subtypes. The LLM always emits A03:2021
 # for all of them (XSS, command injection, code injection, unsafe YAML, SQLi),
@@ -38,6 +38,7 @@ _OVERLAP_TOLERANCE = 2
 # silently prevent the two findings from merging.
 _A03_CLASSES: frozenset[str] = frozenset({
     "sqli", "xss", "command_injection", "code_injection", "unsafe_yaml",
+    "nosqli", "ldap_injection",
 })
 
 # Patterns used to infer the specific vuln_class from an LLM description when
@@ -66,6 +67,18 @@ _DESCRIPTION_CLASS_HINTS: list[tuple[re.Pattern[str], str]] = [
     ), "code_injection"),
     # Unsafe YAML deserialization.
     (re.compile(r"unsafe.yaml|yaml\.load", re.IGNORECASE), "unsafe_yaml"),
+    # LDAP injection — directory service filter injection (must precede generic sqli).
+    (re.compile(
+        r"\bldap\b.*inject|inject.*\bldap\b|\bldap\b.*filter|directory.*inject"
+        r"|ldap\.search|ldap3\.|DirContext|escape_filter_chars",
+        re.IGNORECASE,
+    ), "ldap_injection"),
+    # NoSQL injection — MongoDB/document-store operator injection (must precede generic sqli).
+    (re.compile(
+        r"nosql.*inject|inject.*nosql|mongodb.*inject|pymongo|mongoose.*inject"
+        r"|\$where|\$ne|\$regex|\$gt|\$lt|document.*store.*inject",
+        re.IGNORECASE,
+    ), "nosqli"),
     # SQL injection — explicit match so the fallback is never silently reached.
     (re.compile(
         r"\bsql\b.*inject|inject.*\bsql\b|\bsql.*quer|cursor\.execute"

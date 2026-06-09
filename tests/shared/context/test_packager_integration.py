@@ -138,3 +138,73 @@ def test_attach_empty_candidates():
     packager = ContextPackager()
     bundles = packager.attach([], {"app.py": "x = 1"})
     assert bundles == {}
+
+
+# ---------------------------------------------------------------------------
+# V7: source-aware snippet window
+# ---------------------------------------------------------------------------
+
+def _candidate_with_sources(
+    sources: list[str],
+    line_start: int = 20,
+    line_end: int = 20,
+) -> CandidateForVerification:
+    return CandidateForVerification(
+        file="app.py",
+        vuln_class="sqli",
+        line_start=line_start,
+        line_end=line_end,
+        severity="High",
+        confidence="Medium",
+        sources=sources,
+    )
+
+
+def _fifty_line_file() -> str:
+    return "\n".join(f"line_{i:03d} = {i}" for i in range(1, 51))
+
+
+def test_scanner_only_gets_wider_snippet_than_claude_finding():
+    """Scanner-only candidates get ±14 lines; Claude/merged get ±8 lines."""
+    content = _fifty_line_file()
+    files = {"app.py": content}
+    packager = ContextPackager()
+
+    scanner_cand = _candidate_with_sources(["bandit"], line_start=25, line_end=25)
+    claude_cand = _candidate_with_sources(["claude"], line_start=25, line_end=25)
+
+    bundles = packager.attach([scanner_cand, claude_cand], files)
+
+    scanner_lines = len(bundles[id(scanner_cand)].snippet.splitlines())
+    claude_lines = len(bundles[id(claude_cand)].snippet.splitlines())
+
+    assert scanner_lines > claude_lines, (
+        f"scanner-only snippet ({scanner_lines} lines) should be wider "
+        f"than claude snippet ({claude_lines} lines)"
+    )
+
+
+def test_merged_finding_gets_narrow_snippet():
+    """Merged findings (claude + scanner) use the ±8 window, not the wider ±14."""
+    content = _fifty_line_file()
+    files = {"app.py": content}
+    packager = ContextPackager()
+
+    merged_cand = _candidate_with_sources(["claude", "bandit"], line_start=25, line_end=25)
+    scanner_cand = _candidate_with_sources(["bandit"], line_start=25, line_end=25)
+
+    bundles = packager.attach([merged_cand, scanner_cand], files)
+
+    merged_lines = len(bundles[id(merged_cand)].snippet.splitlines())
+    scanner_lines = len(bundles[id(scanner_cand)].snippet.splitlines())
+
+    assert scanner_lines >= merged_lines
+
+
+def test_scanner_only_snippet_still_capped_at_max_snippet_lines():
+    """Even with ±14 expansion the snippet must not exceed _MAX_SNIPPET_LINES (30)."""
+    content = _fifty_line_file()
+    packager = ContextPackager()
+    cand = _candidate_with_sources(["semgrep"], line_start=25, line_end=25)
+    bundles = packager.attach([cand], {"app.py": content})
+    assert len(bundles[id(cand)].snippet.splitlines()) <= 30

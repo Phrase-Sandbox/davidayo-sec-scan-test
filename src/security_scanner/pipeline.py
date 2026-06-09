@@ -64,9 +64,8 @@ from security_scanner.shared.severity.mapping import (
 from security_scanner.shared.tokens.counter import THRESHOLD as TOKEN_THRESHOLD
 from security_scanner.shared.tokens.counter import (
     count as token_count,
-)
-from security_scanner.shared.tokens.counter import (
     exceeds_limit,
+    trim_to_budget,
 )
 from security_scanner.shared.validation.schema import validate
 from security_scanner.shared.verification.parallel import (
@@ -202,6 +201,8 @@ class ScanPipeline:
                 [p.strip() for p in sc.high_risk_paths.splitlines() if p.strip()] or None
             )
             _enable_consolidation_verifier: bool = sc.enable_consolidation_verifier
+            _enable_partial_scan: bool = sc.enable_partial_scan
+            _enable_zero_findings_retry: bool = sc.enable_zero_findings_retry
         else:
             enabled_adapters = None      # all adapters (binary-available)
             semgrep_rules = None         # all rule packs
@@ -210,6 +211,8 @@ class ScanPipeline:
             _parallelism = None          # module-level env default
             _high_risk_paths = None      # YAML file default
             _enable_consolidation_verifier = False
+            _enable_partial_scan = True   # default: partial scan preferred over 0 findings
+            _enable_zero_findings_retry = True  # default: retry on empty first pass
 
         # Step 1: parse owner/repo.
         parsed = _parse_repo_url(repo_url)
@@ -293,14 +296,40 @@ class ScanPipeline:
                 unscanned_files=[],
             )
 
-        # Step 8: token-limit gate (BR-005). Raises — caller handles per EC-010.
-        if exceeds_limit(files):
-            raise TokenLimitError(token_count(files), TOKEN_THRESHOLD)
-
-        # Step 9: Parallel Claude first-pass + Layer-1 scanner.
+        # Step 9 state — initialised here so the token-trim branch below can set them.
         partial_scan = False
         unscanned: list[str] = []
         raw_findings: list[dict] = []
+
+        # Step 8: token-limit gate (BR-005).
+        # When partial scan is enabled: trim to budget and continue with a subset
+        # of files (highest-risk paths first).  When disabled: raise so the caller
+        # returns an advisory result with zero findings (legacy behaviour, EC-010).
+        if exceeds_limit(files):
+            if _enable_partial_scan:
+                files, trimmed_unscanned = trim_to_budget(files, TOKEN_THRESHOLD)
+                scanner_files = {k: v for k, v in scanner_files.items() if k in files}
+                partial_scan = True
+                unscanned.extend(trimmed_unscanned)
+                log.info(
+                    "token limit exceeded — partial scan",
+                    kept_files=len(files),
+                    skipped_files=len(trimmed_unscanned),
+                )
+                # If every file exceeded the budget (e.g. a single file larger
+                # than 150k tokens), nothing can be scanned — return advisory.
+                if not files:
+                    return _build_result(
+                        repo_url=repo_url, scan_target=scan_target, scan_type=self._mode,
+                        triggered_by=triggered_by,
+                        findings=secret_findings,
+                        gate_decision=GateDecision.advisory,
+                        partial_scan=True,
+                        unscanned_files=unscanned,
+                        warnings=["All files exceed the token budget; no files could be scanned."],
+                    )
+            else:
+                raise TokenLimitError(token_count(files), TOKEN_THRESHOLD)
 
         if _enable_scanner:
             # Run chunked Claude first-pass and Layer-1 scanners concurrently.
@@ -403,8 +432,42 @@ class ScanPipeline:
                     reason=f"Claude response could not be parsed: {exc}",
                 )
 
-        # Step 10: schema validation.
+        # Step 9b: zero-findings retry.
+        # When Claude returns nothing on a non-trivial codebase and the retry flag
+        # is enabled, fire one more analysis pass with an explicit re-examine
+        # instruction.  Fires at most once — if the retry also returns nothing,
+        # processing continues normally (scanner candidates still flow through).
+        _ZERO_FINDINGS_LINE_THRESHOLD = 500
         total_lines = sum(content.count("\n") + 1 for content in files.values())
+        if (
+            not raw_findings
+            and not partial_scan
+            and _enable_zero_findings_retry
+            and total_lines > _ZERO_FINDINGS_LINE_THRESHOLD
+        ):
+            log.info(
+                "zero_findings_retry",
+                source_lines=total_lines,
+                file_count=len(files),
+            )
+            try:
+                retry_findings, _ = await self._claude.analyse_async_chunked(
+                    files,
+                    extra_instruction=(
+                        "IMPORTANT: Re-examine the codebase carefully — the initial analysis "
+                        "found no security issues in a non-trivial codebase. Look especially "
+                        "for injection vulnerabilities, authentication bypasses, insecure "
+                        "cryptography, and access-control flaws. If the code is genuinely "
+                        "secure, explain briefly why in a single advisory-level finding."
+                    ),
+                )
+                if retry_findings:
+                    raw_findings = retry_findings
+                    log.info("zero_findings_retry succeeded", found=len(retry_findings))
+            except (ClaudeTimeoutError, ClaudeUnavailableError, ClaudeResponseError) as exc:
+                log.warning("zero_findings_retry failed", reason=str(exc))
+
+        # Step 10: schema validation.
         validation = validate(raw_findings, total_lines, is_gate_path=is_gate)
         valid_findings = validation.valid_findings
 

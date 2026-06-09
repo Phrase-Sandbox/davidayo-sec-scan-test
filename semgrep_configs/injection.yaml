@@ -224,7 +224,7 @@ rules:
     languages: [python]
     severity: WARNING
     metadata:
-      vuln_class: sqli
+      vuln_class: nosql_injection
       owasp: A03:2021
       cwe: CWE-943
 
@@ -240,7 +240,7 @@ rules:
     languages: [javascript, typescript]
     severity: WARNING
     metadata:
-      vuln_class: sqli
+      vuln_class: nosql_injection
       owasp: A03:2021
       cwe: CWE-943
 
@@ -261,7 +261,7 @@ rules:
     languages: [python]
     severity: ERROR
     metadata:
-      vuln_class: sqli
+      vuln_class: ldap_injection
       owasp: A03:2021
       cwe: CWE-90
 

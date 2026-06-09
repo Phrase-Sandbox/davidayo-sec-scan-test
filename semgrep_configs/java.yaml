@@ -291,7 +291,7 @@ rules:
     languages: [java]
     severity: ERROR
     metadata:
-      vuln_class: sqli
+      vuln_class: ldap_injection
       owasp: A03:2021
       cwe: CWE-90
 

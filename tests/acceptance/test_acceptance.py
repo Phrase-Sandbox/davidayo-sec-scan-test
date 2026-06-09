@@ -12,8 +12,9 @@ Mapping to §13.3 acceptance criteria:
 - AC3: Critical OWASP finding blocks the gate → ``test_critical_finding_blocks_gate``
 - AC5: Claude 503 → advisory, *not* blocked (BR-006) → ``test_claude_503_yields_advisory``
 - AC6: Empty diff → skip with advisory, no Claude call (BR-004) → ``test_empty_diff_skips_scan``
-- AC7: >150k tokens → ``TokenLimitError`` before Claude
-  → ``test_token_overflow_raises_before_claude``
+- AC7: >150k tokens → advisory partial result (default) or ``TokenLimitError`` (legacy)
+  → ``test_token_overflow_returns_advisory_partial_result``,
+     ``test_token_overflow_raises_when_partial_scan_disabled``
 - AC8: Prompt-injection comment doesn't suppress findings; XML wrap intact
   → ``test_prompt_injection_does_not_suppress_findings``
 
@@ -323,13 +324,17 @@ def test_empty_diff_skips_scan():
     claude.analyse.assert_not_called()
 
 
-# --- AC7: Token overflow → TokenLimitError before any Claude call ----------
+# --- AC7: Token overflow → partial scan advisory result (no Claude call) ----
 
 
-def test_token_overflow_raises_before_claude():
-    """AC7: a filtered file set exceeding 150,000 tokens raises
-    TokenLimitError from the pipeline. Claude is never called."""
+def test_token_overflow_returns_advisory_partial_result():
+    """AC7 (updated V7): a filtered file set exceeding 150,000 tokens no longer
+    raises TokenLimitError.  When partial scan is enabled (default), the pipeline
+    trims to budget and returns an advisory result.  If no files fit (one huge
+    file > 150k tokens), the result is advisory with partial_scan=True and
+    Claude is never called."""
     # 600,001 chars / 4 = 150,000.25 tokens → strictly exceeds the threshold.
+    # Single file bigger than the entire budget → kept = {}, all skipped.
     files = {"src/huge.py": "x" * 600_001}
     claude = _mock_claude_returning([])
     pipeline = ScanPipeline(
@@ -338,13 +343,63 @@ def test_token_overflow_raises_before_claude():
         mode=ScanType.deployment_gate,
     )
 
-    with pytest.raises(TokenLimitError):
-        _run(
-            pipeline,
-            repo_url=_REPO,
-            scan_target=ScanTarget.full_repo,
-            triggered_by="alice@phrase.com",
-        )
+    result = _run(
+        pipeline,
+        repo_url=_REPO,
+        scan_target=ScanTarget.full_repo,
+        triggered_by="alice@phrase.com",
+    )
+    assert result.gate_decision == GateDecision.advisory
+    assert result.partial_scan is True
+    assert "src/huge.py" in result.unscanned_files
+    claude.analyse.assert_not_called()
+
+
+def test_token_overflow_raises_when_partial_scan_disabled():
+    """When partial scan is disabled (legacy mode), TokenLimitError is still raised."""
+    from datetime import UTC, datetime
+    from unittest.mock import patch
+
+    from security_scanner.tokens.models import ScannerSettings
+
+    files = {"src/huge.py": "x" * 600_001}
+    claude = _mock_claude_returning([])
+    pipeline = ScanPipeline(
+        _mock_github(files),
+        claude,
+        mode=ScanType.deployment_gate,
+    )
+
+    mock_sc = ScannerSettings(
+        keep_confidences="high,medium",
+        advisory_confidences="low",
+        enable_semgrep=True,
+        enable_bandit=True,
+        enable_gosec=True,
+        enable_eslint=True,
+        semgrep_owasp=True,
+        semgrep_audit=True,
+        semgrep_upload=True,
+        vuln_verifier_parallelism=2,
+        enable_consolidation_verifier=False,
+        enable_partial_scan=False,
+        enable_zero_findings_retry=False,
+        high_risk_paths="",
+        updated_at=datetime.now(UTC),
+        updated_by_email="test@phrase.com",
+    )
+
+    async def _mock_load():
+        return mock_sc
+
+    with patch("security_scanner.pipeline._load_active_scanner_settings", new=_mock_load):
+        with pytest.raises(TokenLimitError):
+            _run(
+                pipeline,
+                repo_url=_REPO,
+                scan_target=ScanTarget.full_repo,
+                triggered_by="alice@phrase.com",
+            )
     claude.analyse.assert_not_called()
 
 

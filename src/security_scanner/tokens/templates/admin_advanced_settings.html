@@ -168,6 +168,39 @@
           </span>
         </label>
       </div>
+
+      <div style="margin-top:1rem;">
+        <label style="display:flex; align-items:flex-start; gap:0.6rem; cursor:pointer;">
+          <input type="checkbox" name="enable_partial_scan" value="on"
+                 {{ 'checked' if sc and sc.enable_partial_scan else 'checked' }}
+                 style="margin-top:0.2rem; flex-shrink:0;">
+          <span>
+            <strong>Partial scan on token limit</strong>
+            <span class="muted" style="font-size:0.84rem; display:block;">
+              When a repository is too large to scan in full (&gt;150&thinsp;000 tokens), scan the
+              highest-risk files that fit &mdash; auth, payments, admin, API routes &mdash; instead of
+              returning zero findings. Skipped files are listed in the scan report.
+              Disable to enforce all-or-nothing behaviour (the previous default).
+            </span>
+          </span>
+        </label>
+      </div>
+
+      <div style="margin-top:1rem;">
+        <label style="display:flex; align-items:flex-start; gap:0.6rem; cursor:pointer;">
+          <input type="checkbox" name="enable_zero_findings_retry" value="on"
+                 {{ 'checked' if sc and sc.enable_zero_findings_retry else 'checked' }}
+                 style="margin-top:0.2rem; flex-shrink:0;">
+          <span>
+            <strong>Retry on empty first pass</strong>
+            <span class="muted" style="font-size:0.84rem; display:block;">
+              When the AI returns no findings on a non-trivial codebase (&gt;500 source lines),
+              run a second analysis pass with an explicit re-examine instruction. Adds one AI
+              call on zero-finding repositories. Disable for cost-constrained environments.
+            </span>
+          </span>
+        </label>
+      </div>
     </fieldset>
 
     {# ── Scanner toggles ── #}

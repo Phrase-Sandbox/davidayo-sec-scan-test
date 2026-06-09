@@ -202,3 +202,40 @@ def test_eslint_detect_buffer_noassert_maps_to_memory_safety() -> None:
 
 def test_eslint_detect_object_injection_maps_to_auth_bypass() -> None:
     assert normalize("eslint", "security/detect-object-injection") == "auth_bypass"
+
+
+# ---------------------------------------------------------------------------
+# V6: taxonomy precision — insecure_network_config, security_misconfiguration,
+#     ldap_injection, nosqli
+# ---------------------------------------------------------------------------
+
+def test_bandit_b104_maps_to_insecure_network_config() -> None:
+    assert normalize("bandit", "B104") == "insecure_network_config"
+
+
+def test_bandit_b201_maps_to_security_misconfiguration() -> None:
+    assert normalize("bandit", "B201") == "security_misconfiguration"
+
+
+def test_gosec_g112_maps_to_security_misconfiguration() -> None:
+    assert normalize("gosec", "G112") == "security_misconfiguration"
+
+
+def test_semgrep_python_ldap_injection_maps_to_ldap_injection() -> None:
+    assert normalize("semgrep", "python-ldap-injection") == "ldap_injection"
+
+
+def test_semgrep_java_ldap_injection_maps_to_ldap_injection() -> None:
+    assert normalize("semgrep", "java-ldap-injection") == "ldap_injection"
+
+
+def test_semgrep_java_ldap_catchall_maps_to_ldap_injection() -> None:
+    assert normalize("semgrep", "java-ldap") == "ldap_injection"
+
+
+def test_semgrep_python_pymongo_nosql_injection_maps_to_nosqli() -> None:
+    assert normalize("semgrep", "python-pymongo-nosql-injection") == "nosqli"
+
+
+def test_semgrep_js_mongoose_nosql_injection_maps_to_nosqli() -> None:
+    assert normalize("semgrep", "js-mongoose-nosql-injection") == "nosqli"

@@ -367,19 +367,24 @@ def test_claude_timeout_sets_partial_scan_and_lists_unscanned_files():
 # --- Token limit (BR-005) --------------------------------------------------
 
 
-def test_token_limit_exceeded_raises_token_limit_error():
+def test_token_limit_exceeded_returns_advisory_partial_result():
+    """V7: when partial scan is enabled (default), a file exceeding the token budget
+    produces an advisory result with partial_scan=True rather than raising."""
     # 600,001 chars → 150,000.25 tokens → strictly exceeds the 150,000 threshold.
+    # Single file larger than the entire budget → kept={}, all skipped → advisory.
     big = {"src/big.py": "x" * 600_001}
     github = _gh(big)
     claude = _claude()
 
-    with pytest.raises(TokenLimitError):
-        _run(
-            ScanPipeline(github, claude, mode=ScanType.deployment_gate),
-            repo_url=_REPO,
-            scan_target=ScanTarget.full_repo,
-            triggered_by="alice@phrase.com",
-        )
+    result = _run(
+        ScanPipeline(github, claude, mode=ScanType.deployment_gate),
+        repo_url=_REPO,
+        scan_target=ScanTarget.full_repo,
+        triggered_by="alice@phrase.com",
+    )
+    assert result.gate_decision == GateDecision.advisory
+    assert result.partial_scan is True
+    assert "src/big.py" in result.unscanned_files
     claude.analyse_async_chunked.assert_not_called()
 
 

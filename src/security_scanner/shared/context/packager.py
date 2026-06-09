@@ -134,7 +134,11 @@ class ContextPackager:
         files: dict[str, str],
     ) -> ContextBundle:
         file_content = files.get(candidate.file, "")
-        snippet = self._extract_snippet(file_content, candidate.line_start, candidate.line_end)
+        scanner_only = "claude" not in candidate.sources
+        snippet = self._extract_snippet(
+            file_content, candidate.line_start, candidate.line_end,
+            scanner_only=scanner_only,
+        )
 
         routes = self._extract_routes(candidate.file, file_content, files)
         middleware = self._extract_middleware(candidate.file, file_content, files)
@@ -182,16 +186,26 @@ class ContextPackager:
             upload_context=upload_ctx,
         )
 
-    def _extract_snippet(self, content: str, line_start: int, line_end: int | None) -> str:
+    def _extract_snippet(
+        self,
+        content: str,
+        line_start: int,
+        line_end: int | None,
+        scanner_only: bool = False,
+    ) -> str:
         if not content:
             return ""
         lines = content.splitlines()
         if line_start:
-            # ±8 lines: wide enough to absorb small line-number errors from the
-            # first-pass LLM (off-by-one to off-by-5 is common when multiple
-            # files are in the same chunk), yet still ≤ _MAX_SNIPPET_LINES (30).
-            lo = max(0, line_start - 8)
-            hi = min(len(lines), (line_end or line_start) + 8)
+            # Scanner-only candidates have no exploit_scenario or description from
+            # Claude, so the verifier needs a wider code window to assess the finding.
+            # ±14 lines (up to the 30-line cap) gives the verifier enough context to
+            # trace a basic taint flow or identify a misconfigured call.
+            # Matched/Claude candidates keep ±8 lines — Claude's narrative already
+            # provides context and a wider window wastes the 80-line bundle budget.
+            expansion = 14 if scanner_only else 8
+            lo = max(0, line_start - expansion)
+            hi = min(len(lines), (line_end or line_start) + expansion)
         else:
             lo, hi = 0, min(len(lines), _MAX_SNIPPET_LINES)
         snippet_lines = lines[lo:hi]

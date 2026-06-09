@@ -32,6 +32,12 @@ _UPLOAD_CLASSES: frozenset[str] = frozenset({"unsafe_file_upload"})
 # Vulnerability classes that trigger the weak-crypto rubric.
 _WEAK_CRYPTO_CLASSES: frozenset[str] = frozenset({"weak_crypto", "weak_hash", "insecure_hash"})
 
+# Vulnerability classes that trigger the LDAP injection rubric.
+_LDAP_CLASSES: frozenset[str] = frozenset({"ldap_injection"})
+
+# Vulnerability classes that trigger the NoSQL injection rubric.
+_NOSQL_CLASSES: frozenset[str] = frozenset({"nosqli"})
+
 
 def build_authz_verifier_rubric() -> str:
     """Return the authz/IDOR-specific rubric appended to the verifier prompt.
@@ -151,6 +157,74 @@ elsewhere), a weak algorithm makes credential recovery trivial. Use the rubric b
 """
 
 
+def build_ldap_verifier_rubric() -> str:
+    """Return the LDAP-injection-specific rubric appended to the verifier prompt."""
+    return """\
+
+## LDAP injection analysis rubric
+
+This candidate may involve injection into an LDAP directory query (CWE-90).
+Apply the following additional steps before issuing a verdict:
+
+1. Look for user-controlled input reaching an LDAP filter string without escaping.
+   Dangerous calls include: ldap.search(), ldap3.Connection.search(),
+   javax.naming.DirContext.search(), or any LDAP filter built by concatenating
+   or formatting user input — e.g. f"(&(uid={user_input})(password=...))"
+
+2. A concrete LDAP injection payload exploits the LDAP filter grammar (RFC 4515).
+   For example, injecting `*)(uid=*))(|(uid=*` into a filter like
+   `(&(uid=INPUT)(password=...))` collapses it to `(&(uid=*))` allowing any user.
+   Confirm the input reaches the filter without ldap.filter.escape_filter_chars()
+   (python-ldap), ldap3's built-in escaping, or equivalent encoding.
+
+3. Do NOT apply SQL injection criteria — there are no SQL keywords or WHERE clauses.
+   LDAP injection exploits the filter operator grammar (`(`, `)`, `*`, `\\`, `\\0`),
+   not SQL syntax. SQL parameterisation does NOT neutralise LDAP injection.
+
+4. Answer `real` if untrusted input reaches an LDAP search filter without
+   protocol-specific LDAP character escaping.
+
+5. Answer `false_positive` only if the input is passed through
+   ldap.filter.escape_filter_chars(), ldap3's escape mechanism, or equivalent
+   encoding before being embedded in the filter string.
+"""
+
+
+def build_nosql_verifier_rubric() -> str:
+    """Return the NoSQL-injection-specific rubric appended to the verifier prompt."""
+    return """\
+
+## NoSQL injection analysis rubric
+
+This candidate may involve injection into a NoSQL document store query (CWE-943),
+such as MongoDB, PyMongo, or Mongoose.
+Apply the following additional steps before issuing a verdict:
+
+1. Look for user-controlled input used directly in a MongoDB query document.
+   Dangerous patterns include:
+   - collection.find({key: userInput}) where userInput can be an object
+   - $where: expression strings built from user input
+   - User-controlled objects merged or spread into a query filter
+
+2. The attack exploits MongoDB query operator grammar — NOT SQL syntax.
+   A payload of `{"$ne": null}` or `{"$gt": ""}` bypasses an equality check.
+   Injecting `{"$where": "sleep(5000)"}` causes a time-based DoS or blind injection.
+   Do NOT look for SQL keywords, WHERE clauses, or SQL-style quoting.
+
+3. Do NOT apply SQL injection criteria (SQL keywords, parameterised queries, cursor
+   safety). Mongo's `$` operators are the attack surface. A parameterised SQL query
+   is irrelevant here — MongoDB has no equivalent parameterisation by default.
+
+4. Answer `real` if untrusted input reaches a MongoDB query document without
+   validation that rejects non-scalar values (i.e. objects/arrays from user input)
+   or sanitisation that strips MongoDB operator keys (keys starting with `$`).
+
+5. Answer `false_positive` only if the input is provably scalar (explicitly cast
+   to str/int before use), or if the code uses a safe ODM query builder that
+   does not accept raw operator objects from untrusted input.
+"""
+
+
 def build_vuln_verifier_system_prompt(*, vuln_class: str | None = None) -> str:
     """Return the system prompt for the production-mode binary vuln verifier.
 
@@ -238,6 +312,8 @@ No JSON, no markdown, no preamble. Only the verdict blocks.
     # auth_bypass / idor → authz rubric only
     # unsafe_file_upload → upload rubric only
     # weak_crypto / weak_hash / insecure_hash → weak-crypto rubric only
+    # ldap_injection → LDAP rubric only
+    # nosqli → NoSQL rubric only
     # other → no rubric appended
     if vuln_class:
         norm = vuln_class.lower()
@@ -247,4 +323,8 @@ No JSON, no markdown, no preamble. Only the verdict blocks.
             base_prompt += build_upload_verifier_rubric()
         elif norm in _WEAK_CRYPTO_CLASSES:
             base_prompt += build_weak_crypto_verifier_rubric()
+        elif norm in _LDAP_CLASSES:
+            base_prompt += build_ldap_verifier_rubric()
+        elif norm in _NOSQL_CLASSES:
+            base_prompt += build_nosql_verifier_rubric()
     return base_prompt

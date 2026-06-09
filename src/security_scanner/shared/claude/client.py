@@ -182,8 +182,18 @@ class ClaudeClient:
 
     # --- Public API ---------------------------------------------------------
 
-    def analyse(self, files: dict[str, str]) -> list[dict]:
+    def analyse(
+        self,
+        files: dict[str, str],
+        extra_instruction: str = "",
+    ) -> list[dict]:
         """Send the wrapped files to Claude and return the parsed findings list.
+
+        Parameters
+        ----------
+        extra_instruction:
+            Optional instruction appended to the system prompt for this call
+            only.  Used by the zero-findings retry to ask Claude to look harder.
 
         Raises
         ------
@@ -195,6 +205,8 @@ class ClaudeClient:
             Response body was not parseable as the expected JSON shape.
         """
         system_prompt = build_system_prompt()
+        if extra_instruction:
+            system_prompt = system_prompt + "\n\n" + extra_instruction
         user_message = build_user_message(files)
         message = self._call_with_retry(system_prompt, user_message)
         return _parse_findings(self._extract_text(message))
@@ -211,18 +223,23 @@ class ClaudeClient:
 
     # --- Async wrappers (thin asyncio.to_thread delegates) ------------------
 
-    async def analyse_async(self, files: dict[str, str]) -> list[dict]:
+    async def analyse_async(
+        self,
+        files: dict[str, str],
+        extra_instruction: str = "",
+    ) -> list[dict]:
         """Async wrapper around ``analyse`` for use in an event loop.
 
         Runs the blocking Anthropic SDK call in a thread-pool worker so the
         event loop is not blocked while waiting for the API response.
         """
-        return await asyncio.to_thread(self.analyse, files)
+        return await asyncio.to_thread(self.analyse, files, extra_instruction)
 
     async def analyse_async_chunked(
         self,
         files: dict[str, str],
         chunk_size: int = CLAUDE_CHUNK_SIZE,
+        extra_instruction: str = "",
     ) -> tuple[list[dict], list[str]]:
         """Split ``files`` into chunks and run ``analyse_async`` on each in parallel.
 
@@ -247,7 +264,7 @@ class ClaudeClient:
         # recover instead of dropping the whole scan.
         if len(files) <= effective_chunk_size:
             try:
-                findings = await self._analyse_with_halving_retry(files)
+                findings = await self._analyse_with_halving_retry(files, extra_instruction)
             except ClaudeResponseError as exc:
                 log.warning(
                     "claude single-chunk parse error after halve-retry — files marked partial",
@@ -271,7 +288,9 @@ class ClaudeClient:
         )
 
         tasks = [
-            asyncio.create_task(self._analyse_with_halving_retry(chunk))
+            asyncio.create_task(
+                self._analyse_with_halving_retry(chunk, extra_instruction)
+            )
             for chunk in chunks
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -316,7 +335,9 @@ class ClaudeClient:
         return await asyncio.to_thread(self.ask, system, user)
 
     async def _analyse_with_halving_retry(
-        self, chunk: dict[str, str]
+        self,
+        chunk: dict[str, str],
+        extra_instruction: str = "",
     ) -> list[dict]:
         """Run ``analyse_async`` on ``chunk``; on parse error, halve and retry once.
 
@@ -326,7 +347,7 @@ class ClaudeClient:
         other half rather than dropping the whole chunk.
         """
         try:
-            return await self.analyse_async(chunk)
+            return await self.analyse_async(chunk, extra_instruction)
         except ClaudeResponseError as exc:
             if len(chunk) <= 1:
                 # Can't halve further — propagate so the chunked loop can
@@ -344,8 +365,8 @@ class ClaudeClient:
                 reason=str(exc),
             )
             results = await asyncio.gather(
-                self.analyse_async(left),
-                self.analyse_async(right),
+                self.analyse_async(left, extra_instruction),
+                self.analyse_async(right, extra_instruction),
                 return_exceptions=True,
             )
             findings: list[dict] = []

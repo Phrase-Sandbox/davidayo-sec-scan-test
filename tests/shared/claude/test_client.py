@@ -333,7 +333,7 @@ def test_chunked_25_files_produces_3_calls_with_correct_chunk_sizes():
 
     call_args_list = []
 
-    async def fake_analyse_async(chunk):
+    async def fake_analyse_async(chunk, extra_instruction=""):
         call_args_list.append(list(chunk.keys()))
         # Return one finding per file to make concatenation easy to verify.
         return [{"vulnerability_id": f"F{k}", "file": k} for k in chunk]
@@ -371,7 +371,7 @@ def test_chunked_one_timeout_does_not_fail_other_chunks():
 
     call_count = [0]
 
-    async def fake_analyse_async(chunk):
+    async def fake_analyse_async(chunk, extra_instruction=""):
         call_count[0] += 1
         if call_count[0] == 2:
             raise ClaudeTimeoutError("timeout on chunk 2")
@@ -400,7 +400,7 @@ def test_chunked_single_chunk_fast_path_calls_analyse_async_once():
 
     call_count = [0]
 
-    async def fake_analyse_async(chunk):
+    async def fake_analyse_async(chunk, extra_instruction=""):
         call_count[0] += 1
         return []
 
@@ -430,7 +430,7 @@ def test_chunked_parse_error_triggers_halve_retry_recovers_findings():
     files = {f"f{i}.py": f"x = {i}" for i in range(8)}  # single chunk
     call_log: list[tuple[str, ...]] = []
 
-    async def fake_analyse_async(chunk):
+    async def fake_analyse_async(chunk, extra_instruction=""):
         keys = tuple(sorted(chunk.keys()))
         call_log.append(keys)
         if len(chunk) == 8:
@@ -462,7 +462,7 @@ def test_chunked_parse_error_both_halves_fail_marks_chunk_partial():
     """
     files = {f"f{i}.py": f"x = {i}" for i in range(10)}  # 2 chunks of 5
 
-    async def fake_analyse_async(chunk):
+    async def fake_analyse_async(chunk, extra_instruction=""):
         # First chunk (f0..f4) always fails, even halved.
         first_chunk_files = {f"f{i}.py" for i in range(5)}
         if set(chunk.keys()) <= first_chunk_files:

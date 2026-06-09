@@ -197,3 +197,38 @@ def test_a03_xss_and_sqli_scanner_candidates_do_not_cross_merge() -> None:
     assert len(result) == 2
     merged = next(c for c in result if "claude" in c.sources)
     assert merged.vuln_class == "xss"
+
+
+# ---------------------------------------------------------------------------
+# V7: overlap tolerance — _OVERLAP_TOLERANCE = 5
+# ---------------------------------------------------------------------------
+
+def test_merge_tolerance_3_lines_apart_merges() -> None:
+    """LLM at line 10, scanner at line 13 — within ±5 tolerance, should merge."""
+    llm = [_llm_finding(lines="10")]
+    cand = _agg_candidate(ls=13, le=13)
+    result = merge_with_llm_findings(llm, [cand])
+    assert len(result) == 1
+    assert "claude" in result[0].sources
+    assert any(s != "claude" for s in result[0].sources)
+
+
+def test_merge_tolerance_5_lines_apart_merges() -> None:
+    """LLM at line 10, scanner at line 15 — exactly at ±5 tolerance boundary."""
+    llm = [_llm_finding(lines="10")]
+    cand = _agg_candidate(ls=15, le=15)
+    result = merge_with_llm_findings(llm, [cand])
+    assert len(result) == 1
+    assert "claude" in result[0].sources
+
+
+def test_merge_tolerance_6_lines_apart_does_not_merge() -> None:
+    """LLM at line 10, scanner at line 16 — just outside tolerance, must not merge."""
+    llm = [_llm_finding(lines="10")]
+    cand = _agg_candidate(ls=16, le=16)
+    result = merge_with_llm_findings(llm, [cand])
+    assert len(result) == 2
+    claude_only = next(c for c in result if c.sources == ["claude"])
+    scanner_only = next(c for c in result if "claude" not in c.sources)
+    assert claude_only is not None
+    assert scanner_only is not None

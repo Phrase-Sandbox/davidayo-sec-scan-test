@@ -282,6 +282,16 @@ class ScannerSettings(Base):
     enable_consolidation_verifier: Mapped[bool] = mapped_column(
         Boolean(), nullable=False, server_default="false"
     )
+    # Partial scan — scan the highest-risk files that fit the token budget instead of
+    # returning zero findings when a repo exceeds 150 000 tokens.
+    enable_partial_scan: Mapped[bool] = mapped_column(
+        Boolean(), nullable=False, server_default="true"
+    )
+    # Zero-findings retry — re-run first-pass LLM with an explicit re-examine instruction
+    # when Claude returns no findings on a non-trivial codebase (>500 source lines).
+    enable_zero_findings_retry: Mapped[bool] = mapped_column(
+        Boolean(), nullable=False, server_default="true"
+    )
     # High-risk path prefixes — newline-separated; empty = use built-in YAML list
     high_risk_paths: Mapped[str] = mapped_column(Text(), nullable=False, server_default="")
     # Audit trail

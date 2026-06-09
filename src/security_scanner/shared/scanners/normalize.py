@@ -12,7 +12,7 @@ weak_crypto, xxe, csrf, open_redirect, auth_bypass, code_injection,
 insecure_random, unsafe_yaml, unsafe_file_upload, injection_generic,
 redos, runtime_panic, subprocess_usage, insecure_network_config, poor_error_handling,
 info_disclosure, insecure_design, security_misconfiguration, vulnerable_components,
-logging_monitoring_failure, memory_safety
+logging_monitoring_failure, memory_safety, ldap_injection, nosqli
 
 ``injection_generic`` is the fallback for OWASP A03:2021 ("Injection") when
 description-based inference in merge.py cannot identify the specific subtype.
@@ -50,6 +50,12 @@ that could allow attacks to go undetected.
 
 ``memory_safety`` covers Node.js buffer misuse and similar memory-padding / uninitialized
 memory issues that are distinct from code injection.
+
+``ldap_injection`` covers injection into LDAP directory queries (e.g. LDAP filter injection,
+CWE-90) — distinct from SQL injection; targets directory services, not relational databases.
+
+``nosqli`` covers injection into NoSQL document store queries (e.g. MongoDB operator
+injection via $where/$ne, CWE-943) — targets document stores, not SQL databases.
 """
 
 from __future__ import annotations
@@ -61,14 +67,14 @@ _BANDIT_MAP: dict[str, str] = {
     "B101": "code_injection",       # assert_used (not really a vuln_class but closest)
     "B102": "code_injection",       # exec_used
     "B103": "path_traversal",       # setting_nodev
-    "B104": "ssrf",                 # hardcoded_bind_all_interfaces
+    "B104": "insecure_network_config",  # hardcoded_bind_all_interfaces — 0.0.0.0 exposure, not SSRF
     "B105": "auth_bypass",          # hardcoded_password_string
     "B106": "auth_bypass",          # hardcoded_password_funcarg
     "B107": "auth_bypass",          # hardcoded_password_default
     "B108": "path_traversal",       # hardcoded_tmp_directory
     "B110": "auth_bypass",          # try_except_pass
     "B112": "auth_bypass",          # try_except_continue
-    "B201": "code_injection",       # flask_debug_true
+    "B201": "security_misconfiguration",  # flask_debug_true — Werkzeug debugger exposure, not code injection
     "B301": "deserialization",      # pickle
     "B302": "deserialization",      # marshal
     "B303": "weak_crypto",          # md5
@@ -143,7 +149,7 @@ _GOSEC_MAP: dict[str, str] = {
     "G109": "code_injection",       # Potential Integer overflow
     "G110": "path_traversal",       # potential DoS (zip slip)
     "G111": "path_traversal",       # file path provided as taint
-    "G112": "path_traversal",       # ReadHeaderTimeout not configured
+    "G112": "security_misconfiguration",  # ReadHeaderTimeout not configured — slowloris DoS, not traversal
     "G113": "weak_crypto",          # Rat math/big
     "G114": "weak_crypto",          # deprecated ioutil
     "G201": "sqli",                 # SQL query construction using format string
@@ -278,11 +284,11 @@ _SEMGREP_MAP: dict[str, str] = {
     "python-flask-header-injection": "xss",
     "js-express-header-injection": "xss",
     "js-express-setHeader-injection": "xss",
-    # injection.yaml — NoSQL injection
-    "python-pymongo-nosql-injection": "sqli",
-    "js-mongoose-nosql-injection": "sqli",
-    # injection.yaml — LDAP injection
-    "python-ldap-injection": "sqli",
+    # injection.yaml — NoSQL injection (MongoDB document store — not SQL)
+    "python-pymongo-nosql-injection": "nosqli",
+    "js-mongoose-nosql-injection": "nosqli",
+    # injection.yaml — LDAP injection (directory queries — not SQL)
+    "python-ldap-injection": "ldap_injection",
     # injection.yaml — format_map injection
     "python-format-map-injection": "code_injection",
     # auth.yaml — JWT weaknesses
@@ -358,7 +364,7 @@ _SEMGREP_MAP: dict[str, str] = {
     "java-ssrf-url-read": "ssrf",
     "java-open-redirect": "open_redirect",
     "java-xss-printwriter": "xss",
-    "java-ldap-injection": "sqli",
+    "java-ldap-injection": "ldap_injection",
     "java-el-injection": "code_injection",
     # java.yaml — weak crypto
     "java-weak-crypto-md5": "weak_crypto",
@@ -386,7 +392,7 @@ _SEMGREP_MAP: dict[str, str] = {
     "java-ssrf": "ssrf",
     "java-open-redirect": "open_redirect",
     "java-xss": "xss",
-    "java-ldap": "sqli",
+    "java-ldap": "ldap_injection",
     "java-el": "code_injection",
     "java-weak": "weak_crypto",
     # upload-security.yaml rule IDs

@@ -110,20 +110,23 @@ def test_rule_2_drops_lockfile_or_vendored_path(path):
     assert filter_findings([finding]) == []
 
 
-# --- Rule 3: low confidence ------------------------------------------------
+# --- Confidence: all levels survive post-filter (verifier handles routing) ---
 
 
-def test_rule_3_drops_low_confidence_finding_in_source_path():
+def test_low_confidence_finding_in_source_path_survives():
+    """Low-confidence findings are no longer dropped here — the verifier's
+    ADVISORY_CONFIDENCES setting routes them to non-blocking advisory status,
+    mirroring scanner-only findings which are always promoted to Medium."""
     finding = _finding("src/app.py", confidence=Confidence.Low)
-    assert filter_findings([finding]) == []
+    assert filter_findings([finding]) == [finding]
 
 
-def test_rule_3_keeps_medium_confidence_finding():
+def test_medium_confidence_finding_survives():
     finding = _finding("src/app.py", confidence=Confidence.Medium)
     assert filter_findings([finding]) == [finding]
 
 
-def test_rule_3_keeps_high_confidence_finding():
+def test_high_confidence_finding_survives():
     finding = _finding("src/app.py", confidence=Confidence.High)
     assert filter_findings([finding]) == [finding]
 
@@ -148,12 +151,12 @@ def test_high_confidence_finding_in_source_path_is_kept():
 def test_mixed_input_correctly_partitioned():
     keep_1 = _finding("src/app.py", confidence=Confidence.High)
     keep_2 = _finding("src/handlers/login.py", confidence=Confidence.Medium)
+    keep_low = _finding("src/x.py", confidence=Confidence.Low)
     drop_test = _finding("tests/test_app.py", confidence=Confidence.High)
     drop_lock = _finding("yarn.lock")
-    drop_low = _finding("src/x.py", confidence=Confidence.Low)
 
-    survivors = filter_findings([keep_1, keep_2, drop_test, drop_lock, drop_low])
-    assert survivors == [keep_1, keep_2]
+    survivors = filter_findings([keep_1, keep_2, drop_test, drop_lock, keep_low])
+    assert survivors == [keep_1, keep_2, keep_low]
 
 
 def test_input_list_is_not_mutated():
