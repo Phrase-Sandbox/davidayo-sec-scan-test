@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects.postgresql import ENUM as PgEnum
 
 revision = "0007"
 down_revision = "0006"
@@ -27,7 +28,7 @@ def upgrade() -> None:
         sa.Column("scan_target", sa.String(64), nullable=True),
         sa.Column(
             "status",
-            sa.Enum("ok", "failed", name="scan_status", create_type=False),
+            PgEnum("ok", "failed", name="scan_status", create_type=False),
             nullable=False,
             server_default="ok",
         ),
