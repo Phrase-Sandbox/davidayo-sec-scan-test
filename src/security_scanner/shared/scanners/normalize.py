@@ -9,11 +9,18 @@ Taxonomy members
 ----------------
 sqli, xss, command_injection, path_traversal, ssrf, deserialization,
 weak_crypto, xxe, csrf, open_redirect, auth_bypass, code_injection,
-insecure_random, unsafe_yaml, unsafe_file_upload, injection_generic
+insecure_random, unsafe_yaml, unsafe_file_upload, injection_generic,
+redos, runtime_panic
 
 ``injection_generic`` is the fallback for OWASP A03:2021 ("Injection") when
 description-based inference in merge.py cannot identify the specific subtype.
 It is purely internal — the OWASP ID (A03:2021) is preserved in the report.
+
+``redos`` covers regex denial-of-service (catastrophic backtracking) — a DoS
+risk distinct from code injection. No special verifier rubric; generic prompt applies.
+
+``runtime_panic`` covers Go runtime panic / DoS issues (e.g. out-of-bounds slice
+access, memory aliasing) that are distinct from injection or traversal vulnerabilities.
 """
 
 from __future__ import annotations
@@ -133,8 +140,8 @@ _GOSEC_MAP: dict[str, str] = {
     "G503": "weak_crypto",          # Import blocklist: crypto/rc4
     "G504": "deserialization",      # Import blocklist: net/http/cgi
     "G505": "weak_crypto",          # Import blocklist: crypto/sha1
-    "G601": "path_traversal",       # Implicit memory aliasing in for loop
-    "G602": "code_injection",       # Slice access can cause a panic
+    "G601": "runtime_panic",         # Implicit memory aliasing in for loop
+    "G602": "runtime_panic",         # Slice access can cause a panic
 }
 
 # ---------------------------------------------------------------------------
@@ -172,7 +179,7 @@ _SEMGREP_MAP: dict[str, str] = {
     "python-yaml-load-unsafe": "unsafe_yaml",     # yaml.load() unsafe Loader (CWE-502)
     "python-tempfile-insecure": "path_traversal", # TOCTOU tempfile race (CWE-377)
     # Security-audit vendored rules — JavaScript/TypeScript
-    "js-localstorage-sensitive": "weak_crypto",   # sensitive tokens in localStorage (CWE-922, OWASP A02)
+    "js-localstorage-sensitive": "auth_bypass",    # sensitive tokens in localStorage — XSS steals token → auth bypass (CWE-922, OWASP A01)
     # Generic semgrep community IDs (r2c / p/owasp-top-ten etc.)
     "sql-injection": "sqli",
     "xss": "xss",
@@ -214,7 +221,7 @@ _SEMGREP_MAP: dict[str, str] = {
 # ---------------------------------------------------------------------------
 _ESLINT_MAP: dict[str, str] = {
     "security/detect-sql-literal-injection": "sqli",
-    "security/detect-non-literal-regexp": "code_injection",
+    "security/detect-non-literal-regexp": "redos",
     "security/detect-non-literal-fs-filename": "path_traversal",
     "security/detect-non-literal-require": "code_injection",
     "security/detect-eval-with-expression": "code_injection",
@@ -222,7 +229,7 @@ _ESLINT_MAP: dict[str, str] = {
     "security/detect-no-csrf-before-method-override": "csrf",
     "security/detect-possible-timing-attacks": "auth_bypass",
     "security/detect-pseudoRandomBytes": "insecure_random",
-    "security/detect-unsafe-regex": "code_injection",
+    "security/detect-unsafe-regex": "redos",
     "security/detect-buffer-noassert": "code_injection",
     "security/detect-child-process": "command_injection",
     "security/detect-disable-mustache-escape": "xss",

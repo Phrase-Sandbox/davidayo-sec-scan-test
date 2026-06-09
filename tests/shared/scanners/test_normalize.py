@@ -123,3 +123,27 @@ def test_semgrep_sqli_percent_format_assign_maps_to_sqli() -> None:
 
 def test_semgrep_sqli_format_method_maps_to_sqli() -> None:
     assert normalize("semgrep", "python-sqli-format-method") == "sqli"
+
+
+# ---------------------------------------------------------------------------
+# V4: taxonomy precision — redos, runtime_panic, auth_bypass for localStorage
+# ---------------------------------------------------------------------------
+
+def test_semgrep_localstorage_sensitive_maps_to_auth_bypass() -> None:
+    assert normalize("semgrep", "js-localstorage-sensitive") == "auth_bypass"
+
+
+def test_eslint_non_literal_regexp_maps_to_redos() -> None:
+    assert normalize("eslint", "security/detect-non-literal-regexp") == "redos"
+
+
+def test_eslint_unsafe_regex_maps_to_redos() -> None:
+    assert normalize("eslint", "security/detect-unsafe-regex") == "redos"
+
+
+def test_gosec_g601_maps_to_runtime_panic() -> None:
+    assert normalize("gosec", "G601") == "runtime_panic"
+
+
+def test_gosec_g602_maps_to_runtime_panic() -> None:
+    assert normalize("gosec", "G602") == "runtime_panic"
