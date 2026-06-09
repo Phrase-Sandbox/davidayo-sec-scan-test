@@ -24,3 +24,4 @@ jobs:
           dockerfile-path: Dockerfile
           build-context: .
           additional-tags: "commit-${{ github.sha }}"
+          build-args: '["BASE_IMAGE_PREFIX=333070415076.dkr.ecr.eu-west-1.amazonaws.com/image/mirror/docker-hub/library/"]'

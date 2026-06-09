@@ -18,6 +18,7 @@ The original secret value is never logged.
 
 from __future__ import annotations
 
+import contextlib
 import math
 import re
 from dataclasses import dataclass
@@ -135,16 +136,30 @@ def strip(files: dict[str, str]) -> SecretStripResult:
     ``[secret stripped from file: <filename>]`` — the original secret value is
     **never** logged.
     """
+    # Initialise detect-secrets settings once for the entire batch.
+    # Calling default_settings() per file (500× on a large repo) costs ~22 ms
+    # each and breaks the §10 NFR.  A single context here satisfies BR-003
+    # while keeping strip() well under 10 s for 500-file repos.
+    try:
+        from detect_secrets.settings import default_settings
+
+        _ctx: contextlib.AbstractContextManager = default_settings()
+        _ds_ready = True
+    except ImportError:
+        _ctx = contextlib.nullcontext()
+        _ds_ready = False
+
     cleaned: dict[str, str] = {}
     affected: list[str] = []
     all_hits: list[SecretHit] = []
-    for filename, content in files.items():
-        new_content, file_hits = _strip_one(content, filename)
-        cleaned[filename] = new_content
-        if file_hits:
-            affected.append(filename)
-            all_hits.extend(file_hits)
-            log.info(f"[secret stripped from file: {filename}]", filename=filename)
+    with _ctx:
+        for filename, content in files.items():
+            new_content, file_hits = _strip_one(content, filename, _ds_initialized=_ds_ready)
+            cleaned[filename] = new_content
+            if file_hits:
+                affected.append(filename)
+                all_hits.extend(file_hits)
+                log.info(f"[secret stripped from file: {filename}]", filename=filename)
     return SecretStripResult(
         cleaned_files=cleaned,
         secrets_found=bool(affected),
@@ -167,12 +182,14 @@ def _credential_shaped(value: str) -> bool:
     return has_lower and has_digit
 
 
-def _strip_one(content: str, filename: str) -> tuple[str, list[SecretHit]]:
+def _strip_one(
+    content: str, filename: str, _ds_initialized: bool = False
+) -> tuple[str, list[SecretHit]]:
     """Return ``(cleaned_content, hits)`` for a single file body."""
     original = content
     # detect-secrets is the expensive layer; run it once on the original and
     # reuse the result for both location tracking and redaction.
-    ds_values = _detect_secrets_values(original)
+    ds_values = _detect_secrets_values(original, _initialized=_ds_initialized)
     # In code files, restrict detect-secrets matches to credential-shaped
     # values. Config files keep the permissive behavior — any high-entropy
     # value in `.env` / `.yaml` / `.ini` is meaningful.
@@ -411,7 +428,7 @@ def _shannon_entropy(s: str) -> float:
     return -sum((c / n) * math.log2(c / n) for c in counts.values())
 
 
-def _detect_secrets_values(content: str) -> list[str]:
+def _detect_secrets_values(content: str, _initialized: bool = False) -> list[str]:
     """Return secret string values found by detect-secrets; swallow library errors.
 
     detect-secrets is **supplementary** — the regex layer above is the
@@ -424,6 +441,10 @@ def _detect_secrets_values(content: str) -> list[str]:
     for our own truffleHog-style heuristic: a candidate must be ≥20 chars
     AND have Shannon entropy ≥4.0 bits/char before we redact it. The regex
     layer remains responsible for short structured tokens (e.g. ``AKIA…``).
+
+    ``_initialized=True`` signals that the caller already holds a
+    ``default_settings()`` context, so this function skips re-initialisation
+    (which is ~22 ms per call and untenable for 500-file repos).
     """
     try:
         from detect_secrets.core import scan
@@ -431,9 +452,13 @@ def _detect_secrets_values(content: str) -> list[str]:
     except ImportError:  # pragma: no cover — pinned dep, only triggers in broken installs
         return []
 
+    _ctx: contextlib.AbstractContextManager = (
+        contextlib.nullcontext() if _initialized else default_settings()
+    )
+
     values: list[str] = []
     try:
-        with default_settings():
+        with _ctx:
             for line in content.splitlines():
                 for secret in scan.scan_line(line):
                     value = getattr(secret, "secret_value", None)

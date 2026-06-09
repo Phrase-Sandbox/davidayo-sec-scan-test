@@ -1,7 +1,12 @@
 # syntax=docker/dockerfile:1.7
 
+# BASE_IMAGE_PREFIX lets CI redirect Docker Hub pulls to the internal ECR mirror
+# (e.g. "333070415076.dkr.ecr.eu-west-1.amazonaws.com/image/mirror/docker-hub/library/").
+# Local builds leave it empty and pull from Docker Hub as normal.
+ARG BASE_IMAGE_PREFIX=
+
 # --- Builder stage -------------------------------------------------------------
-FROM python:3.12-slim AS builder
+FROM ${BASE_IMAGE_PREFIX}python:3.12-slim AS builder
 
 WORKDIR /build
 
@@ -24,7 +29,8 @@ RUN python -m venv /opt/venv \
  && /opt/venv/bin/pip install --no-cache-dir ".[providers,scanners]"
 
 # --- Runtime stage -------------------------------------------------------------
-FROM python:3.12-slim AS runtime
+ARG BASE_IMAGE_PREFIX=
+FROM ${BASE_IMAGE_PREFIX}python:3.12-slim AS runtime
 
 # curl is needed for the HEALTHCHECK probe below.
 # nodejs + npm are needed for the ESLint-security scanner adapter.
