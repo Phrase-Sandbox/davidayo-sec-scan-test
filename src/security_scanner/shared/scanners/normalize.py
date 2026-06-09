@@ -12,7 +12,7 @@ weak_crypto, xxe, csrf, open_redirect, auth_bypass, code_injection,
 insecure_random, unsafe_yaml, unsafe_file_upload, injection_generic,
 redos, runtime_panic, subprocess_usage, insecure_network_config, poor_error_handling,
 info_disclosure, insecure_design, security_misconfiguration, vulnerable_components,
-logging_monitoring_failure, memory_safety, ldap_injection, nosqli
+logging_monitoring_failure, memory_safety, ldap_injection, nosqli, hardcoded_secret
 
 ``injection_generic`` is the fallback for OWASP A03:2021 ("Injection") when
 description-based inference in merge.py cannot identify the specific subtype.
@@ -319,6 +319,23 @@ _SEMGREP_MAP: dict[str, str] = {
     "python-django-debug-true": "security_misconfiguration",
     "python-flask-cookie-no-httponly": "auth_bypass",
     "python-flask-cookie-no-secure": "auth_bypass",
+    # secrets.yaml — language-agnostic hardcoded credential rules.
+    # Not mapped to auth_bypass: the auth_bypass fallback template is IDOR-focused;
+    # these need "move to env vars" guidance instead.
+    "python-hardcoded-password-kwarg": "hardcoded_secret",
+    "python-hardcoded-secret-assign": "hardcoded_secret",
+    "python-hardcoded-jwt-secret": "hardcoded_secret",
+    "python-hardcoded-db-url": "hardcoded_secret",
+    "js-hardcoded-secret-assign": "hardcoded_secret",
+    "js-hardcoded-jwt-sign": "hardcoded_secret",
+    "js-hardcoded-aws-key": "hardcoded_secret",
+    "java-hardcoded-password-field": "hardcoded_secret",
+    "java-hardcoded-connection-string": "hardcoded_secret",
+    "java-hardcoded-basic-auth": "hardcoded_secret",
+    "ruby-hardcoded-secret-assign": "hardcoded_secret",
+    "ruby-hardcoded-secret-key-base": "hardcoded_secret",
+    "go-hardcoded-secret-assign": "hardcoded_secret",
+    "go-hardcoded-db-dsn": "hardcoded_secret",
     # php.yaml — SQL injection
     "php-sqli-mysql-concat": "sqli",
     "php-sqli-mysqli-concat": "sqli",

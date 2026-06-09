@@ -244,6 +244,7 @@ def build_sqli_verifier_rubric() -> str:
   - f-strings: `f"SELECT ... WHERE id = {user_id}"`
   - `.format()`: `"SELECT ... WHERE id = {}".format(user_id)`
   - Concatenation: `"SELECT " + user_input`
+  - Async variants: `await cur.execute(f"SELECT ... WHERE id = {user_id}")` — same patterns, same risk
 - Answer `real` even if the execute() call looks safe in isolation — trace the QUERY variable.
   If the query was built unsafely before being passed to execute(), it is still vulnerable.
 - Answer `false_positive` ONLY if:

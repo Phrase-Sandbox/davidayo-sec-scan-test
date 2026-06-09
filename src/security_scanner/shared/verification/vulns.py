@@ -432,6 +432,27 @@ _REMEDIATION_TEMPLATES: dict[str, dict[str, str]] = {
             "bypassing the login check without knowing any credentials."
         ),
     },
+    "hardcoded_secret": {
+        "suggested_fix": (
+            "Never store credentials in source code. Move the value to an environment "
+            "variable or a secrets manager:\n\n"
+            "```\n"
+            "# Before (vulnerable):\n"
+            "db = connect(password='hardcoded_password')\n\n"
+            "# After (safe):\n"
+            "db = connect(password=os.environ['DB_PASSWORD'])\n"
+            "```\n\n"
+            "For Phrase services: store the secret in 1Password "
+            "('Engineering > <service>') and inject via the Launchpad secrets "
+            "pipeline. Never commit credential values to Git, even in private repos."
+        ),
+        "exploit_scenario": (
+            "An attacker with read access to the repository (or its commit history, "
+            "even after deletion) extracts the hardcoded credential and authenticates "
+            "directly to the target service — database, API, or cloud provider — with "
+            "full application-level permissions."
+        ),
+    },
     "unsafe_yaml": {
         "suggested_fix": (
             "Always use `yaml.safe_load()` instead of `yaml.load()`:\n\n"
