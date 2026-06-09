@@ -15,27 +15,24 @@
   }
 
   .meta-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem 0.9rem;
-    font-size: 0.78rem;
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 0.25rem 1rem;
+    font-size: 0.82rem;
   }
-  .meta-chip {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 0.25rem;
-  }
+  .meta-chip { display: contents; }
   .meta-chip-key {
     font-weight: 600;
     color: var(--muted);
     font-size: 0.74rem;
     text-transform: uppercase;
     letter-spacing: 0.04em;
+    white-space: nowrap;
+    padding-top: 0.05em;
   }
   .meta-chip-val {
     color: var(--fg);
-    word-break: break-all;
-    max-width: 280px;
+    word-break: break-word;
   }
 
   .meta-toggle {
