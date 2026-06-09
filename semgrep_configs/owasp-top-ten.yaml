@@ -90,7 +90,7 @@ rules:
       The | safe filter bypasses Jinja2 autoescaping. If $X contains
       user-controlled data this is stored XSS. Remove | safe or sanitize
       the value before rendering.
-    languages: [html]
+    languages: [generic]
     severity: ERROR
     metadata:
       vuln_class: xss
@@ -238,11 +238,11 @@ rules:
       owasp: A03:2021
 
   - id: js-dangerously-set-innerhtml
-    pattern: dangerouslySetInnerHTML={{ __html: $X }}
+    pattern: "dangerouslySetInnerHTML={{ __html: $X }}"
     message: >
       dangerouslySetInnerHTML with user-controlled data enables XSS in React.
       Sanitize the content with DOMPurify before passing it here.
-    languages: [javascript, typescript]
+    languages: [generic]
     severity: ERROR
     metadata:
       vuln_class: xss
