@@ -896,7 +896,9 @@ async def admin_advanced_settings_post(
         enable_partial_scan=bool(enable_partial_scan),
         enable_zero_findings_retry=bool(enable_zero_findings_retry),
         enable_quality_gate=bool(enable_quality_gate),
-        report_retention_days=int(report_retention_days) if report_retention_days.strip().isdigit() else None,
+        report_retention_days=(
+            int(report_retention_days) if report_retention_days.strip().isdigit() else None
+        ),
         high_risk_paths=high_risk_paths.strip(),
         updated_at=now,
         updated_by_email=admin.email,
@@ -1315,7 +1317,9 @@ async def admin_delete_report(
     try:
         scan_uuid = _uuid.UUID(scan_id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid scan ID.") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Invalid scan ID."
+        ) from exc
 
     factory = get_session_factory()
     async with factory() as session:
@@ -1342,7 +1346,7 @@ async def admin_delete_report(
         all_rows = await _fetch_report_rows(session)
 
     log.info("admin reports delete", actor_email=admin.email, scan_id=scan_id, deleted=deleted)
-    flash = f"ok:Record deleted." if deleted else f"error:Record {scan_id} not found."
+    flash = "ok:Record deleted." if deleted else f"error:Record {scan_id} not found."
     return _render_reports(request, admin, all_rows, page=1, flash=flash)
 
 
