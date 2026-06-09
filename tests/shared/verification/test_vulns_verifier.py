@@ -289,6 +289,49 @@ def test_no_bundle_does_not_emit_context_sections() -> None:
     assert "OWNERSHIP CHECKS:" not in block
 
 
+def test_bundle_snippet_used_as_source_code_block() -> None:
+    """bundle.snippet (±8/14 line window from the packager) must appear in SOURCE CODE."""
+    from security_scanner.shared.context.models import ContextBundle
+    from security_scanner.shared.verification.vulns import _build_candidate_block
+
+    packager_snippet = "line1\nline2\nline3\nTHE_VULNERABLE_LINE\nline5\nline6\nline7"
+    bundle = ContextBundle(
+        file="dao/user.py",
+        vuln_class="sqli",
+        snippet=packager_snippet,
+    )
+    # File content has many lines; verifier's old ±4-line extraction would miss packager_snippet.
+    file_content = "\n".join(f"filler_{i}" for i in range(50))
+    candidate = _make_candidate(file="dao/user.py", vuln_class="sqli")
+
+    block = _build_candidate_block(1, candidate, {"dao/user.py": file_content}, bundle=bundle)
+
+    assert "THE_VULNERABLE_LINE" in block, "packager snippet must appear in SOURCE CODE block"
+
+
+def test_bundle_empty_snippet_falls_back_to_direct_extraction() -> None:
+    """When bundle.snippet is empty, fall back to direct ±4-line extraction."""
+    from security_scanner.shared.context.models import ContextBundle
+    from security_scanner.shared.verification.vulns import _build_candidate_block
+
+    bundle = ContextBundle(file="dao/user.py", vuln_class="sqli", snippet="")
+    # 20-line file; default candidate at line_start=10.
+    lines = [f"line_{i}" for i in range(1, 21)]
+    file_content = "\n".join(lines)
+    # _make_candidate defaults to line_start=10 (1-indexed).
+    candidate = _make_candidate(file="dao/user.py", vuln_class="sqli")
+
+    block = _build_candidate_block(1, candidate, {"dao/user.py": file_content}, bundle=bundle)
+
+    # lo = max(0, 10-4) = 6 → lines[6] = "line_7"
+    # hi = min(20, 10+4) = 14 → lines[6:14] ends at lines[13] = "line_14"
+    assert "line_10" in block    # target line present
+    assert "line_7" in block     # lo boundary (lines[6])
+    assert "line_14" in block    # hi boundary (lines[13])
+    assert "line_6" not in block   # outside window
+    assert "line_15" not in block  # outside window
+
+
 def test_parallelism_param_is_respected() -> None:
     """verify_vuln_candidates with parallelism=1 completes without error."""
     mock_client = MagicMock()

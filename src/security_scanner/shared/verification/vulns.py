@@ -250,8 +250,12 @@ def _build_candidate_block(
 ) -> str:
     """Render one CANDIDATE #N block for the verifier user message."""
     file_content = files.get(candidate.file, "")
-    # Extract a focused snippet around the affected lines.
-    if candidate.line_start and file_content:
+    # Prefer the packager's context-aware snippet (±8 for Claude-sourced findings,
+    # ±14 for scanner-only candidates).  Fall back to a direct ±4-line extraction
+    # when no bundle is available or the packager returned an empty snippet.
+    if bundle is not None and bundle.snippet:
+        snippet = bundle.snippet
+    elif candidate.line_start and file_content:
         lines = file_content.splitlines()
         lo = max(0, candidate.line_start - 4)
         hi = min(len(lines), (candidate.line_end or candidate.line_start) + 4)

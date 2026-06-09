@@ -189,6 +189,11 @@ _SEMGREP_MAP: dict[str, str] = {
     "python-sqli-concat": "sqli",
     "python-sqli-percent-format-assign": "sqli",
     "python-sqli-format-method": "sqli",
+    # Async variants (taint-mode + pattern rules in owasp-top-ten.yaml)
+    "python-async-sqli-fstring": "sqli",
+    "python-async-sqli-concat": "sqli",
+    "python-async-sqli-percent-format-assign": "sqli",
+    "python-async-sqli-format-method": "sqli",
     "python-jinja2-autoescape-false": "xss",
     "jinja2-safe-filter": "xss",
     "python-eval-input": "code_injection",

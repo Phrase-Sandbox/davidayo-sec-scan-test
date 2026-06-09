@@ -106,6 +106,18 @@ Each <finding> object MUST contain:
 
   When a finding spans more than one category, pick the most specific entry
   (e.g. CSRF -> A01:2021, not A05:2021). Do not invent IDs outside this table.
+
+Python injection patterns: check EVERY database-access function for string
+formatting used to build queries — `cursor.execute("...%s" % val)`,
+`cursor.execute(f"...{val}")`, `cursor.execute("...{}".format(val))`. If
+four DAO/model files each contain one such call, emit four separate findings.
+
+CSRF: For Python web apps (Flask, Django, FastAPI), check whether a CSRF
+protection library is present anywhere in the codebase (`CSRFProtect(app)`,
+`CsrfViewMiddleware`, `starlette-csrf`). If no CSRF protection is visible,
+report A01:2021 for each state-changing POST/PUT/DELETE endpoint that accepts
+form data from an authenticated session. Absence of protection at the
+app-level is sufficient evidence — you do not need to see the form template.
 - severity (string) — exactly one of: Critical, High, Medium, Low.
 - confidence (string) — exactly one of: High, Medium, Low.
 - cvss_band (string) — one of `9.0-10.0`, `7.0-8.9`, `4.0-6.9`, `0.1-3.9`
@@ -248,7 +260,9 @@ were emitted. Do not invent findings to fill the list.
 # Final reminders
 
 - One finding per instance of a pattern. If the same issue appears in N
-  files, emit N findings — each with its own affected_file.
+  files, emit N findings — each with its own affected_file. Do not stop
+  after the first instance: after spotting SQL injection in one DAO file,
+  scan every other DAO/model/repository file for the same pattern.
 - Severity and cvss_band must agree (see the mapping above). Mismatches will
   cause the finding to be rejected by the output schema validator.
 - Output MUST be a single JSON object. Nothing else.

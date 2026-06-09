@@ -98,17 +98,18 @@ rules:
       owasp: A03:2021
 
   - id: python-async-sqli-percent-format-assign
-    patterns:
-      - pattern: |
-          $Q = $SQL % $PARAMS
-          ...
-          await $CUR.execute($Q)
-      - metavariable-regex:
-          metavariable: $SQL
-          regex: "(?i).*(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE|INTO).*"
+    mode: taint
+    pattern-sources:
+      - pattern: $TEMPLATE % $ARGS
+    pattern-sinks:
+      - patterns:
+          - pattern: await $CUR.execute($QUERY)
+          - pattern-not: await $CUR.execute($QUERY, $PARAMS)
     message: >
-      SQL query built with % string formatting before async execute(). Use parameterised
-      queries: await cursor.execute("... WHERE id = %s", (value,))
+      SQL query built with Python % operator flows into await execute() without a
+      params tuple (CWE-89, A03:2021). Taint tracking catches this even when the
+      query is built before an async-with block. Use parameterised queries:
+      await cursor.execute("... WHERE id = %s", (value,))
     languages: [python]
     severity: ERROR
     metadata:

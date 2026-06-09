@@ -172,7 +172,7 @@
       <div style="margin-top:1rem;">
         <label style="display:flex; align-items:flex-start; gap:0.6rem; cursor:pointer;">
           <input type="checkbox" name="enable_partial_scan" value="on"
-                 {{ 'checked' if sc and sc.enable_partial_scan else 'checked' }}
+                 {{ 'checked' if not sc or sc.enable_partial_scan else '' }}
                  style="margin-top:0.2rem; flex-shrink:0;">
           <span>
             <strong>Partial scan on token limit</strong>
@@ -189,7 +189,7 @@
       <div style="margin-top:1rem;">
         <label style="display:flex; align-items:flex-start; gap:0.6rem; cursor:pointer;">
           <input type="checkbox" name="enable_zero_findings_retry" value="on"
-                 {{ 'checked' if sc and sc.enable_zero_findings_retry else 'checked' }}
+                 {{ 'checked' if not sc or sc.enable_zero_findings_retry else '' }}
                  style="margin-top:0.2rem; flex-shrink:0;">
           <span>
             <strong>Retry on empty first pass</strong>

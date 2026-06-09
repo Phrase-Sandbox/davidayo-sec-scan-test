@@ -919,6 +919,9 @@ async def admin_advanced_settings_post(
             enable_bandit=bool(enable_bandit),
             enable_gosec=bool(enable_gosec),
             enable_eslint=bool(enable_eslint),
+            enable_consolidation_verifier=bool(enable_consolidation_verifier),
+            enable_partial_scan=bool(enable_partial_scan),
+            enable_zero_findings_retry=bool(enable_zero_findings_retry),
         )
         await session.commit()
 
@@ -927,6 +930,9 @@ async def admin_advanced_settings_post(
         actor_email=admin.email,
         keep_confidences=keep_confidences,
         parallelism=parallelism,
+        enable_consolidation_verifier=bool(enable_consolidation_verifier),
+        enable_partial_scan=bool(enable_partial_scan),
+        enable_zero_findings_retry=bool(enable_zero_findings_retry),
     )
     return templates.TemplateResponse(
         request,
