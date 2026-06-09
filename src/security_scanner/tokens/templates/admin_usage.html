@@ -113,4 +113,24 @@
   {% endif %}
 </div>
 
+<div style="position:fixed; bottom:1rem; right:1.2rem; font-size:0.75rem;
+            color:var(--muted); background:var(--bg); border:1px solid var(--border);
+            border-radius:6px; padding:0.3rem 0.7rem; z-index:100;" id="usage-refresh-chip">
+  Updated <span id="usage-updated-at"></span> &middot; refreshing in <span id="usage-countdown">60</span>s
+</div>
+<script>
+(function () {
+  var loadedAt = new Date();
+  document.getElementById('usage-updated-at').textContent =
+    loadedAt.toTimeString().slice(0, 8);
+  var secs = 60;
+  var interval = setInterval(function () {
+    secs -= 1;
+    var el = document.getElementById('usage-countdown');
+    if (el) el.textContent = secs;
+    if (secs <= 0) { clearInterval(interval); window.location.reload(); }
+  }, 1000);
+})();
+</script>
+
 {% endblock %}

@@ -59,7 +59,7 @@ env:
   - name: GITHUB_OIDC_AUDIENCE
     value: "phrase-scanner"
   - name: GITHUB_OIDC_ALLOWED_WORKFLOW_REFS
-    value: "Phrase-Sandbox/master-scanner-pipeline/.github/workflows/scanner.yml@"
+    value: "Phrase-Launchpad/master-scanner-pipeline/.github/workflows/scanner.yml@"
   # Redirect semgrep temp files to /tmp so readOnlyRootFilesystem: true is not violated
   - name: SEMGREP_SETTINGS_FILE
     value: "/tmp/semgrep-settings.yml"

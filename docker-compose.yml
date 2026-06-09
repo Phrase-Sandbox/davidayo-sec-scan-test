@@ -78,8 +78,8 @@ services:
       # tunnel timeout but suboptimal for Gemini's 1M context window).
       - GEMINI_CHUNK_SIZE=${GEMINI_CHUNK_SIZE:-24}
       - GEMINI_MAX_TOKENS=${GEMINI_MAX_TOKENS:-16384}
-      - VULN_VERIFIER_KEEP_CONFIDENCES=${VULN_VERIFIER_KEEP_CONFIDENCES:-high}
-      - ADVISORY_CONFIDENCES=${ADVISORY_CONFIDENCES:-medium,low}
+      - VULN_VERIFIER_KEEP_CONFIDENCES=${VULN_VERIFIER_KEEP_CONFIDENCES:-high,medium}
+      - ADVISORY_CONFIDENCES=${ADVISORY_CONFIDENCES:-low}
       # Semgrep writes settings/log/version-cache on startup; redirect all to /tmp so read_only: true doesn't block it
       - SEMGREP_SETTINGS_FILE=/tmp/semgrep-settings.yml
       - SEMGREP_LOG_FILE=/tmp/semgrep.log

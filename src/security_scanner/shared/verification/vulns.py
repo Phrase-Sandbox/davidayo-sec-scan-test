@@ -6,9 +6,9 @@ Mirrors the architecture of ``shared/verification/secrets.py``:
 - Fan-out via ``concurrent.futures.ThreadPoolExecutor``.
 - Fail-safe: any LLM error keeps the finding unverified.
 - Threshold: keep only ``verdict=real AND confidence in KEEP_CONFIDENCES``.
-  Default KEEP_CONFIDENCES = {``high``}, env ``VULN_VERIFIER_KEEP_CONFIDENCES``
+  Default KEEP_CONFIDENCES = {``high``, ``medium``}, env ``VULN_VERIFIER_KEEP_CONFIDENCES``
   (comma-separated).
-- Advisory lane: ``ADVISORY_CONFIDENCES`` env var (default ``{"medium"}``):
+- Advisory lane: ``ADVISORY_CONFIDENCES`` env var (default ``{"low"}``):
   ``verdict=real AND confidence in ADVISORY_CONFIDENCES`` → kept with
   ``verification_status=advisory_real`` (non-blocking).
 - Risk routing: files under high-risk path prefixes treat medium-confidence
