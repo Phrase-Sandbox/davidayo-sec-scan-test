@@ -14,7 +14,6 @@ only non-200 responses.
 from __future__ import annotations
 
 import re
-import uuid
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -26,7 +25,6 @@ from security_scanner.agent.slack_alert import send_bypass_alert
 from security_scanner.pipeline import ScanPipeline, TokenLimitError
 from security_scanner.shared.config import Settings, get_settings
 from security_scanner.shared.github.client import GitHubClient
-from security_scanner.tokens.db import get_session_factory
 from security_scanner.shared.llm.base import LLMConfigError
 from security_scanner.shared.llm.factory import (
     build_llm_client,
@@ -40,6 +38,7 @@ from security_scanner.shared.models.enums import (
     Severity,
 )
 from security_scanner.shared.models.scan_result import ScanResult
+from security_scanner.tokens.db import get_session_factory
 from security_scanner.tokens.models import CiScanRecord, ScanStatus
 
 log = get_logger(__name__)
@@ -185,6 +184,7 @@ async def _persist_ci_scan(result: ScanResult, started_at: datetime) -> None:
         # Upsert llm_usage_monthly so CI scans appear in the /admin/usage token spend table.
         if usage is not None:
             from sqlalchemy import select as sa_select  # noqa: PLC0415
+
             from security_scanner.tokens.models import LLMUsageMonthly  # noqa: PLC0415
 
             stmt = sa_select(LLMUsageMonthly).where(

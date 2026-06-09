@@ -8,8 +8,9 @@ Create Date: 2026-06-09
 from __future__ import annotations
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects.postgresql import ENUM as PgEnum
+
+from alembic import op
 
 revision = "0007"
 down_revision = "0006"

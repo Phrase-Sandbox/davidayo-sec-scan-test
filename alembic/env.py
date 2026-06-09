@@ -9,12 +9,12 @@ from __future__ import annotations
 
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+from alembic import context
 from security_scanner.shared.config import get_settings
-from security_scanner.tokens.db import Base
 from security_scanner.tokens import models  # noqa: F401 — register tables with Base.metadata
+from security_scanner.tokens.db import Base
 
 config = context.config
 if config.config_file_name is not None:

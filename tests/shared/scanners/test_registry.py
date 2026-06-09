@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 
 def test_get_adapters_enabled_none_returns_all_available(monkeypatch) -> None:
     """enabled=None (default) returns all binary-available adapters."""

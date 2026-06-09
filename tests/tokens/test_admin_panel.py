@@ -518,6 +518,7 @@ def test_admin_advanced_settings_shows_nav_link(client, session_factory):
 async def test_admin_advanced_settings_post_inserts_row(client, session_factory):
     """POST with valid form inserts a ScannerSettings row."""
     from sqlalchemy import select
+
     from security_scanner.tokens.models import ScannerSettings
 
     form_data = {

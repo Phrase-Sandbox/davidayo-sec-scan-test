@@ -583,7 +583,8 @@ def test_pipeline_uses_scanner_settings_from_db():
     """When _load_active_scanner_settings returns a settings row, it is wired
     through to run_layer1 and verify_vuln_candidates."""
     from datetime import UTC, datetime
-    from unittest.mock import AsyncMock, patch as _patch
+    from unittest.mock import AsyncMock
+    from unittest.mock import patch as _patch
 
     from security_scanner.tokens.models import ScannerSettings
 

@@ -38,13 +38,13 @@ from security_scanner.tokens.db import get_session_factory
 from security_scanner.tokens.models import (
     AuditEvent,
     AuditEventType,
-    CIToken,
     CiScanRecord,
+    CIToken,
     LLMProvider,
     LLMUsageMonthly,
     OrgSettings,
-    ScanRecord,
     ScannerSettings,
+    ScanRecord,
     User,
     UserRole,
 )
