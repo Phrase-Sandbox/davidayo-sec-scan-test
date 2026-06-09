@@ -64,19 +64,46 @@ _INCLUDED_EXTENSIONS: frozenset[str] = frozenset(
         ".yml", ".yaml", ".toml", ".json", ".xml", ".tf", ".hcl",
         # Shell
         ".sh", ".bash", ".zsh",
+        # SQL — LLM can reason about inline queries; static scanners cannot
+        ".sql",
     }
+)
+
+# Scanner layer sees templates too so Semgrep Jinja2/HTML rules can fire.
+# LLM filter excludes templates to save tokens — the scanner rules cover them.
+_SCANNER_INCLUDED_EXTENSIONS: frozenset[str] = _INCLUDED_EXTENSIONS | frozenset(
+    {".jinja2", ".html", ".htm"}
 )
 
 
 def filter(files: dict[str, str]) -> dict[str, str]:
     """Return only source/config files from *files*, dropping everything excluded.
 
-    The original input dict is not mutated.
+    Used for the LLM analysis pass. The original input dict is not mutated.
     """
     return {path: content for path, content in files.items() if _should_keep(path, content)}
 
 
-def _should_keep(path: str, content: str) -> bool:
+def scanner_filter(files: dict[str, str]) -> dict[str, str]:
+    """Wider filter for the Layer-1 scanner pass.
+
+    Identical to :func:`filter` but also includes template files (``.jinja2``,
+    ``.html``, ``.htm``) so that Semgrep Jinja2/HTML rules can match them.
+    The LLM pass uses the narrower :func:`filter` to keep token costs down.
+    The original input dict is not mutated.
+    """
+    return {
+        path: content
+        for path, content in files.items()
+        if _should_keep(path, content, _SCANNER_INCLUDED_EXTENSIONS)
+    }
+
+
+def _should_keep(
+    path: str,
+    content: str,
+    included_extensions: frozenset[str] = _INCLUDED_EXTENSIONS,
+) -> bool:
     posix = PurePosixPath(path)
     basename = posix.name
     suffix = posix.suffix
@@ -97,7 +124,7 @@ def _should_keep(path: str, content: str) -> bool:
     if _is_binary(content):
         return False
     # 6. Inclusion list.
-    if suffix in _INCLUDED_EXTENSIONS:
+    if suffix in included_extensions:
         return True
     if _is_dockerfile_or_makefile(basename):
         return True

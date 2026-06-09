@@ -105,6 +105,18 @@ def test_semgrep_upload_blocklist_maps_to_unsafe_file_upload() -> None:
     assert normalize("semgrep", "upload-blocklist-ext") == "unsafe_file_upload"
 
 
+def test_bandit_b701_maps_to_xss() -> None:
+    assert normalize("bandit", "B701") == "xss"
+
+
+def test_semgrep_python_jinja2_autoescape_false_maps_to_xss() -> None:
+    assert normalize("semgrep", "python-jinja2-autoescape-false") == "xss"
+
+
+def test_semgrep_jinja2_safe_filter_maps_to_xss() -> None:
+    assert normalize("semgrep", "jinja2-safe-filter") == "xss"
+
+
 def test_semgrep_sqli_percent_format_assign_maps_to_sqli() -> None:
     assert normalize("semgrep", "python-sqli-percent-format-assign") == "sqli"
 

@@ -71,6 +71,31 @@ rules:
       vuln_class: sqli
       owasp: A03:2021
 
+  - id: python-jinja2-autoescape-false
+    patterns:
+      - pattern: $FUNC(..., autoescape=False, ...)
+    message: >
+      Jinja2 autoescaping disabled. All template variables will render raw HTML,
+      enabling XSS. Set autoescape=True or use select_autoescape().
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: xss
+      owasp: A03:2021
+
+  - id: jinja2-safe-filter
+    patterns:
+      - pattern: "{{ $X | safe }}"
+    message: >
+      The | safe filter bypasses Jinja2 autoescaping. If $X contains
+      user-controlled data this is stored XSS. Remove | safe or sanitize
+      the value before rendering.
+    languages: [html]
+    severity: ERROR
+    metadata:
+      vuln_class: xss
+      owasp: A03:2021
+
   - id: python-eval-input
     pattern: eval($X)
     message: >

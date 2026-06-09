@@ -38,7 +38,8 @@ from security_scanner.shared.claude.client import (
     ClaudeUnavailableError,
 )
 from security_scanner.shared.context import ContextPackager
-from security_scanner.shared.filters.file_filter import filter as filter_files
+from security_scanner.shared.filters.file_filter import filter as filter_files, scanner_filter as scanner_filter_files
+from security_scanner.shared.verification.consolidation import consolidate_findings
 from security_scanner.shared.filters.post_filter import filter_findings
 from security_scanner.shared.github.client import GitHubAuthError, GitHubClient, GitHubError
 from security_scanner.shared.logging_util import get_logger, set_scan_id
@@ -200,6 +201,7 @@ class ScanPipeline:
             _high_risk_paths: list[str] | None = (
                 [p.strip() for p in sc.high_risk_paths.splitlines() if p.strip()] or None
             )
+            _enable_consolidation_verifier: bool = sc.enable_consolidation_verifier
         else:
             enabled_adapters = None      # all adapters (binary-available)
             semgrep_rules = None         # all rule packs
@@ -207,6 +209,7 @@ class ScanPipeline:
             _advisory_conf = None        # module-level env default
             _parallelism = None          # module-level env default
             _high_risk_paths = None      # YAML file default
+            _enable_consolidation_verifier = False
 
         # Step 1: parse owner/repo.
         parsed = _parse_repo_url(repo_url)
@@ -273,7 +276,11 @@ class ScanPipeline:
         # Step 7: filter AFTER strip so the LLM only receives source files
         # (not minified JS/CSS/vendor bundles).  The stripper above already saw
         # every file, so secrets in filtered-out files are still reported.
+        # LLM filter: source/config/SQL only (token-efficient).
         files = filter_files(strip_result.cleaned_files)
+        # Scanner filter: same rules + template files (.jinja2/.html/.htm) so
+        # Semgrep Jinja2/HTML rules can fire on templates.
+        scanner_files = scanner_filter_files(strip_result.cleaned_files)
 
         # If filtering removed everything, treat as no scannable source.
         if not files:
@@ -300,7 +307,7 @@ class ScanPipeline:
             llm_task = asyncio.create_task(self._claude.analyse_async_chunked(files))
             scanner_task = asyncio.create_task(
                 run_layer1(
-                    files, scan_id,
+                    scanner_files, scan_id,
                     enabled_adapters=enabled_adapters,
                     semgrep_rules=semgrep_rules,
                 )
@@ -413,15 +420,17 @@ class ScanPipeline:
         # local-mode reports.
         if candidates:
             bundles = await asyncio.to_thread(
-                ContextPackager().attach, candidates, files
+                ContextPackager().attach, candidates, scanner_files
             )
         else:
             bundles = {}
 
         # Step 13: production-mode vuln verifier — runs on both gate and
         # on-demand paths so CLI scans don't show unverified findings.
+        # Use scanner_files so the verifier can read template content for any
+        # scanner finding that lands in a .jinja2 / .html file.
         kept = await asyncio.to_thread(
-            verify_vuln_candidates, candidates, files, self._claude,
+            verify_vuln_candidates, candidates, scanner_files, self._claude,
             bundles=bundles,
             keep_confidences=_keep_conf,
             advisory_confidences=_advisory_conf,
@@ -436,9 +445,14 @@ class ScanPipeline:
             claude_only = [f for f in kept if f.sources == ["claude"]]
             scanner_sourced = [f for f in kept if f.sources != ["claude"]]
             verified_claude = await asyncio.to_thread(
-                verify_critical_findings, claude_only, files, self._claude
+                verify_critical_findings, claude_only, scanner_files, self._claude
             )
             kept = [*verified_claude, *scanner_sourced]
+
+        # Step 14b: consolidation verifier — optional single LLM pass reviewing
+        # the complete set of confirmed findings together for combined risks.
+        if _enable_consolidation_verifier and kept:
+            kept = await asyncio.to_thread(consolidate_findings, kept, self._claude)
 
         all_findings = [*secret_findings, *kept]
 

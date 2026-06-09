@@ -44,6 +44,8 @@
     </dd>
     <dt>Parallel checks</dt>
     <dd>{{ sc.vuln_verifier_parallelism }} worker{{ "s" if sc.vuln_verifier_parallelism != 1 else "" }}</dd>
+    <dt>Consolidation verifier</dt>
+    <dd>{% if sc.enable_consolidation_verifier %}Enabled{% else %}<span class="muted">Disabled</span>{% endif %}</dd>
     <dt>Active scanners</dt>
     <dd>
       {% set active = [] %}
@@ -148,6 +150,23 @@
                min="1" max="16" value="{{ sc.vuln_verifier_parallelism if sc else 2 }}"
                style="font:inherit; padding:0.4rem 0.6rem; border:1px solid var(--border);
                       border-radius:6px; background:var(--card); color:var(--fg); width:80px;">
+      </div>
+
+      <div style="margin-top:1rem;">
+        <label style="display:flex; align-items:flex-start; gap:0.6rem; cursor:pointer;">
+          <input type="checkbox" name="enable_consolidation_verifier" value="on"
+                 {{ 'checked' if sc and sc.enable_consolidation_verifier else '' }}
+                 style="margin-top:0.2rem; flex-shrink:0;">
+          <span>
+            <strong>Consolidation verifier</strong>
+            <span class="muted" style="font-size:0.84rem; display:block;">
+              After individual checks complete, run one final AI pass reviewing all confirmed
+              findings together. Detects combined-risk attack chains (e.g. auth bypass + SQL
+              injection = unauthenticated SQLi) and can promote severity to Critical.
+              One extra API call per scan. Most useful when scans produce 5&ndash;30 findings.
+            </span>
+          </span>
+        </label>
       </div>
     </fieldset>
 

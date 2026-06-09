@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from security_scanner.shared.filters.file_filter import filter as file_filter
+from security_scanner.shared.filters.file_filter import filter as file_filter, scanner_filter
 
 # --- Exclusions ---------------------------------------------------------------
 
@@ -237,3 +237,64 @@ def test_json_kept_but_lock_named_json_excluded():
         "package-lock.json": "{}",
     }
     assert file_filter(files) == {"config.json": "{}"}
+
+
+# --- SQL in LLM filter --------------------------------------------------------
+
+
+def test_llm_filter_includes_sql_files():
+    assert file_filter({"migrations/001_init.sql": "CREATE TABLE users (id INT);"}) == {
+        "migrations/001_init.sql": "CREATE TABLE users (id INT);"
+    }
+
+
+def test_llm_filter_excludes_jinja2_files():
+    assert file_filter({"templates/index.jinja2": "{{ name }}"}) == {}
+
+
+def test_llm_filter_excludes_html_files():
+    assert file_filter({"templates/index.html": "<h1>Hello</h1>"}) == {}
+
+
+# --- scanner_filter: template includes ----------------------------------------
+
+
+def test_scanner_filter_includes_jinja2_files():
+    result = scanner_filter({"templates/course.jinja2": "{{ review.review_text }}"})
+    assert result == {"templates/course.jinja2": "{{ review.review_text }}"}
+
+
+def test_scanner_filter_includes_html_files():
+    result = scanner_filter({"views/index.html": "<p>{{ name }}</p>"})
+    assert result == {"views/index.html": "<p>{{ name }}</p>"}
+
+
+def test_scanner_filter_includes_htm_files():
+    result = scanner_filter({"views/page.htm": "<p>content</p>"})
+    assert result == {"views/page.htm": "<p>content</p>"}
+
+
+def test_scanner_filter_excludes_jinja2_in_vendor_dir():
+    result = scanner_filter({"vendor/jinja2/base.jinja2": "{% block %}"})
+    assert result == {}
+
+
+def test_scanner_filter_excludes_jinja2_in_static_dir():
+    result = scanner_filter({"static/templates/email.jinja2": "Hello {{ name }}"})
+    assert result == {}
+
+
+def test_scanner_filter_still_includes_py_files():
+    result = scanner_filter({"app.py": "autoescape=False"})
+    assert result == {"app.py": "autoescape=False"}
+
+
+def test_scanner_filter_includes_sql_files():
+    result = scanner_filter({"db/queries.sql": "SELECT * FROM users"})
+    assert result == {"db/queries.sql": "SELECT * FROM users"}
+
+
+def test_scanner_filter_not_mutate_input():
+    files = {"app.jinja2": "{{ x }}", ".env": "K=v"}
+    scanner_filter(files)
+    assert files == {"app.jinja2": "{{ x }}", ".env": "K=v"}

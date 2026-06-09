@@ -84,7 +84,7 @@ _BANDIT_MAP: dict[str, str] = {
     "B609": "command_injection",    # linux_commands_wildcard_injection
     "B610": "sqli",                 # django_extra_used
     "B611": "sqli",                 # django_rawsql_used
-    "B701": "code_injection",       # jinja2_autoescape_false
+    "B701": "xss",                  # jinja2_autoescape_false
     "B702": "xss",                  # use_of_mako_templates
     "B703": "xss",                  # django_mark_safe
 }
@@ -143,6 +143,8 @@ _SEMGREP_MAP: dict[str, str] = {
     "python-sqli-concat": "sqli",
     "python-sqli-percent-format-assign": "sqli",
     "python-sqli-format-method": "sqli",
+    "python-jinja2-autoescape-false": "xss",
+    "jinja2-safe-filter": "xss",
     "python-eval-input": "code_injection",
     "python-os-system-input": "command_injection",
     "python-pickle-loads": "deserialization",

@@ -278,6 +278,10 @@ class ScannerSettings(Base):
     vuln_verifier_parallelism: Mapped[int] = mapped_column(
         Integer(), nullable=False, server_default="2"
     )
+    # Consolidation verifier — single LLM pass reviewing all confirmed findings together
+    enable_consolidation_verifier: Mapped[bool] = mapped_column(
+        Boolean(), nullable=False, server_default="false"
+    )
     # High-risk path prefixes — newline-separated; empty = use built-in YAML list
     high_risk_paths: Mapped[str] = mapped_column(Text(), nullable=False, server_default="")
     # Audit trail
