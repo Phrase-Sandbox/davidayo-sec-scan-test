@@ -17,6 +17,7 @@ orchestrator treats ``scan_failed=True`` as advisory and proceeds.
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 
@@ -168,7 +169,8 @@ def _is_well_formed_exploit_scenario(scenario: object, affected_file: object) ->
         return False
     if not isinstance(affected_file, str) or not affected_file:
         return False
-    if affected_file not in scenario:
+    basename = os.path.basename(affected_file)
+    if affected_file not in scenario and (not basename or basename not in scenario):
         return False
     lowered = scenario.lower()
     return any(keyword in lowered for keyword in _EXPLOIT_KEYWORDS)

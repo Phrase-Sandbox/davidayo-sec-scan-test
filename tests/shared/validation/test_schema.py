@@ -333,3 +333,45 @@ def test_validator_does_not_mutate_input_dicts():
     snapshot = deepcopy(raw)
     validate([raw], total_source_lines=100)
     assert raw == snapshot
+
+
+# --- Rule 4 basename fallback (LLM often uses short filename) ---------------
+
+
+def test_rule_4_accepts_exploit_scenario_with_basename_only():
+    """LLM uses only the filename without the directory path — should pass."""
+    raw = _valid_raw_finding(
+        affected_file="src/handlers/login.py",
+        exploit_scenario=(
+            "An attacker submits username=admin' OR '1'='1 as the login "
+            "payload to login.py, bypassing the WHERE clause."
+        ),
+    )
+    result = validate([raw], total_source_lines=100)
+    assert len(result.valid_findings) == 1
+    assert result.rejected_findings == []
+
+
+def test_rule_4_still_rejects_scenario_with_no_file_reference():
+    """No full path AND no basename → still rejected."""
+    raw = _valid_raw_finding(
+        affected_file="src/handlers/login.py",
+        exploit_scenario=(
+            "An attacker submits a crafted payload to the server and triggers injection."
+        ),
+    )
+    result = validate([raw], total_source_lines=100)
+    assert result.valid_findings == []
+    assert raw in result.rejected_findings
+
+
+def test_rule_4_full_path_still_accepted():
+    """The existing full-path match must continue to work after the basename change."""
+    raw = _valid_raw_finding(
+        affected_file="src/handlers/login.py",
+        exploit_scenario=(
+            "Attacker sends a query to src/handlers/login.py triggering SQLi."
+        ),
+    )
+    result = validate([raw], total_source_lines=100)
+    assert len(result.valid_findings) == 1

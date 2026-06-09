@@ -19,6 +19,7 @@ production-mode vuln verifier.
 from __future__ import annotations
 
 import logging
+import re
 
 from security_scanner.shared.models.finding import VulnerabilityFinding
 from security_scanner.shared.scanners.models import AggregatedCandidate
@@ -28,6 +29,27 @@ from security_scanner.shared.scanners.types import CandidateForVerification
 log = logging.getLogger(__name__)
 
 _OVERLAP_TOLERANCE = 2
+
+# A03:2021 covers multiple injection subtypes. The LLM always emits A03:2021
+# for all of them (XSS, command injection, code injection, unsafe YAML, SQLi),
+# but scanner tools index findings under their specific subtype class.
+# We try every A03 subclass when searching the scanner index so a mismatch
+# between the LLM's broad OWASP ID and the scanner's specific class does not
+# silently prevent the two findings from merging.
+_A03_CLASSES: frozenset[str] = frozenset({
+    "sqli", "xss", "command_injection", "code_injection", "unsafe_yaml",
+})
+
+# Patterns used to infer the specific vuln_class from an LLM description when
+# a scanner match was not found and the OWASP ID alone is too broad.
+# Evaluated in order; first match wins.  Falls back to the primary normalized
+# class (usually "sqli" for A03:2021) when nothing matches.
+_DESCRIPTION_CLASS_HINTS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"cross.site scripting|\bxss\b", re.IGNORECASE), "xss"),
+    (re.compile(r"command.injection|subprocess.*shell|os\.system", re.IGNORECASE), "command_injection"),
+    (re.compile(r"code.injection|\beval\b|\bexec\b", re.IGNORECASE), "code_injection"),
+    (re.compile(r"unsafe.yaml|yaml\.load", re.IGNORECASE), "unsafe_yaml"),
+]
 
 
 def _parse_affected_lines(affected_lines: str | None) -> tuple[int, int]:
@@ -51,13 +73,36 @@ def _overlap(a_start: int, a_end: int, b_start: int, b_end: int) -> bool:
 
 
 def _llm_vuln_class(finding: VulnerabilityFinding) -> str:
-    """Best-effort vuln_class from a Claude finding's vulnerability_id.
-
-    Uses the OWASP→vuln_class mapping first, falling back to the general
-    normalizer.  ``normalize("owasp", "a03:2021")`` → ``"sqli"`` so that
-    Claude's Injection findings can merge with Bandit's ``sqli`` candidates.
-    """
+    """Primary vuln_class from a Claude finding's OWASP vulnerability_id."""
     return normalize("owasp", finding.vulnerability_id.lower())
+
+
+def _infer_class_from_description(description: str, fallback: str) -> str:
+    """Return a specific vuln_class inferred from an LLM description string.
+
+    Falls back to the normalised primary class (usually "sqli" for A03:2021)
+    when no pattern matches, which is no worse than the previous behaviour.
+    """
+    for pattern, vuln_class in _DESCRIPTION_CLASS_HINTS:
+        if pattern.search(description):
+            return vuln_class
+    return fallback
+
+
+def _llm_candidate_classes(finding: VulnerabilityFinding) -> list[str]:
+    """All scanner vuln_classes to try when matching this LLM finding.
+
+    A03:2021 is used for all injection types (SQLi, XSS, command injection,
+    code injection, unsafe YAML).  For A03:2021 findings, the description-
+    inferred class is tried first (most specific), then every other A03
+    subtype as a fallback.  For other OWASP IDs this is a single-element list.
+    """
+    primary = _llm_vuln_class(finding)
+    if finding.vulnerability_id.upper() == "A03:2021":
+        inferred = _infer_class_from_description(finding.description or "", primary)
+        extras = sorted(_A03_CLASSES - {inferred})
+        return [inferred] + extras
+    return [primary]
 
 
 def merge_with_llm_findings(
@@ -93,43 +138,52 @@ def merge_with_llm_findings(
 
     for llm_f in llm_findings:
         l_start, l_end = _parse_affected_lines(llm_f.affected_lines)
-        l_vuln_class = _llm_vuln_class(llm_f)
+        # First element is always the description-inferred (most specific) class.
+        l_candidate_classes = _llm_candidate_classes(llm_f)
         matched = False
 
-        # Look for a scanner candidate in the same file/class with overlapping lines.
-        for idx, cand in scanner_index.get((llm_f.affected_file, l_vuln_class), []):
-            if _overlap(l_start, l_end, cand.line_start, cand.line_end):
-                # Merged candidate.
-                merged_sources = ["claude"] + [s for s in cand.sources if s != "claude"]
-                result.append(CandidateForVerification(
-                    file=llm_f.affected_file,
-                    line_start=min(l_start, cand.line_start) if l_start else cand.line_start,
-                    line_end=max(l_end, cand.line_end) if l_end else cand.line_end,
-                    vuln_class=l_vuln_class,
-                    vulnerability_id=llm_f.vulnerability_id,
-                    severity=llm_f.severity.value,
-                    confidence=llm_f.confidence.value,
-                    cvss_band=llm_f.cvss_band,
-                    description=llm_f.description,
-                    suggested_fix=llm_f.suggested_fix,
-                    owasp_reference=llm_f.owasp_reference,
-                    exploit_scenario=llm_f.exploit_scenario,
-                    sources=merged_sources,
-                    consensus_score=len(set(merged_sources)),
-                    raw_rule_ids=cand.raw_rule_ids,
-                    scanner_message=cand.message,
-                ))
-                matched_scanner.add(idx)
-                matched = True
-                break  # merge with first match only
+        # Try each candidate class against the scanner index.  For A03:2021
+        # this covers all injection subtypes; for other OWASP IDs it is a
+        # single-element list and behaves identically to before.
+        for candidate_class in l_candidate_classes:
+            for idx, cand in scanner_index.get((llm_f.affected_file, candidate_class), []):
+                if _overlap(l_start, l_end, cand.line_start, cand.line_end):
+                    merged_sources = ["claude"] + [s for s in cand.sources if s != "claude"]
+                    result.append(CandidateForVerification(
+                        file=llm_f.affected_file,
+                        line_start=min(l_start, cand.line_start) if l_start else cand.line_start,
+                        line_end=max(l_end, cand.line_end) if l_end else cand.line_end,
+                        # Use the scanner's specific class — it is always more
+                        # precise than the LLM's broad OWASP-derived class.
+                        vuln_class=cand.vuln_class,
+                        vulnerability_id=llm_f.vulnerability_id,
+                        severity=llm_f.severity.value,
+                        confidence=llm_f.confidence.value,
+                        cvss_band=llm_f.cvss_band,
+                        description=llm_f.description,
+                        suggested_fix=llm_f.suggested_fix,
+                        owasp_reference=llm_f.owasp_reference,
+                        exploit_scenario=llm_f.exploit_scenario,
+                        sources=merged_sources,
+                        consensus_score=len(set(merged_sources)),
+                        raw_rule_ids=cand.raw_rule_ids,
+                        scanner_message=cand.message,
+                    ))
+                    matched_scanner.add(idx)
+                    matched = True
+                    break  # merge with first match only
+            if matched:
+                break
 
         if not matched:
-            # Claude-only candidate.
+            # Claude-only candidate.  Use the description-inferred class
+            # (l_candidate_classes[0]) so the verifier receives the correct
+            # label (e.g. "xss") rather than the OWASP fallback ("sqli").
             result.append(CandidateForVerification(
                 file=llm_f.affected_file,
                 line_start=l_start,
                 line_end=l_end,
-                vuln_class=l_vuln_class,
+                vuln_class=l_candidate_classes[0],
                 vulnerability_id=llm_f.vulnerability_id,
                 severity=llm_f.severity.value,
                 confidence=llm_f.confidence.value,
