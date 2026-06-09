@@ -1,12 +1,13 @@
 """Semgrep adapter.
 
-Invokes ``semgrep --json --quiet --metrics=off --error`` with vendored local
-configs so scans do not depend on the Semgrep Registry being available.
+Invokes ``semgrep --json --quiet --metrics=off --error`` with all vendored local
+configs. All packs are best-effort — a missing or broken config is skipped
+silently so no single file can abort the scan.
 
-When SEMGREP_USE_REGISTRY=true the adapter also appends the official
-``p/owasp-top-ten`` and ``p/default`` registry packs for significantly broader
-language and vulnerability-class coverage. Registry packs require internet
-access; unavailability falls back gracefully (findings may be fewer).
+When SEMGREP_USE_REGISTRY=true the adapter also appends four official registry
+packs (p/owasp-top-ten, p/default, p/python, p/sql-injection) for broader
+multi-language coverage. Registry packs require internet access; unavailability
+falls back gracefully.
 
 Binary missing → log warning + return [] (graceful degrade).
 """
@@ -41,13 +42,12 @@ _PHP_CONFIG = _CONFIGS_DIR / "php.yaml"
 _JAVA_CONFIG = _CONFIGS_DIR / "java.yaml"
 
 # Maps rule-pack name → config path.
-# "required" packs abort the scan when missing; "best-effort" packs are skipped silently.
-_REQUIRED_PACKS = {"owasp", "audit"}
+# All packs are best-effort: missing or invalid configs are skipped silently.
+# No pack aborts the scan — the registry packs + remaining local packs always run.
+_REQUIRED_PACKS: set[str] = set()
 _CONFIG_MAP: dict[str, Path] = {
-    # Core packs (required)
     "owasp": _OWASP_CONFIG,
     "audit": _AUDIT_CONFIG,
-    # Best-effort packs — skipped silently when file missing
     "upload": _UPLOAD_CONFIG,
     "ssrf": _SSRF_CONFIG,
     "path_traversal": _PATH_TRAVERSAL_CONFIG,

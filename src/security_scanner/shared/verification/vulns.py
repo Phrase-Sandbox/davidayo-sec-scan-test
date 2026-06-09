@@ -161,8 +161,8 @@ _REMEDIATION_TEMPLATES: dict[str, dict[str, str]] = {
             "Also block redirects (`allow_redirects=False`) and use a DNS allowlist."
         ),
         "exploit_scenario": (
-            "An attacker passes `http://169.254.169.254/latest/meta-data/iam/security-credentials/` "
-            "as the URL. The server-side request reaches the AWS metadata endpoint and returns "
+            "An attacker passes `http://169.254.169.254/latest/meta-data/iam/security-credentials/`"
+            " as the URL. The server-side request reaches the AWS metadata endpoint and returns "
             "IAM credentials, which the attacker uses to escalate privileges in AWS."
         ),
     },
@@ -200,13 +200,14 @@ _REMEDIATION_TEMPLATES: dict[str, dict[str, str]] = {
             "if not token or token != request.form.get('csrf_token'):\n"
             "    abort(403)\n"
             "```\n\n"
-            "Include the token in every form using a hidden field or a custom request header for AJAX."
+            "Include the token in every form using a hidden field or a "
+            "custom request header for AJAX."
         ),
         "exploit_scenario": (
-            "An attacker hosts a page with a hidden form that auto-submits a state-changing request "
-            "(e.g., password change or funds transfer) to the target site. Because the victim is "
-            "already authenticated, the browser includes their session cookie and the request "
-            "succeeds without their knowledge."
+            "An attacker hosts a page with a hidden form that auto-submits a state-changing "
+            "request (e.g., password change or funds transfer) to the target site. "
+            "Because the victim is already authenticated, the browser includes their session "
+            "cookie and the request succeeds without their knowledge."
         ),
     },
     "weak_crypto": {
@@ -341,7 +342,8 @@ _REMEDIATION_TEMPLATES: dict[str, dict[str, str]] = {
     },
     "unsafe_file_upload": {
         "suggested_fix": (
-            "Validate file type by magic bytes, not extension or Content-Type. Store outside webroot:\n\n"
+            "Validate file type by magic bytes, not extension or Content-Type. "
+            "Store outside webroot:\n\n"
             "```python\n"
             "import magic  # python-magic\n"
             "ALLOWED_MIME = {'image/jpeg', 'image/png', 'application/pdf'}\n"

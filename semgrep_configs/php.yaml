@@ -50,19 +50,19 @@ rules:
       cwe: CWE-89
 
   - id: php-sqli-variable-query
-    patterns:
+    pattern-either:
       - pattern: |
-          $SQL = "..." . $_GET[$KEY]
+          $SQL = "..." . $_GET[$KEY];
           ...
-          $DB->query($SQL)
+          $DB->query($SQL);
       - pattern: |
-          $SQL = "..." . $_POST[$KEY]
+          $SQL = "..." . $_POST[$KEY];
           ...
-          $DB->query($SQL)
+          $DB->query($SQL);
       - pattern: |
-          $SQL = "..." . $_REQUEST[$KEY]
+          $SQL = "..." . $_REQUEST[$KEY];
           ...
-          $DB->query($SQL)
+          $DB->query($SQL);
     message: >
       SQL query built from a $_GET/$_POST/$_REQUEST value without parameterization
       (SQL Injection — CWE-89). Use prepared statements with bind_param().
@@ -343,9 +343,9 @@ rules:
 
   - id: php-open-redirect
     patterns:
-      - pattern: header("Location: " . $_GET[$KEY])
-      - pattern: header("Location: " . $_POST[$KEY])
-      - pattern: header("location: " . $_GET[$KEY])
+      - pattern: 'header("Location: " . $_GET[$KEY])'
+      - pattern: 'header("Location: " . $_POST[$KEY])'
+      - pattern: 'header("location: " . $_GET[$KEY])'
     message: >
       Open redirect: Location header set from user-controlled input (CWE-601).
       An attacker can craft a URL that redirects victims to a phishing site.

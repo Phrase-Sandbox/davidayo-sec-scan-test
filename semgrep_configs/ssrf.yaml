@@ -134,7 +134,7 @@ rules:
       - pattern: axios.put($URL, ...)
       - pattern: axios.patch($URL, ...)
       - pattern: axios.delete($URL, ...)
-      - pattern: axios.request({url: $URL, ...})
+      - pattern: "axios.request({url: $URL, ...})"
     message: >
       axios request with a potentially user-controlled URL enables SSRF.
       Validate the URL against an allowlist before making the request.

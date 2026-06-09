@@ -185,12 +185,12 @@ rules:
   # ---------------------------------------------------------------------------
 
   - id: java-deserialization-objectinputstream
-    patterns:
+    pattern-either:
       - pattern: new ObjectInputStream($STREAM).readObject()
       - pattern: |
           ObjectInputStream $OIS = new ObjectInputStream($STREAM);
           ...
-          $OIS.readObject()
+          $OIS.readObject();
     message: >
       Insecure deserialization: ObjectInputStream.readObject() deserializes
       arbitrary Java classes from untrusted data (CWE-502). Combined with

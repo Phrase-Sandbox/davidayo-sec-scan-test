@@ -56,8 +56,6 @@ Rules:
 
 def _needs_strengthening(finding: VulnerabilityFinding) -> bool:
     """Return True if the finding's fix lacks a code block and the class is fixable-in-code."""
-    vuln_class = (finding.vulnerability_id or "").lower()
-    # Try to extract class from sources or description as fallback
     # The primary check is the suggested_fix content
     has_code_block = "```" in (finding.suggested_fix or "")
     if has_code_block:
@@ -98,7 +96,8 @@ def _build_user_message(batch: list[VulnerabilityFinding], files: dict[str, str]
             f"FILE: {finding.affected_file}\n"
             f"LINES: {finding.affected_lines or 'unknown'}\n"
             f"DESCRIPTION: {finding.description[:400] if finding.description else ''}\n"
-            f"CURRENT FIX (weak — no code block): {finding.suggested_fix[:300] if finding.suggested_fix else '(empty)'}\n"
+            f"CURRENT FIX (weak — no code block): "
+            f"{finding.suggested_fix[:300] if finding.suggested_fix else '(empty)'}\n"
             f"CODE:\n{snippet[:1200] if snippet else '(unavailable)'}"
         )
     return "\n\n".join(parts)

@@ -71,10 +71,10 @@ from security_scanner.shared.tokens.counter import (
 )
 from security_scanner.shared.validation.schema import validate
 from security_scanner.shared.verification.consolidation import consolidate_findings
-from security_scanner.shared.verification.quality_gate import strengthen_fix_quality
 from security_scanner.shared.verification.parallel import (
     verify_critical_findings,
 )
+from security_scanner.shared.verification.quality_gate import strengthen_fix_quality
 from security_scanner.shared.verification.secrets import verify_secret_findings
 from security_scanner.shared.verification.vulns import (
     verify_vuln_candidates,
@@ -218,7 +218,7 @@ class ScanPipeline:
             _enable_consolidation_verifier = False
             _enable_partial_scan = True   # default: partial scan preferred over 0 findings
             _enable_zero_findings_retry = True  # default: retry on empty first pass
-            _enable_quality_gate = False  # default: off (zero latency change for existing deployments)
+            _enable_quality_gate = False  # default: off (zero latency for existing deployments)
 
         # Step 1: parse owner/repo.
         parsed = _parse_repo_url(repo_url)

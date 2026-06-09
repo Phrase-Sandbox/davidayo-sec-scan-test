@@ -6,7 +6,7 @@ rules:
 
   - id: python-jwt-decode-no-verify
     patterns:
-      - pattern: jwt.decode($TOKEN, options={"verify_signature": False, ...}, ...)
+      - pattern: 'jwt.decode($TOKEN, options={"verify_signature": False, ...}, ...)'
     message: >
       JWT signature verification is disabled (verify_signature: False).
       An attacker can forge arbitrary tokens by modifying the payload and
@@ -36,7 +36,7 @@ rules:
 
   - id: python-jwt-decode-complete-unverified
     patterns:
-      - pattern: jwt.decode($TOKEN, ..., complete=True, options={"verify_signature": False}, ...)
+      - pattern: 'jwt.decode($TOKEN, ..., complete=True, options={"verify_signature": False}, ...)'
     message: >
       JWT decoded without signature verification. Tokens can be forged by an attacker.
     languages: [python]
@@ -48,7 +48,7 @@ rules:
 
   - id: python-python-jose-no-verify
     patterns:
-      - pattern: jose.jwt.decode($TOKEN, $KEY, options={"verify_signature": False, ...}, ...)
+      - pattern: 'jose.jwt.decode($TOKEN, $KEY, options={"verify_signature": False, ...}, ...)'
     message: >
       python-jose JWT decoded without signature verification. Token forgery is possible.
       Remove the options override.

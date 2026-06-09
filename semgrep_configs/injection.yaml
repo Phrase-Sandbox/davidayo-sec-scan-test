@@ -214,8 +214,8 @@ rules:
 
   - id: python-pymongo-nosql-injection
     patterns:
-      - pattern: $COLLECTION.find({$KEY: $VALUE})
-      - pattern-not: $COLLECTION.find({$KEY: "..."})
+      - pattern: "$COLLECTION.find({$KEY: $VALUE})"
+      - pattern-not: "$COLLECTION.find({$KEY: \"...\"})"
     message: >
       MongoDB query with a potentially user-controlled value (NoSQL Injection).
       If $VALUE is a dict supplied by the user (e.g. from request.json), an
@@ -230,8 +230,8 @@ rules:
 
   - id: js-mongoose-nosql-injection
     patterns:
-      - pattern: $MODEL.find({$KEY: $VALUE})
-      - pattern-not: $MODEL.find({$KEY: "..."})
+      - pattern: "$MODEL.find({$KEY: $VALUE})"
+      - pattern-not: "$MODEL.find({$KEY: \"...\"})"
     message: >
       Mongoose find() query with a potentially user-controlled value.
       If $VALUE is an object from req.body/query, an attacker can inject MongoDB
