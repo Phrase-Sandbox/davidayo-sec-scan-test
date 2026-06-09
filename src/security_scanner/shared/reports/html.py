@@ -32,6 +32,7 @@ from security_scanner.shared.models.enums import (
 )
 from security_scanner.shared.models.finding import VulnerabilityFinding
 from security_scanner.shared.models.scan_result import ScanResult
+from security_scanner.shared.reports.vuln_names import vuln_display_name
 
 _SEVERITY_COLOURS: dict[Severity, str] = {
     Severity.Critical: "#b94a4a",
@@ -267,6 +268,13 @@ td a.finding-link {
   font-weight: 600;
 }
 td a.finding-link:hover { text-decoration: underline; }
+td a.finding-link .vuln-name {
+  display: block;
+  font-size: 0.78em;
+  color: var(--muted);
+  font-weight: 400;
+  margin-top: 0.15em;
+}
 
 code {
   background: var(--row-tint);
@@ -625,10 +633,12 @@ def _findings_table(findings: list[VulnerabilityFinding]) -> str:
 
 def _findings_table_row(f: VulnerabilityFinding, idx: int) -> str:
     anchor = f"finding-{idx}"
+    name = vuln_display_name(f.vulnerability_id)
+    name_html = f'<span class="vuln-name">{escape(name)}</span>' if name else ""
     return (
         "<tr>"
         f'<td><a class="finding-link" href="#{anchor}">'
-        f"{escape(f.vulnerability_id)}</a></td>"
+        f"{escape(f.vulnerability_id)}{name_html}</a></td>"
         f"<td>{_severity_span(f.severity)}</td>"
         f"<td>{escape(f.confidence.value)}</td>"
         f"<td>{escape(f.verification_status.value)}</td>"
@@ -830,11 +840,13 @@ def _finding_card(
         else _code(f.affected_file)
     )
     badge = _fix_badge_html(f.suggested_fix)
+    name = vuln_display_name(f.vulnerability_id)
+    name_suffix = f" · {escape(name)}" if name else ""
     parts: list[str] = [
         f'<details id="finding-{idx}" class="finding-block {sev_class}"{open_attr}>',
         "<summary>",
         _severity_span(f.severity),
-        f"<span>{escape(f.vulnerability_id)} — {location}</span>",
+        f"<span>{escape(f.vulnerability_id)}{name_suffix} — {location}</span>",
         badge,
     ]
     # Advisory_real findings get the auto-triaged badge.
@@ -875,11 +887,14 @@ def _group_card(
     head = items[0]
     first_idx = indices[id(head)]
     sev_class = f"sev-{head.severity.value.lower()}"
+    name = vuln_display_name(head.vulnerability_id)
+    name_suffix = f" · {escape(name)}" if name else ""
     parts: list[str] = [
         f'<details id="finding-{first_idx}" class="finding-block {sev_class}">',
         "<summary>",
         _severity_span(head.severity),
-        f"<span>All {len(items)} are one problem — {escape(head.vulnerability_id)}</span>",
+        f"<span>All {len(items)} are one problem — "
+        f"{escape(head.vulnerability_id)}{name_suffix}</span>",
         '<span class="fix-badge">fix all at once</span>',
         "</summary>",
         (

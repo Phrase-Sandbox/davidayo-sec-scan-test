@@ -29,6 +29,7 @@ from security_scanner.shared.models.enums import (
 )
 from security_scanner.shared.models.finding import VulnerabilityFinding
 from security_scanner.shared.models.scan_result import ScanResult
+from security_scanner.shared.reports.vuln_names import vuln_display_name
 
 
 def build_markdown_report(result: ScanResult) -> str:
@@ -138,12 +139,14 @@ def _findings_table(findings: list[VulnerabilityFinding]) -> str:
         "| --- | --- | --- | --- | --- | --- | --- |",
     ]
     for f in findings:
+        name = vuln_display_name(f.vulnerability_id)
+        id_cell = f"{f.vulnerability_id} ({name})" if name else f.vulnerability_id
         lines.append(
             "| "
             + " | ".join(
                 _md_cell(c)
                 for c in (
-                    f.vulnerability_id,
+                    id_cell,
                     f.severity.value,
                     f.confidence.value,
                     f.verification_status.value,
@@ -187,8 +190,10 @@ def _detailed_findings(findings: list[VulnerabilityFinding]) -> str:
                 context_block = _upload_context_md_panel(f.context_summary)
             else:
                 context_block = f"\n**Cross-file context**\n\n```\n{f.context_summary}\n```\n"
+        name = vuln_display_name(f.vulnerability_id)
+        id_display = f"{f.vulnerability_id} ({name})" if name else f.vulnerability_id
         sections.append(
-            f"### {f.vulnerability_id} — {f.severity.value} "
+            f"### {id_display} — {f.severity.value} "
             f"(confidence: {f.confidence.value}, verification: "
             f"{f.verification_status.value}){advisory_badge}\n"
             f"\n"

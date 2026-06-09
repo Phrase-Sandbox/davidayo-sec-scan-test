@@ -90,7 +90,7 @@ def test_metadata_section_includes_all_required_fields():
 def test_findings_table_present_when_findings_exist():
     report = build_markdown_report(_result(findings=[_finding()]))
     assert "## Findings (1)" in report
-    assert "| A03:2021 |" in report
+    assert "A03:2021 (Injection)" in report
 
 
 def test_findings_table_absent_when_no_findings():
