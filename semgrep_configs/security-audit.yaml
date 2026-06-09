@@ -70,7 +70,7 @@ rules:
     languages: [python]
     severity: ERROR
     metadata:
-      vuln_class: insecure_tls
+      vuln_class: weak_crypto
       owasp: A02:2021
 
   - id: python-requests-no-verify
@@ -81,7 +81,7 @@ rules:
     languages: [python]
     severity: ERROR
     metadata:
-      vuln_class: insecure_tls
+      vuln_class: weak_crypto
       owasp: A02:2021
 
   - id: python-assert-auth
@@ -93,7 +93,7 @@ rules:
     languages: [python]
     severity: WARNING
     metadata:
-      vuln_class: broken_access_control
+      vuln_class: auth_bypass
       owasp: A01:2021
 
   - id: python-yaml-load-unsafe
@@ -108,7 +108,7 @@ rules:
     languages: [python]
     severity: ERROR
     metadata:
-      vuln_class: deserialization
+      vuln_class: unsafe_yaml
       owasp: A08:2021
 
   - id: python-tempfile-insecure
@@ -122,7 +122,7 @@ rules:
     languages: [python]
     severity: WARNING
     metadata:
-      vuln_class: insecure_temp_file
+      vuln_class: path_traversal
       owasp: A01:2021
 
   - id: js-localstorage-sensitive
@@ -132,6 +132,8 @@ rules:
       - pattern: localStorage.setItem("auth", ...)
       - pattern: localStorage.setItem("password", ...)
       - pattern: localStorage.setItem("secret", ...)
+      - pattern: localStorage.setItem("creds", ...)
+      - pattern: localStorage.setItem("key", ...)
     message: >
       Storing sensitive tokens or credentials in localStorage is insecure —
       accessible to any JS on the page (XSS risk). Use HttpOnly cookies or
@@ -139,5 +141,5 @@ rules:
     languages: [javascript, typescript]
     severity: WARNING
     metadata:
-      vuln_class: insecure_storage
+      vuln_class: weak_crypto
       owasp: A02:2021

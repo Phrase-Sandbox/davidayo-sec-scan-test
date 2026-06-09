@@ -9,7 +9,11 @@ Taxonomy members
 ----------------
 sqli, xss, command_injection, path_traversal, ssrf, deserialization,
 weak_crypto, xxe, csrf, open_redirect, auth_bypass, code_injection,
-insecure_random, unsafe_yaml, unsafe_file_upload
+insecure_random, unsafe_yaml, unsafe_file_upload, injection_generic
+
+``injection_generic`` is the fallback for OWASP A03:2021 ("Injection") when
+description-based inference in merge.py cannot identify the specific subtype.
+It is purely internal — the OWASP ID (A03:2021) is preserved in the report.
 """
 
 from __future__ import annotations
@@ -137,7 +141,7 @@ _GOSEC_MAP: dict[str, str] = {
 # Semgrep (language-agnostic, using vendored rule IDs)
 # ---------------------------------------------------------------------------
 _SEMGREP_MAP: dict[str, str] = {
-    # OWASP top-ten vendored rules
+    # OWASP top-ten vendored rules — Python
     "python-sqli-fstring": "sqli",
     "python-sqli-string-format": "sqli",
     "python-sqli-concat": "sqli",
@@ -146,14 +150,29 @@ _SEMGREP_MAP: dict[str, str] = {
     "python-jinja2-autoescape-false": "xss",
     "jinja2-safe-filter": "xss",
     "python-eval-input": "code_injection",
+    "python-exec-input": "code_injection",       # exec() arbitrary code execution (CWE-94)
     "python-os-system-input": "command_injection",
     "python-pickle-loads": "deserialization",
+    "python-marshal-loads": "deserialization",    # marshal.loads() untrusted data (CWE-502)
     "python-xml-parse-no-defusedxml": "xxe",
-    # Security-audit vendored rules
+    # OWASP top-ten vendored rules — JavaScript/TypeScript
+    "js-innerhtml-assignment": "xss",            # innerHTML/outerHTML DOM XSS sink (CWE-79)
+    "js-document-write": "xss",                  # document.write DOM XSS sink (CWE-79)
+    "js-eval-input": "code_injection",           # eval() code injection (CWE-94)
+    "js-dangerously-set-innerhtml": "xss",       # React dangerouslySetInnerHTML (CWE-79)
+    "js-child-process-exec-concat": "command_injection",  # child_process.exec concat (CWE-78)
+    # Security-audit vendored rules — Python
     "python-subprocess-shell-true": "command_injection",
     "python-hashlib-md5": "weak_crypto",
     "python-hashlib-sha1": "weak_crypto",
     "python-random-security": "insecure_random",
+    "python-ssl-no-verify": "weak_crypto",        # TLS cert validation disabled (CWE-295, OWASP A02)
+    "python-requests-no-verify": "weak_crypto",   # requests verify=False (CWE-295, OWASP A02)
+    "python-assert-auth": "auth_bypass",          # assert for auth stripped by -O (OWASP A01)
+    "python-yaml-load-unsafe": "unsafe_yaml",     # yaml.load() unsafe Loader (CWE-502)
+    "python-tempfile-insecure": "path_traversal", # TOCTOU tempfile race (CWE-377)
+    # Security-audit vendored rules — JavaScript/TypeScript
+    "js-localstorage-sensitive": "weak_crypto",   # sensitive tokens in localStorage (CWE-922, OWASP A02)
     # Generic semgrep community IDs (r2c / p/owasp-top-ten etc.)
     "sql-injection": "sqli",
     "xss": "xss",
@@ -229,7 +248,7 @@ _TOOL_MAPS: dict[str, dict[str, str]] = {
 _OWASP_MAP: dict[str, str] = {
     "a01:2021": "auth_bypass",       # Broken Access Control
     "a02:2021": "weak_crypto",       # Cryptographic Failures
-    "a03:2021": "sqli",              # Injection (default to SQLi, most common)
+    "a03:2021": "injection_generic",  # Injection — specific class inferred from description in merge.py
     "a04:2021": "code_injection",    # Insecure Design
     "a05:2021": "code_injection",    # Security Misconfiguration
     "a06:2021": "code_injection",    # Vulnerable Components

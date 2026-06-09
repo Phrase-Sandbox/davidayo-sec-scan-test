@@ -45,10 +45,51 @@ _A03_CLASSES: frozenset[str] = frozenset({
 # Evaluated in order; first match wins.  Falls back to the primary normalized
 # class (usually "sqli" for A03:2021) when nothing matches.
 _DESCRIPTION_CLASS_HINTS: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"cross.site scripting|\bxss\b", re.IGNORECASE), "xss"),
-    (re.compile(r"command.injection|subprocess.*shell|os\.system", re.IGNORECASE), "command_injection"),
-    (re.compile(r"code.injection|\beval\b|\bexec\b", re.IGNORECASE), "code_injection"),
+    # XSS first — DOM sinks and XSS terminology before code_injection so that
+    # descriptions mentioning "eval" in an XSS context are not misclassified.
+    (re.compile(
+        r"cross.site scripting|\bxss\b|innerHTML|outerHTML|dangerouslySetInnerHTML"
+        r"|document\.write|html.*inject|reflected.*html|stored.*html|autoescape.*false"
+        r"|jinja.*\bsafe\b",
+        re.IGNORECASE,
+    ), "xss"),
+    # Command injection — shell execution patterns.
+    (re.compile(
+        r"command.injection|subprocess.*shell|os\.system|os\.popen"
+        r"|child_process|shell=True|shell.*true",
+        re.IGNORECASE,
+    ), "command_injection"),
+    # Code injection / SSTI — eval, exec, server-side template injection.
+    (re.compile(
+        r"code.injection|\beval\b|\bexec\b|server.side template|\bssti\b|template.*inject",
+        re.IGNORECASE,
+    ), "code_injection"),
+    # Unsafe YAML deserialization.
     (re.compile(r"unsafe.yaml|yaml\.load", re.IGNORECASE), "unsafe_yaml"),
+    # SQL injection — explicit match so the fallback is never silently reached.
+    (re.compile(
+        r"\bsql\b.*inject|inject.*\bsql\b|\bsql.*quer|cursor\.execute"
+        r"|raw.*quer|orm.*raw|prepared.*statement",
+        re.IGNORECASE,
+    ), "sqli"),
+    # Path traversal / file inclusion (LLM sometimes tags these A03:2021).
+    (re.compile(
+        r"path.*travers|directory.*travers|zip.*slip|tar.*slip"
+        r"|arbitrary.*file|\blfi\b|\brfi\b|file.*inclus|\.\./",
+        re.IGNORECASE,
+    ), "path_traversal"),
+    # Open redirect.
+    (re.compile(r"open.*redirect|unvalidated.*redirect", re.IGNORECASE), "open_redirect"),
+    # Deserialization (non-YAML).
+    (re.compile(
+        r"deserializ|pickle|marshal|java.*serial|untrusted.*object",
+        re.IGNORECASE,
+    ), "deserialization"),
+    # File upload / MIME / extension checks.
+    (re.compile(
+        r"file.*upload|upload.*file|mime.*type|arbitrary.*upload|file.*ext(?:ension)?",
+        re.IGNORECASE,
+    ), "unsafe_file_upload"),
 ]
 
 
