@@ -143,9 +143,13 @@ rules:
   # ---------------------------------------------------------------------------
 
   - id: js-fs-readfile-traversal
-    patterns:
-      - pattern: fs.readFile($PATH, ...)
-      - pattern-not: fs.readFile("...", ...)
+    pattern-either:
+      - patterns:
+          - pattern: fs.readFile($PATH, ...)
+          - pattern-not: fs.readFile("...", ...)
+      - patterns:
+          - pattern: readFile($PATH, ...)
+          - pattern-not: readFile("...", ...)
     message: >
       fs.readFile() with a potentially user-controlled path enables path traversal
       (CWE-22). An attacker can supply '../../../etc/passwd' to read arbitrary files.
@@ -159,9 +163,13 @@ rules:
       cwe: CWE-22
 
   - id: js-fs-readfilesync-traversal
-    patterns:
-      - pattern: fs.readFileSync($PATH, ...)
-      - pattern-not: fs.readFileSync("...", ...)
+    pattern-either:
+      - patterns:
+          - pattern: fs.readFileSync($PATH, ...)
+          - pattern-not: fs.readFileSync("...", ...)
+      - patterns:
+          - pattern: readFileSync($PATH, ...)
+          - pattern-not: readFileSync("...", ...)
     message: >
       fs.readFileSync() with a potentially user-controlled path enables path
       traversal. Validate the resolved path against an allowed base directory.
@@ -173,9 +181,13 @@ rules:
       cwe: CWE-22
 
   - id: js-fs-writefile-traversal
-    patterns:
-      - pattern: fs.writeFile($PATH, ...)
-      - pattern-not: fs.writeFile("...", ...)
+    pattern-either:
+      - patterns:
+          - pattern: fs.writeFile($PATH, ...)
+          - pattern-not: fs.writeFile("...", ...)
+      - patterns:
+          - pattern: writeFile($PATH, ...)
+          - pattern-not: writeFile("...", ...)
     message: >
       fs.writeFile() with a potentially user-controlled path enables path
       traversal for arbitrary file write (CWE-22). Validate the path before writing.
@@ -187,9 +199,13 @@ rules:
       cwe: CWE-22
 
   - id: js-fs-createreadstream-traversal
-    patterns:
-      - pattern: fs.createReadStream($PATH, ...)
-      - pattern-not: fs.createReadStream("...", ...)
+    pattern-either:
+      - patterns:
+          - pattern: fs.createReadStream($PATH, ...)
+          - pattern-not: fs.createReadStream("...", ...)
+      - patterns:
+          - pattern: createReadStream($PATH, ...)
+          - pattern-not: createReadStream("...", ...)
     message: >
       fs.createReadStream() with a potentially user-controlled path enables
       arbitrary file read. Validate the resolved path before streaming.
@@ -201,9 +217,19 @@ rules:
       cwe: CWE-22
 
   - id: js-path-join-traversal
-    patterns:
-      - pattern: path.join($BASE, $REQ)
-      - pattern-not: path.join($BASE, "...")
+    pattern-either:
+      - patterns:
+          - pattern: path.join($BASE, $REQ)
+          - pattern-not: path.join($BASE, "...")
+      - patterns:
+          - pattern: path.join($BASE, ..., $LAST)
+          - pattern-not: path.join($BASE, ..., "...")
+      - patterns:
+          - pattern: join($BASE, $REQ)
+          - pattern-not: join($BASE, "...")
+      - patterns:
+          - pattern: join($BASE, ..., $LAST)
+          - pattern-not: join($BASE, ..., "...")
     message: >
       path.join() with a potentially user-controlled component enables path
       traversal. An attacker can supply '..' segments to escape the base directory.

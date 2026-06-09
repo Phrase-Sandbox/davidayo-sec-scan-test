@@ -1,0 +1,273 @@
+rules:
+
+  # ---------------------------------------------------------------------------
+  # Go SQL injection
+  # ---------------------------------------------------------------------------
+
+  - id: go-sqli-sprintf
+    patterns:
+      - pattern: $DB.$METHOD(fmt.Sprintf($SQL, ...))
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: ^(Query|QueryContext|Exec|ExecContext|QueryRow|QueryRowContext)$
+    message: >
+      SQL query built with fmt.Sprintf() and user-controlled arguments (CWE-89).
+      Use parameterized queries: db.Query("SELECT ... WHERE id = ?", id).
+    languages: [go]
+    severity: ERROR
+    metadata:
+      vuln_class: sqli
+      owasp: A03:2021
+      cwe: CWE-89
+
+  - id: go-sqli-sprintf-assign
+    patterns:
+      - pattern: |
+          $QUERY := fmt.Sprintf($SQL, ...)
+          ...
+          $DB.$METHOD($QUERY, ...)
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: ^(Query|QueryContext|Exec|ExecContext|QueryRow|QueryRowContext)$
+    message: >
+      SQL query built with fmt.Sprintf() assigned to a variable then executed
+      (CWE-89). Use parameterized queries with ? placeholders instead.
+    languages: [go]
+    severity: ERROR
+    metadata:
+      vuln_class: sqli
+      owasp: A03:2021
+      cwe: CWE-89
+
+  - id: go-sqli-concat
+    patterns:
+      - pattern: $DB.$METHOD($SQL + $USERINPUT, ...)
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: ^(Query|QueryContext|Exec|ExecContext|QueryRow|QueryRowContext)$
+    message: >
+      SQL query built by string concatenation (CWE-89).
+      Use parameterized queries with ? placeholders.
+    languages: [go]
+    severity: ERROR
+    metadata:
+      vuln_class: sqli
+      owasp: A03:2021
+      cwe: CWE-89
+
+  # ---------------------------------------------------------------------------
+  # Go command injection
+  # ---------------------------------------------------------------------------
+
+  - id: go-cmd-injection-exec-command
+    patterns:
+      - pattern: exec.Command($CMD, $USERINPUT, ...)
+      - pattern-not: exec.Command("...", ...)
+    message: >
+      Command injection: exec.Command() with a potentially user-controlled
+      executable or arguments (CWE-78). Use a fixed command allowlist and pass
+      arguments as separate strings, never via shell expansion.
+    languages: [go]
+    severity: ERROR
+    metadata:
+      vuln_class: command_injection
+      owasp: A03:2021
+      cwe: CWE-78
+
+  - id: go-cmd-injection-exec-command-context
+    patterns:
+      - pattern: exec.CommandContext($CTX, $CMD, $USERINPUT, ...)
+      - pattern-not: exec.CommandContext($CTX, "...", ...)
+    message: >
+      Command injection: exec.CommandContext() with a potentially user-controlled
+      executable or arguments (CWE-78). Use a fixed command allowlist.
+    languages: [go]
+    severity: ERROR
+    metadata:
+      vuln_class: command_injection
+      owasp: A03:2021
+      cwe: CWE-78
+
+  # ---------------------------------------------------------------------------
+  # Go path traversal
+  # ---------------------------------------------------------------------------
+
+  - id: go-path-traversal-filepath-join
+    patterns:
+      - pattern: filepath.Join($BASE, $USERINPUT)
+      - pattern-not: filepath.Join($BASE, "...")
+    message: >
+      Path traversal: filepath.Join() with potentially user-controlled path
+      component (CWE-22). An attacker can supply '../../../etc/passwd' to escape
+      the base directory. Use filepath.Clean() and verify the result has the
+      expected prefix with strings.HasPrefix(path, base).
+    languages: [go]
+    severity: WARNING
+    metadata:
+      vuln_class: path_traversal
+      owasp: A01:2021
+      cwe: CWE-22
+
+  - id: go-path-traversal-os-open
+    patterns:
+      - pattern: os.Open($PATH)
+      - pattern-not: os.Open("...")
+    message: >
+      Path traversal: os.Open() with potentially user-controlled path (CWE-22).
+      Validate and normalize the path with filepath.Clean() and check it remains
+      within the allowed base directory.
+    languages: [go]
+    severity: WARNING
+    metadata:
+      vuln_class: path_traversal
+      owasp: A01:2021
+      cwe: CWE-22
+
+  - id: go-path-traversal-os-readfile
+    patterns:
+      - pattern: os.ReadFile($PATH)
+      - pattern-not: os.ReadFile("...")
+    message: >
+      Path traversal: os.ReadFile() with potentially user-controlled path (CWE-22).
+      Validate path with filepath.Clean() + strings.HasPrefix() before reading.
+    languages: [go]
+    severity: WARNING
+    metadata:
+      vuln_class: path_traversal
+      owasp: A01:2021
+      cwe: CWE-22
+
+  # ---------------------------------------------------------------------------
+  # Go SSRF
+  # ---------------------------------------------------------------------------
+
+  - id: go-ssrf-http-get
+    patterns:
+      - pattern: http.Get($URL)
+      - pattern-not: http.Get("...")
+    message: >
+      SSRF: http.Get() with a potentially user-controlled URL (CWE-918).
+      An attacker can target internal services or cloud metadata endpoints.
+      Validate the URL host against an allowlist before making the request.
+    languages: [go]
+    severity: WARNING
+    metadata:
+      vuln_class: ssrf
+      owasp: A10:2021
+      cwe: CWE-918
+
+  - id: go-ssrf-http-post
+    patterns:
+      - pattern: http.Post($URL, ...)
+      - pattern-not: http.Post("...", ...)
+    message: >
+      SSRF: http.Post() with a potentially user-controlled URL (CWE-918).
+      Validate the URL host against an allowlist before making the request.
+    languages: [go]
+    severity: WARNING
+    metadata:
+      vuln_class: ssrf
+      owasp: A10:2021
+      cwe: CWE-918
+
+  - id: go-ssrf-http-client-do
+    patterns:
+      - pattern: |
+          $REQ, $ERR = http.NewRequest($METHOD, $URL, ...)
+          ...
+          $CLIENT.Do($REQ)
+      - pattern-not: |
+          $REQ, $ERR = http.NewRequest($METHOD, "...", ...)
+          ...
+          $CLIENT.Do($REQ)
+    message: >
+      SSRF: http.NewRequest() with a potentially user-controlled URL (CWE-918).
+      Validate the target URL against an allowlist before making the request.
+    languages: [go]
+    severity: WARNING
+    metadata:
+      vuln_class: ssrf
+      owasp: A10:2021
+      cwe: CWE-918
+
+  # ---------------------------------------------------------------------------
+  # Go open redirect
+  # ---------------------------------------------------------------------------
+
+  - id: go-open-redirect
+    patterns:
+      - pattern: http.Redirect($W, $R, $URL, ...)
+      - pattern-not: http.Redirect($W, $R, "...", ...)
+    message: >
+      Open redirect: http.Redirect() with a potentially user-controlled URL
+      (CWE-601). Validate the destination against an allowlist of permitted URLs
+      before redirecting.
+    languages: [go]
+    severity: WARNING
+    metadata:
+      vuln_class: open_redirect
+      owasp: A01:2021
+      cwe: CWE-601
+
+  # ---------------------------------------------------------------------------
+  # Go weak crypto
+  # ---------------------------------------------------------------------------
+
+  - id: go-weak-hash-md5
+    patterns:
+      - pattern: md5.New()
+    message: >
+      MD5 is a broken hash function. Do not use for security purposes (passwords,
+      integrity checks, signatures). Use SHA-256 or bcrypt/argon2 for passwords.
+    languages: [go]
+    severity: WARNING
+    metadata:
+      vuln_class: weak_crypto
+      owasp: A02:2021
+      cwe: CWE-327
+
+  - id: go-weak-hash-sha1
+    patterns:
+      - pattern: sha1.New()
+    message: >
+      SHA-1 is broken (collision attacks demonstrated). Upgrade to SHA-256 or
+      stronger for all new code.
+    languages: [go]
+    severity: WARNING
+    metadata:
+      vuln_class: weak_crypto
+      owasp: A02:2021
+      cwe: CWE-327
+
+  # ---------------------------------------------------------------------------
+  # Go XSS
+  # ---------------------------------------------------------------------------
+
+  - id: go-xss-template-html-unsafe
+    patterns:
+      - pattern: template.HTML($USERINPUT)
+    message: >
+      XSS: template.HTML() marks content as safe HTML, bypassing Go's auto-escaping
+      (CWE-79). If $USERINPUT contains user-supplied data, arbitrary script can be
+      injected. Only use template.HTML() on content you have already sanitized.
+    languages: [go]
+    severity: ERROR
+    metadata:
+      vuln_class: xss
+      owasp: A03:2021
+      cwe: CWE-79
+
+  - id: go-xss-fmt-fprintf-response
+    patterns:
+      - pattern: fmt.Fprintf($W, $FORMAT, ..., $USERINPUT, ...)
+      - pattern-not: fmt.Fprintf($W, "...", ...)
+    message: >
+      XSS risk: fmt.Fprintf() writing user-controlled data to an http.ResponseWriter
+      without HTML escaping (CWE-79). Use html/template or html.EscapeString() to
+      encode output.
+    languages: [go]
+    severity: WARNING
+    metadata:
+      vuln_class: xss
+      owasp: A03:2021
+      cwe: CWE-79

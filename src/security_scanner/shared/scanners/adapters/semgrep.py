@@ -40,6 +40,8 @@ _INJECTION_CONFIG = _CONFIGS_DIR / "injection.yaml"
 _AUTH_CONFIG = _CONFIGS_DIR / "auth.yaml"
 _PHP_CONFIG = _CONFIGS_DIR / "php.yaml"
 _JAVA_CONFIG = _CONFIGS_DIR / "java.yaml"
+_GO_CONFIG = _CONFIGS_DIR / "go.yaml"
+_SECRETS_CONFIG = _CONFIGS_DIR / "secrets.yaml"
 
 # Maps rule-pack name → config path.
 # All packs are best-effort: missing or invalid configs are skipped silently.
@@ -55,6 +57,8 @@ _CONFIG_MAP: dict[str, Path] = {
     "auth": _AUTH_CONFIG,
     "php": _PHP_CONFIG,
     "java": _JAVA_CONFIG,
+    "go": _GO_CONFIG,
+    "secrets": _SECRETS_CONFIG,
 }
 
 # When SEMGREP_USE_REGISTRY=true, append official registry packs for broad
@@ -84,7 +88,8 @@ async def scan(
         An empty set skips Semgrep entirely.
 
         Recognised names: ``owasp``, ``audit``, ``upload``, ``ssrf``,
-        ``path_traversal``, ``injection``, ``auth``, ``php``, ``java``.
+        ``path_traversal``, ``injection``, ``auth``, ``php``, ``java``,
+        ``go``, ``secrets``.
         Registry packs (``p/owasp-top-ten``, ``p/default``) are added
         automatically when ``SEMGREP_USE_REGISTRY=true`` regardless of this
         parameter.
