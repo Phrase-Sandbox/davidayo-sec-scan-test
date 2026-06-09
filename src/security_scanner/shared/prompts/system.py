@@ -90,9 +90,9 @@ Each <finding> object MUST contain:
       Security Misconfiguration: open CORS (`*`), debug
         endpoints, verbose errors, default creds in config,
         missing security headers                               -> A05:2021
-      Vulnerable & Outdated Components (known-CVE dep,
+      Vulnerable and Outdated Components (known-CVE dep,
         unmaintained library)                                  -> A06:2021
-      Identification & Auth Failures: weak password
+      Identification and Authentication Failures: weak password
         validation, broken session handling, missing MFA,
         predictable tokens, JWT `alg=none`                     -> A07:2021
       Software & Data Integrity Failures: untrusted

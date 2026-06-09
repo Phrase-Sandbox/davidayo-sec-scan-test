@@ -60,9 +60,12 @@ _ADVISORY = (Severity.Low,)
 # Stable OWASP edition movements. Keys are 2021 IDs (or SECRET-001); values
 # render as a footnote under each card. Categories with no movement omit.
 _OWASP_2021_TO_2025: dict[str, str] = {
-    "A03:2021": "Injection moved to A05:2025 in the latest edition.",
-    "A07:2021": "Auth Failures absorbed into A05:2025 Security Misconfiguration.",
-    "SECRET-001": "Hard-coded credentials relate to A05:2025 Security Misconfiguration.",
+    "A03:2021": "Injection is A05:2025 in the latest edition.",
+    "A07:2021": "Renamed to A07:2025 Authentication Failures in the latest edition.",
+    "A08:2021": "Renamed to A08:2025 Software or Data Integrity Failures in the latest edition.",
+    "A09:2021": "Renamed to A09:2025 Security Logging and Alerting Failures in the latest edition.",
+    "A10:2021": "SSRF is not a standalone category in OWASP Top 10:2025.",
+    "SECRET-001": "Hard-coded credentials map to A04:2025 Cryptographic Failures in the latest edition.",  # noqa: E501
 }
 
 # Permissive `affected_lines` parser. Accepts "42", "42-55", "42, 43".

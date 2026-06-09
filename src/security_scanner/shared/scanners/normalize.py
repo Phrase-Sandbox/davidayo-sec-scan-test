@@ -497,7 +497,7 @@ _OWASP_MAP: dict[str, str] = {
     "a08:2021": "deserialization",  # Software and Data Integrity Failures
     "a09:2021": "logging_monitoring_failure",  # Security Logging and Monitoring Failures
     "a10:2021": "ssrf",  # SSRF
-    "secret-001": "weak_crypto",  # hardcoded credential
+    "secret-001": "hardcoded_secret",  # hardcoded credential
 }
 
 # Add OWASP map to the tool maps so normalize() can handle it.

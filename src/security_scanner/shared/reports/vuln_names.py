@@ -17,10 +17,10 @@ _VULN_ID_TO_NAME: dict[str, str] = {
     "A03:2021": "Injection",
     "A04:2021": "Insecure Design",
     "A05:2021": "Security Misconfiguration",
-    "A06:2021": "Vulnerable & Outdated Components",
-    "A07:2021": "Identification & Authentication Failures",
-    "A08:2021": "Software & Data Integrity Failures",
-    "A09:2021": "Security Logging & Monitoring Failures",
+    "A06:2021": "Vulnerable and Outdated Components",
+    "A07:2021": "Identification and Authentication Failures",
+    "A08:2021": "Software and Data Integrity Failures",
+    "A09:2021": "Security Logging and Monitoring Failures",
     "A10:2021": "Server-Side Request Forgery",
     # OWASP LLM Top 10 2025
     "LLM01:2025": "Prompt Injection",
@@ -72,3 +72,33 @@ _VULN_ID_TO_NAME: dict[str, str] = {
 def vuln_display_name(vuln_id: str) -> str:
     """Return the canonical human-readable name for a vuln ID, or '' if unknown."""
     return _VULN_ID_TO_NAME.get(vuln_id, "")
+
+
+_OWASP_REF_URLS: dict[str, str] = {
+    "A01:2021": "https://owasp.org/Top10/A01_2021-Broken_Access_Control/",
+    "A02:2021": "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/",
+    "A03:2021": "https://owasp.org/Top10/A03_2021-Injection/",
+    "A04:2021": "https://owasp.org/Top10/A04_2021-Insecure_Design/",
+    "A05:2021": "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/",
+    "A06:2021": "https://owasp.org/Top10/A06_2021-Vulnerable_and_Outdated_Components/",
+    "A07:2021": "https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/",
+    "A08:2021": "https://owasp.org/Top10/A08_2021-Software_and_Data_Integrity_Failures/",
+    "A09:2021": "https://owasp.org/Top10/A09_2021-Security_Logging_and_Monitoring_Failures/",
+    "A10:2021": "https://owasp.org/Top10/A10_2021-Server_Side_Request_Forgery_%28SSRF%29/",
+    "LLM01:2025": "https://genai.owasp.org/llm-top-10/llm01-prompt-injection/",
+    "LLM02:2025": "https://genai.owasp.org/llm-top-10/llm02-sensitive-information-disclosure/",
+    "LLM03:2025": "https://genai.owasp.org/llm-top-10/llm03-supply-chain/",
+    "LLM04:2025": "https://genai.owasp.org/llm-top-10/llm04-data-model-poisoning/",
+    "LLM05:2025": "https://genai.owasp.org/llm-top-10/llm05-improper-output-handling/",
+    "LLM06:2025": "https://genai.owasp.org/llm-top-10/llm06-excessive-agency/",
+    "LLM07:2025": "https://genai.owasp.org/llm-top-10/llm07-system-prompt-leakage/",
+    "LLM08:2025": "https://genai.owasp.org/llm-top-10/llm08-vector-embedding-weaknesses/",
+    "LLM09:2025": "https://genai.owasp.org/llm-top-10/llm09-misinformation/",
+    "LLM10:2025": "https://genai.owasp.org/llm-top-10/llm10-unbounded-consumption/",
+    "SECRET-001": "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/",
+}
+
+
+def owasp_reference_url(vulnerability_id: str) -> str:
+    """Return the canonical OWASP reference URL for a known vulnerability ID, or ''."""
+    return _OWASP_REF_URLS.get(vulnerability_id, "")

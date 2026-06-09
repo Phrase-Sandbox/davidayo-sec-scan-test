@@ -35,6 +35,7 @@ from security_scanner.shared.models.enums import (
 )
 from security_scanner.shared.models.finding import VulnerabilityFinding
 from security_scanner.shared.prompts.system import _defang_source_code_tags
+from security_scanner.shared.reports.vuln_names import owasp_reference_url
 from security_scanner.shared.scanners.types import CandidateForVerification
 from security_scanner.shared.severity.mapping import severity_to_cvss_band
 from security_scanner.shared.verification.prompts import build_vuln_verifier_system_prompt
@@ -924,7 +925,7 @@ def candidate_to_finding(
             candidate.suggested_fix
             or _tmpl.get("suggested_fix", "Review and remediate the identified vulnerability.")
         ),
-        owasp_reference=candidate.owasp_reference or "",
+        owasp_reference=owasp_reference_url(vuln_id) or candidate.owasp_reference or "",
         patch_file_path="",
         exploit_scenario=(
             candidate.exploit_scenario

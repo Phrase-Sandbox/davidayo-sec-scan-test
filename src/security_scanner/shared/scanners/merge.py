@@ -48,6 +48,17 @@ _A03_CLASSES: frozenset[str] = frozenset(
     }
 )
 
+# A01:2021 covers multiple access-control subtypes. Similar to A03, the LLM
+# emits A01:2021 for all of them, but scanners index under specific classes.
+_A01_CLASSES: frozenset[str] = frozenset(
+    {
+        "auth_bypass",
+        "path_traversal",
+        "csrf",
+        "open_redirect",
+    }
+)
+
 # Patterns used to infer the specific vuln_class from an LLM description when
 # a scanner match was not found and the OWASP ID alone is too broad.
 # Evaluated in order; first match wins.  Falls back to the primary normalized
@@ -189,6 +200,10 @@ def _llm_candidate_classes(finding: VulnerabilityFinding) -> list[str]:
     if finding.vulnerability_id.upper() == "A03:2021":
         inferred = _infer_class_from_description(finding.description or "", primary)
         extras = sorted(_A03_CLASSES - {inferred})
+        return [inferred] + extras
+    if finding.vulnerability_id.upper() == "A01:2021":
+        inferred = _infer_class_from_description(finding.description or "", primary)
+        extras = sorted(_A01_CLASSES - {inferred})
         return [inferred] + extras
     return [primary]
 

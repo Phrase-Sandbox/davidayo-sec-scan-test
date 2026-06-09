@@ -361,16 +361,15 @@ def test_ai_prompt_text_includes_file_path_and_suggested_fix_phrase():
 
 
 def test_owasp_edition_footnote_rendered_for_known_2021_ids():
-    # A03:2021 has a known 2025 movement; the footnote appears.
+    # A03:2021 has a known 2025 cross-reference; the footnote appears.
     f = _finding(vulnerability_id="A03:2021", severity=Severity.Critical)
     html = build_html_report(_result(findings=[f]))
-    assert "moved to A05:2025" in html
+    assert "A05:2025" in html
 
 
 def test_owasp_edition_footnote_absent_for_ids_without_known_movement():
     f = _finding(vulnerability_id="A04:2021", severity=Severity.Critical)
     html = build_html_report(_result(findings=[f]))
-    assert "moved to A05:2025" not in html
     assert "A05:2025" not in html  # nothing leaks in for unmapped IDs
 
 
