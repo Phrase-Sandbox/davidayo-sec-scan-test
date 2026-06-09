@@ -794,6 +794,43 @@ async def portal_report_detail(
     )
 
 
+@router.get("/reports/{scan_id}/html", response_class=Response)
+async def portal_report_html(
+    user: _UserDep,
+    scan_id: str,
+    download: bool = Query(default=False),
+) -> Response:
+    """Serve the raw HTML report for iframe embedding or download."""
+    import uuid  # noqa: PLC0415
+
+    try:
+        scan_uuid = uuid.UUID(scan_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Invalid scan ID."
+        ) from exc
+
+    factory = get_session_factory()
+    async with factory() as session:
+        stmt = select(ScanRecord).where(
+            ScanRecord.scan_id == scan_uuid,
+            ScanRecord.user_email == user.email,
+        )
+        scan = (await session.execute(stmt)).scalar_one_or_none()
+
+    if scan is None or not scan.html_report:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Report not found."
+        )
+
+    headers: dict[str, str] = {}
+    if download:
+        headers["Content-Disposition"] = (
+            f'attachment; filename="scan-{scan_id[:8]}.html"'
+        )
+    return Response(content=scan.html_report, media_type="text/html", headers=headers)
+
+
 # ---------------------------------------------------------------------------
 # Usage transparency (/portal/usage)
 # ---------------------------------------------------------------------------

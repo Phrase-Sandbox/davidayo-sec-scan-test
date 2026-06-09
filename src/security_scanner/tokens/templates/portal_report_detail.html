@@ -108,13 +108,32 @@
 
 {% if scan.html_report %}
 <div class="card" style="padding: 0; overflow: hidden;">
-  <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border);">
+  <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
     <h2 style="margin: 0;">Full Report</h2>
+    <a href="/portal/reports/{{ scan.scan_id }}/html?download=true"
+       style="font-size: 0.85rem; color: var(--accent);">Download HTML ↓</a>
   </div>
-  <div style="padding: 1.5rem;">
-    {{ scan.html_report | safe }}
-  </div>
+  <iframe
+    id="report-iframe"
+    src="/portal/reports/{{ scan.scan_id }}/html"
+    style="width: 100%; border: none; display: block; min-height: 600px;"
+    sandbox="allow-same-origin allow-scripts"
+    loading="lazy"
+    title="Scan report"
+  ></iframe>
 </div>
+<script>
+  (function () {
+    var iframe = document.getElementById('report-iframe');
+    function resize() {
+      try {
+        iframe.style.height =
+          iframe.contentWindow.document.documentElement.scrollHeight + 'px';
+      } catch (_) {}
+    }
+    iframe.addEventListener('load', resize);
+  })();
+</script>
 {% elif scan.markdown_report %}
 <div class="card">
   <h2>Report</h2>
