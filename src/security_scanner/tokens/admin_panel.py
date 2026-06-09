@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+import uuid as _uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated
@@ -27,7 +29,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import desc, func, select
+from sqlalchemy import delete, desc, func, select
 
 from security_scanner.shared.config import get_settings
 from security_scanner.shared.logging_util import get_logger
@@ -857,6 +859,7 @@ async def admin_advanced_settings_post(
     enable_partial_scan: Annotated[str, Form()] = "",
     enable_zero_findings_retry: Annotated[str, Form()] = "",
     enable_quality_gate: Annotated[str, Form()] = "",
+    report_retention_days: Annotated[str, Form()] = "",
     enable_semgrep: Annotated[str, Form()] = "",
     enable_bandit: Annotated[str, Form()] = "",
     enable_gosec: Annotated[str, Form()] = "",
@@ -893,6 +896,7 @@ async def admin_advanced_settings_post(
         enable_partial_scan=bool(enable_partial_scan),
         enable_zero_findings_retry=bool(enable_zero_findings_retry),
         enable_quality_gate=bool(enable_quality_gate),
+        report_retention_days=int(report_retention_days) if report_retention_days.strip().isdigit() else None,
         high_risk_paths=high_risk_paths.strip(),
         updated_at=now,
         updated_by_email=admin.email,
@@ -1117,3 +1121,226 @@ async def admin_usage(
             "flash": None,
         },
     )
+
+
+# --- Reports (/admin/reports) -----------------------------------------------
+
+
+_REPORTS_PAGE_SIZE = 25
+
+
+@dataclass
+class _ReportRow:
+    source: str  # "portal" | "ci"
+    scan_id: _uuid.UUID
+    started_at: datetime
+    actor: str
+    repo_url: str
+    provider: str | None
+    status: str
+    findings_count: int
+    critical: int
+    high: int
+    medium: int
+    low: int
+    has_report: bool  # True if html_report is not None (portal only)
+
+
+async def _fetch_report_rows(session) -> list[_ReportRow]:  # type: ignore[type-arg]
+    """Fetch all portal + CI scan records and merge into a unified sorted list."""
+    portal_stmt = select(ScanRecord).order_by(desc(ScanRecord.started_at))
+    portal_rows = (await session.execute(portal_stmt)).scalars().all()
+
+    ci_stmt = select(CiScanRecord).order_by(desc(CiScanRecord.started_at))
+    ci_rows = (await session.execute(ci_stmt)).scalars().all()
+
+    rows: list[_ReportRow] = []
+    for r in portal_rows:
+        rows.append(_ReportRow(
+            source="portal",
+            scan_id=r.scan_id,
+            started_at=r.started_at,
+            actor=r.user_email,
+            repo_url=r.repo_url or "",
+            provider=r.provider,
+            status=r.status.value if hasattr(r.status, "value") else str(r.status),
+            findings_count=r.findings_count,
+            critical=r.critical,
+            high=r.high,
+            medium=r.medium,
+            low=r.low,
+            has_report=bool(r.html_report),
+        ))
+    for r in ci_rows:
+        rows.append(_ReportRow(
+            source="ci",
+            scan_id=r.scan_id,
+            started_at=r.started_at,
+            actor=r.triggered_by,
+            repo_url=r.repo_url or "",
+            provider=r.provider,
+            status=r.status.value if hasattr(r.status, "value") else str(r.status),
+            findings_count=r.findings_count,
+            critical=r.critical,
+            high=r.high,
+            medium=r.medium,
+            low=r.low,
+            has_report=False,
+        ))
+
+    rows.sort(key=lambda x: x.started_at, reverse=True)
+    return rows
+
+
+def _render_reports(
+    request: Request,
+    admin: PhraseUser,
+    rows: list[_ReportRow],
+    page: int,
+    flash: str | None = None,
+) -> HTMLResponse:
+    total = len(rows)
+    offset = (page - 1) * _REPORTS_PAGE_SIZE
+    page_rows = rows[offset: offset + _REPORTS_PAGE_SIZE]
+    has_next = offset + _REPORTS_PAGE_SIZE < total
+    portal_count = sum(1 for r in rows if r.source == "portal")
+    ci_count = total - portal_count
+    return templates.TemplateResponse(
+        request,
+        "admin_reports.html",
+        {
+            "user": admin,
+            "rows": page_rows,
+            "page": page,
+            "has_next": has_next,
+            "portal_count": portal_count,
+            "ci_count": ci_count,
+            "flash": flash,
+        },
+        headers=_NO_STORE_HEADERS,
+    )
+
+
+@router.get("/reports", response_class=HTMLResponse)
+async def admin_reports(
+    request: Request,
+    admin: _AdminDep,
+    page: Annotated[int, Query(ge=1)] = 1,
+) -> HTMLResponse:
+    """Combined portal + CI scan report list."""
+    factory = get_session_factory()
+    async with factory() as session:
+        all_rows = await _fetch_report_rows(session)
+    return _render_reports(request, admin, all_rows, page)
+
+
+@router.post("/reports/purge-all", response_class=HTMLResponse)
+async def admin_reports_purge_all(
+    request: Request,
+    admin: _AdminDep,
+) -> HTMLResponse:
+    """Delete ALL portal and CI scan records."""
+    factory = get_session_factory()
+    async with factory() as session:
+        portal_result = await session.execute(delete(ScanRecord))
+        ci_result = await session.execute(delete(CiScanRecord))
+        await session.commit()
+        portal_deleted = portal_result.rowcount or 0
+        ci_deleted = ci_result.rowcount or 0
+        all_rows = await _fetch_report_rows(session)
+
+    log.info(
+        "admin reports purge_all",
+        actor_email=admin.email,
+        portal_deleted=portal_deleted,
+        ci_deleted=ci_deleted,
+    )
+    flash = f"ok:Purged {portal_deleted} portal and {ci_deleted} CI records."
+    return _render_reports(request, admin, all_rows, page=1, flash=flash)
+
+
+@router.post("/reports/bulk-delete", response_class=HTMLResponse)
+async def admin_reports_bulk_delete(
+    request: Request,
+    admin: _AdminDep,
+) -> HTMLResponse:
+    """Delete selected scan records. Form posts scan_ids as 'source:uuid' strings."""
+    form = await request.form()
+    raw_ids: list[str] = form.getlist("scan_ids")
+
+    portal_ids: list[_uuid.UUID] = []
+    ci_ids: list[_uuid.UUID] = []
+    for item in raw_ids:
+        parts = item.split(":", 1)
+        if len(parts) != 2:
+            continue
+        source, scan_id_str = parts
+        try:
+            uid = _uuid.UUID(scan_id_str)
+        except ValueError:
+            continue
+        if source == "portal":
+            portal_ids.append(uid)
+        elif source == "ci":
+            ci_ids.append(uid)
+
+    deleted = 0
+    factory = get_session_factory()
+    async with factory() as session:
+        if portal_ids:
+            res = await session.execute(
+                delete(ScanRecord).where(ScanRecord.scan_id.in_(portal_ids))
+            )
+            deleted += res.rowcount or 0
+        if ci_ids:
+            res = await session.execute(
+                delete(CiScanRecord).where(CiScanRecord.scan_id.in_(ci_ids))
+            )
+            deleted += res.rowcount or 0
+        await session.commit()
+        all_rows = await _fetch_report_rows(session)
+
+    log.info("admin reports bulk_delete", actor_email=admin.email, deleted=deleted)
+    flash = f"ok:Deleted {deleted} record{'s' if deleted != 1 else ''}."
+    return _render_reports(request, admin, all_rows, page=1, flash=flash)
+
+
+@router.post("/reports/{scan_id}/delete", response_class=HTMLResponse)
+async def admin_delete_report(
+    request: Request,
+    admin: _AdminDep,
+    scan_id: str,
+) -> HTMLResponse:
+    """Delete a single scan record (portal or CI)."""
+    try:
+        scan_uuid = _uuid.UUID(scan_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid scan ID.") from exc
+
+    factory = get_session_factory()
+    async with factory() as session:
+        portal_row = (
+            await session.execute(select(ScanRecord).where(ScanRecord.scan_id == scan_uuid))
+        ).scalar_one_or_none()
+
+        if portal_row is not None:
+            await session.delete(portal_row)
+            deleted = True
+        else:
+            ci_row = (
+                await session.execute(
+                    select(CiScanRecord).where(CiScanRecord.scan_id == scan_uuid)
+                )
+            ).scalar_one_or_none()
+            if ci_row is not None:
+                await session.delete(ci_row)
+                deleted = True
+            else:
+                deleted = False
+
+        await session.commit()
+        all_rows = await _fetch_report_rows(session)
+
+    log.info("admin reports delete", actor_email=admin.email, scan_id=scan_id, deleted=deleted)
+    flash = f"ok:Record deleted." if deleted else f"error:Record {scan_id} not found."
+    return _render_reports(request, admin, all_rows, page=1, flash=flash)

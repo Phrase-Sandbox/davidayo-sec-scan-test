@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Report {{ scan.scan_id }} — Phrase Security Scanner{% endblock %}
+{% block tabs %}
+<nav class="tabs">
+  <a href="/portal/">Token</a>
+  <a href="/portal/settings">Settings</a>
+  <a href="/portal/reports" class="active">Reports</a>
+  <a href="/portal/usage">Usage</a>
+</nav>
+{% endblock %}
+{% block content %}
+<p style="margin-bottom: 1rem;">
+  <a href="/portal/reports" style="font-size: 0.9rem;">← All reports</a>
+</p>
+
+<div class="card">
+  <h2>Scan Summary</h2>
+  <dl>
+    <dt>Scan ID</dt><dd class="mono" style="font-size: 0.85rem;">{{ scan.scan_id }}</dd>
+    <dt>Repo</dt><dd>{{ scan.repo_url }}</dd>
+    <dt>Started</dt><dd>{{ scan.started_at.strftime("%Y-%m-%d %H:%M UTC") if scan.started_at else "—" }}</dd>
+    <dt>Finished</dt><dd>{{ scan.finished_at.strftime("%Y-%m-%d %H:%M UTC") if scan.finished_at else "—" }}</dd>
+    <dt>Status</dt>
+    <dd>
+      {% if scan.status == "ok" %}<span class="pill pill-ok">ok</span>
+      {% else %}<span class="pill pill-fail">{{ scan.status }}</span>{% endif %}
+    </dd>
+    <dt>Provider</dt><dd>{{ scan.provider or "—" }}</dd>
+    <dt>Model</dt><dd>{{ scan.model or "—" }}</dd>
+    <dt>Findings</dt>
+    <dd>
+      {{ scan.findings_count }}
+      {% if scan.critical %}&nbsp;<span class="sev sev-C">{{ scan.critical }}C</span>{% endif %}
+      {% if scan.high %}&nbsp;<span class="sev sev-H">{{ scan.high }}H</span>{% endif %}
+      {% if scan.medium %}&nbsp;<span class="sev sev-M">{{ scan.medium }}M</span>{% endif %}
+      {% if scan.low %}&nbsp;<span class="sev sev-L">{{ scan.low }}L</span>{% endif %}
+    </dd>
+  </dl>
+</div>
+
+{% if usage %}
+<div class="card">
+  <h2>LLM Usage — this scan</h2>
+  <p class="muted" style="font-size: 0.85rem; margin-bottom: 1rem;">
+    These numbers come directly from the provider SDK response. Cross-reference
+    with your provider console using the response IDs below.
+  </p>
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-num">{{ "{:,}".format(usage.n_llm_calls) }}</div>
+      <div class="stat-label">LLM calls</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num">{{ "{:,}".format(usage.input_tokens) }}</div>
+      <div class="stat-label">Input tokens</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num">{{ "{:,}".format(usage.output_tokens) }}</div>
+      <div class="stat-label">Output tokens</div>
+    </div>
+    {% if usage.cache_read_input_tokens %}
+    <div class="stat-card">
+      <div class="stat-num">{{ "{:,}".format(usage.cache_read_input_tokens) }}</div>
+      <div class="stat-label">Cache-read tokens</div>
+    </div>
+    {% endif %}
+    {% if usage.cache_creation_input_tokens %}
+    <div class="stat-card">
+      <div class="stat-num">{{ "{:,}".format(usage.cache_creation_input_tokens) }}</div>
+      <div class="stat-label">Cache-write tokens</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% if response_ids %}
+<div class="card">
+  <h2>Provider Response IDs</h2>
+  <p class="muted" style="font-size: 0.85rem; margin-bottom: 0.75rem;">
+    Each ID maps to a single LLM API call. Click
+    <strong>Open in Console</strong> to verify the exact token counts
+    and content against your provider's own records.
+  </p>
+  <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+    {% for rid in response_ids %}
+    <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.75rem;
+                background: var(--bg); border: 1px solid var(--border); border-radius: 6px;">
+      <code class="mono" style="flex: 1; font-size: 0.82rem;">{{ rid }}</code>
+      <button onclick="navigator.clipboard.writeText('{{ rid }}').then(() => { this.textContent = 'Copied!'; setTimeout(() => this.textContent = 'Copy', 1500); })"
+              class="btn" style="font-size: 0.8rem; padding: 0.3rem 0.6rem; flex-shrink: 0;">Copy</button>
+      {% if scan.provider == "anthropic" %}
+      <a href="{{ console_base }}?message={{ rid }}" target="_blank" rel="noopener"
+         class="btn" style="font-size: 0.8rem; padding: 0.3rem 0.6rem; flex-shrink: 0; white-space: nowrap;">
+        Open in Anthropic Console ↗
+      </a>
+      {% else %}
+      <a href="{{ console_base }}" target="_blank" rel="noopener"
+         class="btn" style="font-size: 0.8rem; padding: 0.3rem 0.6rem; flex-shrink: 0; white-space: nowrap;">
+        Open in Google Cloud ↗
+      </a>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if scan.html_report %}
+<div class="card" style="padding: 0; overflow: hidden;">
+  <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border);">
+    <h2 style="margin: 0;">Full Report</h2>
+  </div>
+  <div style="padding: 1.5rem;">
+    {{ scan.html_report | safe }}
+  </div>
+</div>
+{% elif scan.markdown_report %}
+<div class="card">
+  <h2>Report</h2>
+  <pre style="font-size: 0.85rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word;">{{ scan.markdown_report }}</pre>
+</div>
+{% endif %}
+{% endblock %}

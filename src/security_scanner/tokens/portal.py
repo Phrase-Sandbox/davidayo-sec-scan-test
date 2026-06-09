@@ -686,17 +686,30 @@ async def portal_settings_post(
 
 
 # ---------------------------------------------------------------------------
-# Scan history (/portal/scans, /portal/scans/<scan_id>)
+# Scan reports (/portal/reports, /portal/reports/<scan_id>)
+# Legacy /portal/scans paths redirect 301 for backward compat.
 # ---------------------------------------------------------------------------
 
 
 @router.get("/scans", response_class=HTMLResponse)
-async def portal_scans(
+async def _portal_scans_redirect() -> HTMLResponse:
+    from fastapi.responses import RedirectResponse  # noqa: PLC0415
+    return RedirectResponse("/portal/reports", status_code=301)
+
+
+@router.get("/scans/{scan_id}", response_class=HTMLResponse)
+async def _portal_scan_detail_redirect(scan_id: str) -> HTMLResponse:
+    from fastapi.responses import RedirectResponse  # noqa: PLC0415
+    return RedirectResponse(f"/portal/reports/{scan_id}", status_code=301)
+
+
+@router.get("/reports", response_class=HTMLResponse)
+async def portal_reports(
     request: Request,
     user: _UserDep,
     page: Annotated[int, Query(ge=1)] = 1,
 ) -> HTMLResponse:
-    """Paginated list of the caller's scan records."""
+    """Paginated list of the caller's scan reports."""
     factory = get_session_factory()
     offset = (page - 1) * _SCANS_PAGE_SIZE
     async with factory() as session:
@@ -714,7 +727,7 @@ async def portal_scans(
 
     return templates.TemplateResponse(
         request,
-        "portal_scans.html",
+        "portal_reports.html",
         {
             "user": user,
             "scans": scans,
@@ -724,8 +737,8 @@ async def portal_scans(
     )
 
 
-@router.get("/scans/{scan_id}", response_class=HTMLResponse)
-async def portal_scan_detail(
+@router.get("/reports/{scan_id}", response_class=HTMLResponse)
+async def portal_report_detail(
     request: Request,
     user: _UserDep,
     scan_id: str,
@@ -770,7 +783,7 @@ async def portal_scan_detail(
 
     return templates.TemplateResponse(
         request,
-        "portal_scan_detail.html",
+        "portal_report_detail.html",
         {
             "user": user,
             "scan": scan,

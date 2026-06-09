@@ -13,10 +13,12 @@ this drain has time to complete.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 
 from fastapi import FastAPI, Response, status
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -171,8 +173,69 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         token_registry_enabled=settings.USE_TOKEN_REGISTRY,
         admin_local_bypass=settings.ADMIN_LOCAL_BYPASS,
     )
+
+    purge_task: asyncio.Task | None = None
+    if settings.DATABASE_URL:
+        purge_task = asyncio.create_task(_report_retention_loop())
+
     yield
+
+    if purge_task is not None:
+        purge_task.cancel()
+        try:
+            await purge_task
+        except asyncio.CancelledError:
+            pass
     log.info("service shutting down", version=VERSION)
+
+
+async def _report_retention_loop() -> None:
+    """Background task: purge scan records older than the configured retention window.
+
+    Runs once immediately at startup, then every 24 hours. Only fires when
+    report_retention_days is set in ScannerSettings; silently skips otherwise.
+    Exceptions are caught and logged so a DB hiccup can never crash the app.
+    """
+    from sqlalchemy import delete, desc, select  # noqa: PLC0415
+
+    from security_scanner.tokens.db import get_session_factory  # noqa: PLC0415
+    from security_scanner.tokens.models import (  # noqa: PLC0415
+        CiScanRecord,
+        ScanRecord,
+        ScannerSettings,
+    )
+
+    while True:
+        try:
+            factory = get_session_factory()
+            async with factory() as session:
+                sc = (
+                    await session.execute(
+                        select(ScannerSettings).order_by(desc(ScannerSettings.id)).limit(1)
+                    )
+                ).scalar_one_or_none()
+                if sc and sc.report_retention_days:
+                    cutoff = datetime.now(UTC) - timedelta(days=sc.report_retention_days)
+                    portal_res = await session.execute(
+                        delete(ScanRecord).where(ScanRecord.started_at < cutoff)
+                    )
+                    ci_res = await session.execute(
+                        delete(CiScanRecord).where(CiScanRecord.started_at < cutoff)
+                    )
+                    await session.commit()
+                    portal_n = portal_res.rowcount or 0
+                    ci_n = ci_res.rowcount or 0
+                    if portal_n or ci_n:
+                        log.info(
+                            "report retention purge",
+                            retention_days=sc.report_retention_days,
+                            portal_deleted=portal_n,
+                            ci_deleted=ci_n,
+                        )
+        except Exception:  # noqa: BLE001 — purge must never crash the app
+            log.warning("report retention purge failed", exc_info=True)
+
+        await asyncio.sleep(86400)  # 24 h
 
 
 def _local_test_mode_enabled() -> bool:

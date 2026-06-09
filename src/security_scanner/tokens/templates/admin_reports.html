@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}Admin — Reports{% endblock %}
+
+{% block extra_styles %}
+<style>
+  .source-badge {
+    display: inline-block;
+    font: 11px/1 ui-monospace, "SF Mono", Menlo, monospace;
+    border-radius: 4px;
+    padding: 0.18em 0.45em;
+    white-space: nowrap;
+  }
+  .source-portal { background: rgba(37,99,235,0.08); border: 1px solid rgba(37,99,235,0.25); color: #1e3a8a; }
+  .source-ci     { background: rgba(5,150,105,0.07);  border: 1px solid rgba(5,150,105,0.25);  color: #065f46; }
+  .email-cell { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.82rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card" style="padding:0.6rem 1rem;">
+  <p style="margin:0; display:flex; gap:0.35rem; flex-wrap:wrap;">
+    <a href="/admin/tokens" class="btn">Tokens</a>
+    <a href="/admin/users" class="btn">Users</a>
+    <a href="/admin/org-settings" class="btn">Org Settings</a>
+    <a href="/admin/ci-token" class="btn">CI Token</a>
+    <a href="/admin/audit" class="btn">Audit log</a>
+    <a href="/admin/usage" class="btn">Usage</a>
+    <a href="/admin/reports" class="btn">Reports</a>
+    <a href="/admin/advanced-settings" class="btn">Advanced Settings</a>
+  </p>
+</div>
+
+{# ── Header + bulk actions ── #}
+<div class="card">
+  <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.6rem; margin-bottom:0.6rem;">
+    <h2 style="margin:0;">Scan Reports</h2>
+    <span class="muted" style="font-size:0.82rem;">{{ portal_count }} portal &nbsp;·&nbsp; {{ ci_count }} CI</span>
+  </div>
+  <p class="muted" style="margin:0; font-size:0.83rem;">
+    Combined view of all portal and CI scans across the organisation.
+    Portal scans have full HTML reports; CI scans show metadata only.
+  </p>
+</div>
+
+{# ── Main table (wrapped in a form for bulk/purge actions) ── #}
+<form method="post" id="bulk-form">
+<div class="card" style="padding:0; overflow:hidden;">
+
+  {# Toolbar #}
+  <div style="padding:0.6rem 1rem; border-bottom:1px solid var(--border); display:flex; gap:0.4rem; flex-wrap:wrap; align-items:center;">
+    <button type="submit" formaction="/admin/reports/bulk-delete" class="btn btn-danger"
+            style="font-size:0.82rem;"
+            onclick="return document.querySelectorAll('input[name=scan_ids]:checked').length > 0 || (alert('Select at least one row.'), false)">
+      Delete Selected
+    </button>
+    <button type="submit" formaction="/admin/reports/purge-all" class="btn btn-danger"
+            style="font-size:0.82rem;"
+            onclick="return confirm('Delete ALL scan records? This cannot be undone.')">
+      Purge All
+    </button>
+    <label style="margin-left:auto; font-size:0.82rem; color:var(--muted); cursor:pointer;">
+      <input type="checkbox" id="select-all" style="margin-right:0.3rem;"
+             onchange="document.querySelectorAll('input[name=scan_ids]').forEach(c => c.checked = this.checked)">
+      Select all
+    </label>
+  </div>
+
+  {% if rows %}
+  <div style="overflow-x:auto;">
+    <table style="min-width:800px;">
+      <thead>
+        <tr>
+          <th style="width:32px;"></th>
+          <th style="width:70px;">Type</th>
+          <th style="width:130px;">Started</th>
+          <th>User / Actor</th>
+          <th>Repo</th>
+          <th style="width:90px;">Provider</th>
+          <th style="width:60px;">Status</th>
+          <th style="text-align:center; width:32px;">C</th>
+          <th style="text-align:center; width:32px;">H</th>
+          <th style="text-align:center; width:32px;">M</th>
+          <th style="text-align:center; width:32px;">L</th>
+          <th style="width:140px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td style="text-align:center;">
+            <input type="checkbox" name="scan_ids" value="{{ row.source }}:{{ row.scan_id }}">
+          </td>
+          <td>
+            {% if row.source == "portal" %}
+              <span class="source-badge source-portal">portal</span>
+            {% else %}
+              <span class="source-badge source-ci">CI</span>
+            {% endif %}
+          </td>
+          <td class="mono" style="font-size:0.8rem; white-space:nowrap; color:var(--muted);">
+            {{ row.started_at.strftime("%Y-%m-%d") }}<br>
+            <span style="font-size:0.74rem;">{{ row.started_at.strftime("%H:%M") }}</span>
+          </td>
+          <td>
+            <span class="email-cell" title="{{ row.actor }}">{{ row.actor }}</span>
+          </td>
+          <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:0.85rem;">
+            <span title="{{ row.repo_url }}">{{ row.repo_url | replace("https://github.com/", "") or "—" }}</span>
+          </td>
+          <td class="muted" style="font-size:0.82rem;">{{ row.provider or "—" }}</td>
+          <td>
+            {% if row.status == "ok" %}
+              <span class="pill pill-ok">ok</span>
+            {% else %}
+              <span class="pill pill-fail">{{ row.status }}</span>
+            {% endif %}
+          </td>
+          <td style="text-align:center;">
+            {% if row.critical %}<span class="sev sev-C">{{ row.critical }}</span>{% else %}<span class="muted">0</span>{% endif %}
+          </td>
+          <td style="text-align:center;">
+            {% if row.high %}<span class="sev sev-H">{{ row.high }}</span>{% else %}<span class="muted">0</span>{% endif %}
+          </td>
+          <td style="text-align:center;">
+            {% if row.medium %}<span class="sev sev-M">{{ row.medium }}</span>{% else %}<span class="muted">0</span>{% endif %}
+          </td>
+          <td style="text-align:center;">
+            {% if row.low %}<span class="sev sev-L">{{ row.low }}</span>{% else %}<span class="muted">0</span>{% endif %}
+          </td>
+          <td style="white-space:nowrap;">
+            {% if row.source == "portal" and row.has_report %}
+              <a href="/portal/reports/{{ row.scan_id }}" target="_blank" rel="noopener"
+                 style="font-size:0.8rem; margin-right:0.5rem;">View ↗</a>
+            {% else %}
+              <span class="muted" style="font-size:0.8rem; margin-right:0.5rem;">—</span>
+            {% endif %}
+            <form method="post" action="/admin/reports/{{ row.scan_id }}/delete" style="display:inline;"
+                  onsubmit="return confirm('Delete this record?')">
+              <button type="submit" class="btn btn-danger" style="font-size:0.76rem; padding:0.2rem 0.5rem;">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# Pagination #}
+  <div style="display:flex; justify-content:space-between; align-items:center;
+              padding:0.65rem 1rem; border-top:1px solid var(--border);">
+    <span class="muted" style="font-size:0.81rem;">Page {{ page }}</span>
+    <div style="display:flex; gap:0.3rem;">
+      {% if page > 1 %}
+        <a href="/admin/reports?page={{ page - 1 }}" class="btn" style="font-size:0.82rem;">← Prev</a>
+      {% endif %}
+      {% if has_next %}
+        <a href="/admin/reports?page={{ page + 1 }}" class="btn" style="font-size:0.82rem;">Next →</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% else %}
+  <div style="padding:3rem 1.5rem; text-align:center; color:var(--muted);">
+    <p style="margin:0; font-size:0.9rem;">No scan records found.</p>
+  </div>
+  {% endif %}
+
+</div>
+</form>
+{% endblock %}

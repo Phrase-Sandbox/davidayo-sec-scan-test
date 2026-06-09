@@ -280,6 +280,9 @@ class ScannerSettings(Base):
     enable_quality_gate: Mapped[bool] = mapped_column(
         Boolean(), nullable=False, server_default="false"
     )
+    # Report retention — auto-purge scan_records and ci_scan_records older than N days.
+    # None = no automatic purging (default; admin must opt in).
+    report_retention_days: Mapped[int | None] = mapped_column(Integer(), nullable=True, default=None)
     # Audit trail
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_by_email: Mapped[str] = mapped_column(String(320), nullable=False)

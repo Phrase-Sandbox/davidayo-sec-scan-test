@@ -10,6 +10,7 @@
     <a href="/admin/ci-token" class="btn">CI Token</a>
     <a href="/admin/audit" class="btn">Audit log</a>
     <a href="/admin/usage" class="btn">Usage</a>
+    <a href="/admin/reports" class="btn">Reports</a>
     <a href="/admin/advanced-settings" class="btn">Advanced Settings</a>
   </p>
 </div>
@@ -48,6 +49,8 @@
     <dd>{% if sc.enable_consolidation_verifier %}Enabled{% else %}<span class="muted">Disabled</span>{% endif %}</dd>
     <dt>Fix quality gate</dt>
     <dd>{% if sc.enable_quality_gate %}Enabled{% else %}<span class="muted">Disabled (default)</span>{% endif %}</dd>
+    <dt>Report retention</dt>
+    <dd>{% if sc.report_retention_days %}Auto-purge after <strong>{{ sc.report_retention_days }}</strong> days{% else %}<span class="muted">Disabled — records kept indefinitely</span>{% endif %}</dd>
     <dt>Active scanners</dt>
     <dd>
       {% set active = [] %}
@@ -305,6 +308,32 @@
           </span>
         </span>
       </label>
+    </fieldset>
+
+    {# ── Report retention ── #}
+    <fieldset style="border:1px solid var(--border); border-radius:8px; padding:1rem; margin:0 0 1.25rem;">
+      <legend style="font-weight:600; padding:0 0.4rem;">Report retention</legend>
+
+      <div>
+        <label style="display:block; font-weight:600; margin-bottom:0.3rem;" for="report_retention_days">
+          Auto-purge scan records older than how many days?
+        </label>
+        <p class="muted" style="font-size:0.84rem; margin:0 0 0.5rem;">
+          When set, the scanner deletes entire <strong>scan_records</strong> and
+          <strong>ci_scan_records</strong> rows (including any stored HTML report) that are
+          older than this threshold. The purge runs at startup and once every 24 hours.
+          Leave blank to keep all records indefinitely. You can also manually delete or purge
+          records from the <a href="/admin/reports">Reports</a> page at any time.
+        </p>
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+          <input type="number" name="report_retention_days" id="report_retention_days"
+                 min="1" max="3650" placeholder="blank = keep forever"
+                 value="{{ sc.report_retention_days if sc and sc.report_retention_days else '' }}"
+                 style="font:inherit; padding:0.4rem 0.6rem; border:1px solid var(--border);
+                        border-radius:6px; background:var(--card); color:var(--fg); width:160px;">
+          <span class="muted" style="font-size:0.85rem;">days (e.g. 90 = keep 3 months)</span>
+        </div>
+      </div>
     </fieldset>
 
     {# ── High-risk paths ── #}
