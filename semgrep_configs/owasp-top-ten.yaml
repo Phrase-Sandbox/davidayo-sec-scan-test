@@ -42,6 +42,35 @@ rules:
       vuln_class: sqli
       owasp: A03:2021
 
+  - id: python-sqli-percent-format-assign
+    patterns:
+      - pattern: |
+          $Q = $SQL % $PARAMS
+          ...
+          $CUR.execute($Q)
+      - metavariable-regex:
+          metavariable: $SQL
+          regex: "(?i).*(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE|INTO).*"
+    message: >
+      SQL query built with % string formatting before execute(). Use parameterised
+      queries: cursor.execute("... WHERE id = %s", (value,))
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: sqli
+      owasp: A03:2021
+
+  - id: python-sqli-format-method
+    patterns:
+      - pattern: $CUR.execute($Q.format(...))
+    message: >
+      SQL query constructed with .format() interpolation. Use parameterised queries.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: sqli
+      owasp: A03:2021
+
   - id: python-eval-input
     pattern: eval($X)
     message: >

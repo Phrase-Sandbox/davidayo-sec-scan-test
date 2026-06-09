@@ -103,3 +103,11 @@ def test_semgrep_upload_no_size_limit_maps_to_unsafe_file_upload() -> None:
 
 def test_semgrep_upload_blocklist_maps_to_unsafe_file_upload() -> None:
     assert normalize("semgrep", "upload-blocklist-ext") == "unsafe_file_upload"
+
+
+def test_semgrep_sqli_percent_format_assign_maps_to_sqli() -> None:
+    assert normalize("semgrep", "python-sqli-percent-format-assign") == "sqli"
+
+
+def test_semgrep_sqli_format_method_maps_to_sqli() -> None:
+    assert normalize("semgrep", "python-sqli-format-method") == "sqli"

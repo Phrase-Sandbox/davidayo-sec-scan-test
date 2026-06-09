@@ -141,6 +141,8 @@ _SEMGREP_MAP: dict[str, str] = {
     "python-sqli-fstring": "sqli",
     "python-sqli-string-format": "sqli",
     "python-sqli-concat": "sqli",
+    "python-sqli-percent-format-assign": "sqli",
+    "python-sqli-format-method": "sqli",
     "python-eval-input": "code_injection",
     "python-os-system-input": "command_injection",
     "python-pickle-loads": "deserialization",
