@@ -39,6 +39,9 @@ _UPLOAD_CLASSES: frozenset[str] = frozenset({"unsafe_file_upload"})
 # Vulnerability classes that trigger the weak-crypto rubric.
 _WEAK_CRYPTO_CLASSES: frozenset[str] = frozenset({"weak_crypto", "weak_hash", "insecure_hash"})
 
+# Vulnerability classes that trigger the hardcoded-secret rubric.
+_HARDCODED_SECRET_CLASSES: frozenset[str] = frozenset({"hardcoded_secret"})
+
 # Vulnerability classes that trigger the LDAP injection rubric.
 _LDAP_CLASSES: frozenset[str] = frozenset({"ldap_injection"})
 
@@ -161,6 +164,42 @@ elsewhere), a weak algorithm makes credential recovery trivial. Use the rubric b
    SHA-256 or better for non-password uses) is confirmed to be in use, or if
    MD5/SHA-1 is provably used only for non-security caching/deduplication
    where an attacker-controlled collision carries no security impact.
+"""
+
+
+def build_hardcoded_secret_verifier_rubric() -> str:
+    """Return the hardcoded-secret-specific rubric appended to the verifier prompt."""
+    return """\
+
+## Hardcoded secret analysis rubric — OVERRIDES the general criteria above
+
+**For this vulnerability class (hardcoded_secret), the general criteria #1 and #2
+above do NOT apply.** A direct injection data-flow path from attacker-controlled
+input is NOT required — the secret is the vulnerability, not the data flow.
+
+1. Answer `real` if the code contains a string literal assigned to a variable
+   or parameter whose name indicates a credential, token, key, or password
+   (e.g. PASSWORD, SECRET_KEY, API_KEY, JWT_SECRET, db_password, access_token,
+   signing_key, DATABASE_URL with embedded credentials). The string must look
+   like a real value — not an empty string, a format placeholder like
+   {SECRET_KEY}, or a clearly auto-generated example.
+
+2. The exploit model is: an attacker with read access to the repository
+   (or its git history, even after deletion) extracts the hardcoded value and
+   authenticates directly to the target service — database, API, or cloud
+   provider — with full application-level permissions. No runtime injection
+   is required.
+
+3. Answer `false_positive` ONLY if:
+   - The value is an empty string, a placeholder (e.g. "YOUR_SECRET_HERE",
+     "<SECRET>", "${SECRET_KEY}", "REPLACE_ME", "changeme"), OR
+   - The variable is clearly in a test fixture or example config file AND
+     the value is obviously not a real credential (e.g. "test", "example",
+     "password123" in a file named `test_*.py` or `example_config.yaml`).
+
+4. Do NOT mark `false_positive` solely because the file is a test, fixture,
+   example, or demo. If the value looks like a real credential (sufficient
+   entropy or format consistent with a real secret), answer `real`.
 """
 
 
@@ -430,7 +469,8 @@ No JSON, no markdown, no preamble. Only the verdict blocks.
     # Class→rubric registry (exclusive — first match wins):
     # auth_bypass / idor                      → authz rubric
     # unsafe_file_upload                      → upload rubric
-    # weak_crypto / weak_hash / insecure_hash → weak-crypto rubric
+    # weak_crypto / weak_hash / insecure_hash → weak-crypto rubric (OVERRIDES data-flow req)
+    # hardcoded_secret                        → hardcoded-secret rubric (OVERRIDES data-flow req)
     # ldap_injection                          → LDAP rubric
     # nosqli                                  → NoSQL rubric
     # sqli                                    → SQLi rubric
@@ -447,6 +487,8 @@ No JSON, no markdown, no preamble. Only the verdict blocks.
             base_prompt += build_upload_verifier_rubric()
         elif norm in _WEAK_CRYPTO_CLASSES:
             base_prompt += build_weak_crypto_verifier_rubric()
+        elif norm in _HARDCODED_SECRET_CLASSES:
+            base_prompt += build_hardcoded_secret_verifier_rubric()
         elif norm in _LDAP_CLASSES:
             base_prompt += build_ldap_verifier_rubric()
         elif norm in _NOSQL_CLASSES:

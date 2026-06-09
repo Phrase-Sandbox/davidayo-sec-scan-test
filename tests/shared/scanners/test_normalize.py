@@ -239,3 +239,51 @@ def test_semgrep_python_pymongo_nosql_injection_maps_to_nosqli() -> None:
 
 def test_semgrep_js_mongoose_nosql_injection_maps_to_nosqli() -> None:
     assert normalize("semgrep", "js-mongoose-nosql-injection") == "nosqli"
+
+
+# ---------------------------------------------------------------------------
+# V7: go.yaml rule mappings
+# ---------------------------------------------------------------------------
+
+def test_semgrep_go_sqli_sprintf_maps_to_sqli() -> None:
+    assert normalize("semgrep", "go-sqli-sprintf") == "sqli"
+
+
+def test_semgrep_go_sqli_sprintf_assign_maps_to_sqli() -> None:
+    assert normalize("semgrep", "go-sqli-sprintf-assign") == "sqli"
+
+
+def test_semgrep_go_sqli_concat_maps_to_sqli() -> None:
+    assert normalize("semgrep", "go-sqli-concat") == "sqli"
+
+
+def test_semgrep_go_cmd_injection_exec_command_maps_to_command_injection() -> None:
+    assert normalize("semgrep", "go-cmd-injection-exec-command") == "command_injection"
+
+
+def test_semgrep_go_cmd_injection_exec_command_context_maps_to_command_injection() -> None:
+    assert normalize("semgrep", "go-cmd-injection-exec-command-context") == "command_injection"
+
+
+def test_semgrep_go_weak_hash_md5_maps_to_weak_crypto() -> None:
+    assert normalize("semgrep", "go-weak-hash-md5") == "weak_crypto"
+
+
+def test_semgrep_go_weak_hash_sha1_maps_to_weak_crypto() -> None:
+    assert normalize("semgrep", "go-weak-hash-sha1") == "weak_crypto"
+
+
+def test_semgrep_go_hardcoded_secret_assign_maps_to_hardcoded_secret() -> None:
+    assert normalize("semgrep", "go-hardcoded-secret-assign") == "hardcoded_secret"
+
+
+def test_semgrep_go_hardcoded_db_dsn_maps_to_hardcoded_secret() -> None:
+    assert normalize("semgrep", "go-hardcoded-db-dsn") == "hardcoded_secret"
+
+
+def test_semgrep_python_hardcoded_password_kwarg_maps_to_hardcoded_secret() -> None:
+    assert normalize("semgrep", "python-hardcoded-password-kwarg") == "hardcoded_secret"
+
+
+def test_semgrep_js_hardcoded_aws_key_maps_to_hardcoded_secret() -> None:
+    assert normalize("semgrep", "js-hardcoded-aws-key") == "hardcoded_secret"

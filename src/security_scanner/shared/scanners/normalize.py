@@ -393,6 +393,16 @@ _SEMGREP_MAP: dict[str, str] = {
     "java-weak-crypto-sha1": "weak_crypto",
     "java-weak-cipher-des": "weak_crypto",
     "java-tls-insecure-skip-verify": "weak_crypto",
+    # go.yaml — SQL injection (not caught by substring match)
+    "go-sqli-sprintf": "sqli",
+    "go-sqli-sprintf-assign": "sqli",
+    "go-sqli-concat": "sqli",
+    # go.yaml — command injection (not caught by substring match)
+    "go-cmd-injection-exec-command": "command_injection",
+    "go-cmd-injection-exec-command-context": "command_injection",
+    # go.yaml — weak crypto (CRITICAL: no attacker data-flow; must reach weak_crypto rubric)
+    "go-weak-hash-md5": "weak_crypto",
+    "go-weak-hash-sha1": "weak_crypto",
     # Prefix-based catch-all for registry rule IDs (p/owasp-top-ten etc.)
     # These use patterns like "python.lang.security.audit.sqli.*"
     # The normalize() prefix/substring logic handles the rest.
@@ -415,6 +425,10 @@ _SEMGREP_MAP: dict[str, str] = {
     "java-ldap": "ldap_injection",
     "java-el": "code_injection",
     "java-weak": "weak_crypto",
+    # go.yaml prefix catch-alls for future rule variants
+    "go-sqli": "sqli",
+    "go-cmd": "command_injection",
+    "go-weak": "weak_crypto",
     # upload-security.yaml rule IDs
     "upload-attacker-filename": "unsafe_file_upload",
     "upload-extension-only": "unsafe_file_upload",
