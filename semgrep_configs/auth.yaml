@@ -20,7 +20,7 @@ rules:
       cwe: CWE-347
 
   - id: python-jwt-decode-algorithms-none
-    patterns:
+    pattern-either:
       - pattern: jwt.decode($TOKEN, ..., algorithms=["none"], ...)
       - pattern: jwt.decode($TOKEN, ..., algorithms=["HS256", "none"], ...)
     message: >

@@ -124,8 +124,9 @@ rules:
       cwe: CWE-22
 
   - id: python-os-path-join-user-input
-    patterns:
+    pattern-either:
       - pattern: os.path.join($BASE, request.$ATTR)
+      - pattern: os.path.join($BASE, request.$ATTR[$KEY])
     message: >
       os.path.join() with request data as the filename enables path traversal.
       The attacker can supply '../../../etc/passwd' to escape the base directory.

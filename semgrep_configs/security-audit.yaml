@@ -1,6 +1,6 @@
 rules:
   - id: python-subprocess-shell-true
-    patterns:
+    pattern-either:
       - pattern: subprocess.run(..., shell=True, ...)
       - pattern: subprocess.call(..., shell=True, ...)
       - pattern: subprocess.Popen(..., shell=True, ...)
@@ -17,7 +17,7 @@ rules:
       owasp: A03:2021
 
   - id: python-hashlib-md5
-    patterns:
+    pattern-either:
       - pattern: hashlib.md5(...)
       - pattern: hashlib.new("md5", ...)
     message: >
@@ -31,7 +31,7 @@ rules:
       owasp: A02:2021
 
   - id: python-hashlib-sha1
-    patterns:
+    pattern-either:
       - pattern: hashlib.sha1(...)
       - pattern: hashlib.new("sha1", ...)
     message: >
@@ -44,7 +44,7 @@ rules:
       owasp: A02:2021
 
   - id: python-random-security
-    patterns:
+    pattern-either:
       - pattern: random.random()
       - pattern: random.randint(...)
       - pattern: random.choice(...)
@@ -60,7 +60,7 @@ rules:
       owasp: A02:2021
 
   - id: python-ssl-no-verify
-    patterns:
+    pattern-either:
       - pattern: ssl.create_default_context(..., check_hostname=False, ...)
       - pattern: ssl._create_unverified_context(...)
       - pattern: ssl.CERT_NONE
@@ -97,7 +97,7 @@ rules:
       owasp: A01:2021
 
   - id: python-yaml-load-unsafe
-    patterns:
+    pattern-either:
       - pattern: yaml.load($X)
       - pattern: yaml.load($X, Loader=yaml.Loader)
       - pattern: yaml.load($X, Loader=yaml.UnsafeLoader)
@@ -112,7 +112,7 @@ rules:
       owasp: A08:2021
 
   - id: python-tempfile-insecure
-    patterns:
+    pattern-either:
       - pattern: tempfile.mktemp(...)
       - pattern: os.tempnam(...)
     message: >
@@ -126,7 +126,7 @@ rules:
       owasp: A01:2021
 
   - id: js-localstorage-sensitive
-    patterns:
+    pattern-either:
       - pattern: localStorage.setItem("token", ...)
       - pattern: localStorage.setItem("jwt", ...)
       - pattern: localStorage.setItem("auth", ...)

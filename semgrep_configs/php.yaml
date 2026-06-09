@@ -5,7 +5,7 @@ rules:
   # ---------------------------------------------------------------------------
 
   - id: php-sqli-mysql-concat
-    patterns:
+    pattern-either:
       - pattern: mysql_query("..." . $USERINPUT)
       - pattern: mysql_query($QUERY . $USERINPUT)
     message: >
@@ -20,7 +20,7 @@ rules:
       cwe: CWE-89
 
   - id: php-sqli-mysqli-concat
-    patterns:
+    pattern-either:
       - pattern: mysqli_query($CONN, "..." . $USERINPUT)
       - pattern: mysqli_query($CONN, $QUERY . $USERINPUT)
       - pattern: $CONN->query("..." . $USERINPUT)
@@ -36,7 +36,7 @@ rules:
       cwe: CWE-89
 
   - id: php-sqli-pdo-exec-concat
-    patterns:
+    pattern-either:
       - pattern: $PDO->query("..." . $USERINPUT)
       - pattern: $PDO->exec("..." . $USERINPUT)
     message: >
@@ -134,7 +134,7 @@ rules:
   # ---------------------------------------------------------------------------
 
   - id: php-lfi-include
-    patterns:
+    pattern-either:
       - pattern: include($_GET[$KEY])
       - pattern: include($_POST[$KEY])
       - pattern: include($_REQUEST[$KEY])
@@ -154,7 +154,7 @@ rules:
       cwe: CWE-98
 
   - id: php-lfi-require
-    patterns:
+    pattern-either:
       - pattern: require($_GET[$KEY])
       - pattern: require($_POST[$KEY])
       - pattern: require($BASEVAR . $_GET[$KEY])
@@ -169,7 +169,7 @@ rules:
       cwe: CWE-98
 
   - id: php-lfi-include-once
-    patterns:
+    pattern-either:
       - pattern: include_once($_GET[$KEY])
       - pattern: include_once($BASEVAR . $_GET[$KEY])
       - pattern: require_once($_GET[$KEY])
@@ -189,7 +189,7 @@ rules:
   # ---------------------------------------------------------------------------
 
   - id: php-cmd-injection-system
-    patterns:
+    pattern-either:
       - pattern: system($_GET[$KEY])
       - pattern: system($_POST[$KEY])
       - pattern: system("..." . $_GET[$KEY])
@@ -206,7 +206,7 @@ rules:
       cwe: CWE-78
 
   - id: php-cmd-injection-exec
-    patterns:
+    pattern-either:
       - pattern: exec($_GET[$KEY], ...)
       - pattern: exec($_POST[$KEY], ...)
       - pattern: exec("..." . $_GET[$KEY], ...)
@@ -221,7 +221,7 @@ rules:
       cwe: CWE-78
 
   - id: php-cmd-injection-shell-exec
-    patterns:
+    pattern-either:
       - pattern: shell_exec($_GET[$KEY])
       - pattern: shell_exec($_POST[$KEY])
       - pattern: shell_exec("..." . $_GET[$KEY])
@@ -236,7 +236,7 @@ rules:
       cwe: CWE-78
 
   - id: php-cmd-injection-passthru
-    patterns:
+    pattern-either:
       - pattern: passthru($_GET[$KEY])
       - pattern: passthru("..." . $_GET[$KEY])
     message: >
@@ -249,7 +249,7 @@ rules:
       cwe: CWE-78
 
   - id: php-cmd-injection-popen
-    patterns:
+    pattern-either:
       - pattern: popen("..." . $_GET[$KEY], ...)
       - pattern: popen("..." . $_POST[$KEY], ...)
     message: >
@@ -266,7 +266,7 @@ rules:
   # ---------------------------------------------------------------------------
 
   - id: php-code-injection-eval
-    patterns:
+    pattern-either:
       - pattern: eval($_GET[$KEY])
       - pattern: eval($_POST[$KEY])
       - pattern: eval($_REQUEST[$KEY])
@@ -282,7 +282,7 @@ rules:
       cwe: CWE-94
 
   - id: php-create-function-injection
-    patterns:
+    pattern-either:
       - pattern: create_function($ARGS, $_GET[$KEY])
       - pattern: create_function($ARGS, $_POST[$KEY])
     message: >
@@ -300,7 +300,7 @@ rules:
   # ---------------------------------------------------------------------------
 
   - id: php-deserialization-get
-    patterns:
+    pattern-either:
       - pattern: unserialize($_GET[$KEY])
       - pattern: unserialize($_POST[$KEY])
       - pattern: unserialize($_COOKIE[$KEY])
@@ -322,7 +322,7 @@ rules:
   # ---------------------------------------------------------------------------
 
   - id: php-file-upload-unsafe
-    patterns:
+    pattern-either:
       - pattern: move_uploaded_file($_FILES[$FIELD]["tmp_name"], $DEST . $_FILES[$FIELD]["name"])
       - pattern: move_uploaded_file($_FILES[$FIELD]["tmp_name"], $_FILES[$FIELD]["name"])
     message: >
@@ -342,7 +342,7 @@ rules:
   # ---------------------------------------------------------------------------
 
   - id: php-open-redirect
-    patterns:
+    pattern-either:
       - pattern: 'header("Location: " . $_GET[$KEY])'
       - pattern: 'header("Location: " . $_POST[$KEY])'
       - pattern: 'header("location: " . $_GET[$KEY])'
@@ -362,7 +362,7 @@ rules:
   # ---------------------------------------------------------------------------
 
   - id: php-header-injection
-    patterns:
+    pattern-either:
       - pattern: header($HEADER . $_GET[$KEY])
       - pattern: header($HEADER . $_POST[$KEY])
     message: >
@@ -381,7 +381,7 @@ rules:
   # ---------------------------------------------------------------------------
 
   - id: php-file-get-contents-traversal
-    patterns:
+    pattern-either:
       - pattern: file_get_contents($_GET[$KEY])
       - pattern: file_get_contents($_POST[$KEY])
       - pattern: file_get_contents($BASE . $_GET[$KEY])

@@ -164,7 +164,7 @@ rules:
       owasp: A03:2021
 
   - id: python-os-system-input
-    patterns:
+    pattern-either:
       - pattern: os.system($X)
       - pattern: os.popen($X)
     message: >
@@ -177,7 +177,7 @@ rules:
       owasp: A03:2021
 
   - id: python-pickle-loads
-    patterns:
+    pattern-either:
       - pattern: pickle.loads($X)
       - pattern: pickle.load($X)
       - pattern: cPickle.loads($X)
@@ -192,7 +192,7 @@ rules:
       owasp: A08:2021
 
   - id: python-xml-parse-no-defusedxml
-    patterns:
+    pattern-either:
       - pattern: xml.etree.ElementTree.parse($X)
       - pattern: xml.etree.ElementTree.fromstring($X)
       - pattern: xml.etree.cElementTree.parse($X)
@@ -217,7 +217,7 @@ rules:
       owasp: A03:2021
 
   - id: python-marshal-loads
-    patterns:
+    pattern-either:
       - pattern: marshal.loads($X)
       - pattern: marshal.load($X)
     message: >
@@ -230,7 +230,7 @@ rules:
       owasp: A08:2021
 
   - id: python-lxml-xxe
-    patterns:
+    pattern-either:
       - pattern: lxml.etree.parse($X)
       - pattern: lxml.etree.fromstring($X)
     message: >
@@ -244,7 +244,7 @@ rules:
       owasp: A05:2021
 
   - id: python-open-redirect
-    patterns:
+    pattern-either:
       - pattern: flask.redirect($X)
       - pattern: redirect($X)
     message: >
@@ -257,7 +257,7 @@ rules:
       owasp: A01:2021
 
   - id: js-innerhtml-assignment
-    patterns:
+    pattern-either:
       - pattern: $X.innerHTML = $Y
       - pattern: $X.outerHTML = $Y
     message: >
@@ -270,7 +270,7 @@ rules:
       owasp: A03:2021
 
   - id: js-document-write
-    patterns:
+    pattern-either:
       - pattern: document.write($X)
       - pattern: document.writeln($X)
     message: >
@@ -305,7 +305,7 @@ rules:
       owasp: A03:2021
 
   - id: js-child-process-exec-concat
-    patterns:
+    pattern-either:
       - pattern: require('child_process').exec($X + ...)
       - pattern: require("child_process").exec($X + ...)
       - pattern: exec($CMD + ...)

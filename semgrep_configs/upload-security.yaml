@@ -63,11 +63,18 @@ rules:
   # -----------------------------------------------------------------------
 
   - id: upload-extension-only
-    patterns:
-      - pattern: |
-          $F = request.files[...]
-          ...
-          $F.filename.endswith(...)
+    pattern-either:
+      - patterns:
+          - pattern: |
+              $F = request.files[...]
+              ...
+              $F.filename.endswith(...)
+      - patterns:
+          - pattern: |
+              $F = request.files[...]
+              ...
+              if $F.filename.endswith(...):
+                ...
     message: >
       Unsafe file upload: validation checks only the filename extension, which
       is trivially forged. An attacker can rename 'evil.php' to 'evil.php.png'.
@@ -84,11 +91,18 @@ rules:
   # -----------------------------------------------------------------------
 
   - id: upload-mime-only
-    patterns:
-      - pattern: |
-          $F = request.files[...]
-          ...
-          $F.content_type
+    pattern-either:
+      - patterns:
+          - pattern: |
+              $F = request.files[...]
+              ...
+              $F.content_type
+      - patterns:
+          - pattern: |
+              $F = request.files[...]
+              ...
+              if $F.content_type == ...:
+                ...
     message: >
       Unsafe file upload: validation relies solely on Content-Type, which is
       supplied by the client and trivially forged. Perform server-side
@@ -125,7 +139,7 @@ rules:
   # -----------------------------------------------------------------------
 
   - id: upload-webroot-storage-flask
-    patterns:
+    pattern-either:
       - pattern: |
           $F.save(os.path.join(app.static_folder, ...))
       - pattern: |
@@ -168,7 +182,7 @@ rules:
   # -----------------------------------------------------------------------
 
   - id: upload-zip-slip
-    patterns:
+    pattern-either:
       - pattern: |
           $Z = zipfile.ZipFile(...)
           ...
@@ -191,7 +205,7 @@ rules:
       cwe: "CWE-22"
 
   - id: upload-tar-slip
-    patterns:
+    pattern-either:
       - pattern: |
           $T = tarfile.open(...)
           ...
@@ -216,7 +230,7 @@ rules:
   # -----------------------------------------------------------------------
 
   - id: upload-risky-parser-yaml
-    patterns:
+    pattern-either:
       - pattern: yaml.load($F, Loader=yaml.Loader)
       - pattern: yaml.load($F, Loader=yaml.FullLoader)
       - pattern: yaml.unsafe_load($F)
