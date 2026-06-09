@@ -1,7 +1,17 @@
-{% extends "admin_base.html" %}
+{% extends "base.html" %}
 {% block title %}Admin — Usage Analytics{% endblock %}
 
-{% block admin_content %}
+{% block content %}
+<div class="card" style="padding:0.6rem 1rem;">
+  <p style="margin:0; display:flex; gap:0.35rem; flex-wrap:wrap;">
+    <a href="/admin/tokens" class="btn">Tokens</a>
+    <a href="/admin/users" class="btn">Users</a>
+    <a href="/admin/org-settings" class="btn">Org Settings</a>
+    <a href="/admin/ci-token" class="btn">CI Token</a>
+    <a href="/admin/audit" class="btn">Audit log</a>
+    <a href="/admin/usage" class="btn">Usage</a>
+  </p>
+</div>
 
 <div class="card">
   <h2>Usage Analytics</h2>
@@ -133,4 +143,4 @@
 })();
 </script>
 
-{% endblock %}
+{% endblock content %}
