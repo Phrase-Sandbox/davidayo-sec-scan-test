@@ -343,6 +343,7 @@ def _verify_batch(
     keep_confidences: frozenset[str],
     bundles: dict[int, ContextBundle] | None = None,
     advisory_confidences: frozenset[str] | None = None,
+    high_risk_paths: list[str] | None = None,
 ) -> list[VulnerabilityFinding | None]:
     """Verify up to _BATCH_SIZE candidates in one Claude call.
 
@@ -411,7 +412,8 @@ def _verify_batch(
 
         # verdict == "real" — determine effective keep set for this candidate.
         # High-risk paths widen KEEP_CONFIDENCES to include medium.
-        if _is_high_risk_path(candidate.file):
+        # is_high_risk_path falls back to the YAML list when prefixes=None.
+        if is_high_risk_path(candidate.file, prefixes=high_risk_paths):
             effective_keep = keep_confidences | frozenset({"medium"})
         else:
             effective_keep = keep_confidences
@@ -543,6 +545,8 @@ def verify_vuln_candidates(
     keep_confidences: frozenset[str] | None = None,
     advisory_confidences: frozenset[str] | None = None,
     bundles: dict[int, ContextBundle] | None = None,
+    parallelism: int | None = None,
+    high_risk_paths: list[str] | None = None,
 ) -> list[VulnerabilityFinding]:
     """Run the production-mode binary verifier over all vuln candidates.
 
@@ -579,7 +583,7 @@ def verify_vuln_candidates(
     effective_keep = keep_confidences if keep_confidences is not None else _KEEP_CONFIDENCES
     indices = list(range(len(candidates)))
     batches: list[list[int]] = list(_chunk(indices, _BATCH_SIZE))
-    workers = min(_MAX_PARALLELISM, len(batches))
+    workers = min(parallelism or _MAX_PARALLELISM, len(batches))
 
     slots: list[VulnerabilityFinding | None] = [None] * len(candidates)
 
@@ -593,6 +597,7 @@ def verify_vuln_candidates(
                 effective_keep,
                 bundles,
                 advisory_confidences,
+                high_risk_paths,
             ): batch
             for batch in batches
         }

@@ -19,6 +19,7 @@ defences, but an infra NetworkPolicy is the defence-in-depth follow-up.
 from __future__ import annotations
 
 import asyncio
+import functools
 
 from security_scanner.shared.context.upload_finder import find_upload_handlers
 from security_scanner.shared.context.upload_models import UploadHandler
@@ -139,6 +140,9 @@ def _synthesise_candidates(
 async def run_layer1(
     files: dict[str, str],
     scan_id: str,
+    *,
+    enabled_adapters: set[str] | None = None,
+    semgrep_rules: set[str] | None = None,
 ) -> list[AggregatedCandidate]:
     """Run all available scanner adapters concurrently and return aggregated candidates.
 
@@ -149,6 +153,14 @@ async def run_layer1(
     scan_id:
         The current scan's UUID hex string — used as a tempdir prefix so two
         concurrent scans never share a workspace.
+    enabled_adapters:
+        When ``None`` (default), all binary-available adapters run. Pass a set of
+        adapter names (``"semgrep"``, ``"bandit"``, ``"gosec"``, ``"eslint"``) to
+        restrict which adapters execute for this scan.
+    semgrep_rules:
+        When ``None`` (default), Semgrep runs all rule packs. Pass a set of
+        rule-pack names (``"owasp"``, ``"audit"``, ``"upload"``) to restrict which
+        Semgrep configs are used.
 
     Returns
     -------
@@ -159,10 +171,16 @@ async def run_layer1(
     if not files:
         return []
 
-    adapters = get_adapters()
+    adapters = get_adapters(enabled=enabled_adapters)
     if not adapters:
         log.warning("run_layer1: no scanner adapters available")
         return []
+
+    # Bind semgrep rule-pack selection for this scan only.
+    # functools.partial of an async fn returns a coroutine when called — works
+    # transparently with `await adapter_fn(workspace)` in _run_one below.
+    if "semgrep" in adapters and semgrep_rules is not None:
+        adapters["semgrep"] = functools.partial(adapters["semgrep"], rules=semgrep_rules)
 
     all_candidates: list[ScannerCandidate] = []
 

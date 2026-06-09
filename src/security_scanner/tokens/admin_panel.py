@@ -44,6 +44,7 @@ from security_scanner.tokens.models import (
     LLMUsageMonthly,
     OrgSettings,
     ScanRecord,
+    ScannerSettings,
     User,
     UserRole,
 )
@@ -809,6 +810,130 @@ async def admin_demote_user(
 
     log.info("admin demoted user from admin", actor_email=admin.email, target_email=email)
     return await admin_users(request, admin, page=1, q=email)
+
+
+# ---------------------------------------------------------------------------
+# Advanced settings (/admin/advanced-settings)
+# ---------------------------------------------------------------------------
+
+_KEEP_CONF_OPTIONS = {
+    "high": "High confidence only",
+    "high,medium": "High + Medium confidence (recommended)",
+    "high,medium,low": "High + Medium + Low confidence",
+}
+
+_ADVISORY_CONF_OPTIONS = {
+    "low": "Low confidence only (recommended)",
+    "medium,low": "Medium + Low confidence",
+    "": "None (no advisory findings)",
+}
+
+
+@router.get("/advanced-settings", response_class=HTMLResponse)
+async def admin_advanced_settings_get(
+    request: Request,
+    admin: _AdminDep,
+) -> HTMLResponse:
+    """Render the Advanced Settings page with the current DB-stored values."""
+    factory = get_session_factory()
+    async with factory() as session:
+        stmt = select(ScannerSettings).order_by(ScannerSettings.id.desc()).limit(1)
+        sc = (await session.execute(stmt)).scalar_one_or_none()
+
+    return templates.TemplateResponse(
+        request,
+        "admin_advanced_settings.html",
+        {
+            "user": admin,
+            "sc": sc,
+            "keep_conf_options": _KEEP_CONF_OPTIONS,
+            "advisory_conf_options": _ADVISORY_CONF_OPTIONS,
+            "flash": None,
+        },
+        headers=_NO_STORE_HEADERS,
+    )
+
+
+@router.post("/advanced-settings", response_class=HTMLResponse)
+async def admin_advanced_settings_post(
+    request: Request,
+    admin: _AdminDep,
+    keep_confidences: Annotated[str, Form()],
+    advisory_confidences: Annotated[str, Form()],
+    vuln_verifier_parallelism: Annotated[int, Form()],
+    high_risk_paths: Annotated[str, Form()] = "",
+    enable_semgrep: Annotated[str, Form()] = "",
+    enable_bandit: Annotated[str, Form()] = "",
+    enable_gosec: Annotated[str, Form()] = "",
+    enable_eslint: Annotated[str, Form()] = "",
+    semgrep_owasp: Annotated[str, Form()] = "",
+    semgrep_audit: Annotated[str, Form()] = "",
+    semgrep_upload: Annotated[str, Form()] = "",
+) -> HTMLResponse:
+    """Save a new ScannerSettings row (append-only, MAX id is authoritative)."""
+    # Validate keep_confidences is one of the known combos.
+    if keep_confidences not in _KEEP_CONF_OPTIONS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid keep_confidences value: {keep_confidences!r}",
+        )
+    # Clamp parallelism to [1, 16].
+    parallelism = max(1, min(16, vuln_verifier_parallelism))
+
+    # HTML checkboxes omit the field entirely when unchecked.
+    # FastAPI Form() defaults to "" — bool("") == False, bool("on") == True.
+    now = datetime.now(UTC)
+    sc = ScannerSettings(
+        keep_confidences=keep_confidences,
+        advisory_confidences=advisory_confidences,
+        enable_semgrep=bool(enable_semgrep),
+        enable_bandit=bool(enable_bandit),
+        enable_gosec=bool(enable_gosec),
+        enable_eslint=bool(enable_eslint),
+        semgrep_owasp=bool(semgrep_owasp),
+        semgrep_audit=bool(semgrep_audit),
+        semgrep_upload=bool(semgrep_upload),
+        vuln_verifier_parallelism=parallelism,
+        high_risk_paths=high_risk_paths.strip(),
+        updated_at=now,
+        updated_by_email=admin.email,
+    )
+    factory = get_session_factory()
+    async with factory() as session:
+        session.add(sc)
+        await token_audit.record(
+            session,
+            event_type=AuditEventType.org_config_changed,
+            actor_email=admin.email,
+            section="advanced_settings",
+            keep_confidences=keep_confidences,
+            advisory_confidences=advisory_confidences,
+            parallelism=parallelism,
+            enable_semgrep=bool(enable_semgrep),
+            enable_bandit=bool(enable_bandit),
+            enable_gosec=bool(enable_gosec),
+            enable_eslint=bool(enable_eslint),
+        )
+        await session.commit()
+
+    log.info(
+        "admin advanced settings saved",
+        actor_email=admin.email,
+        keep_confidences=keep_confidences,
+        parallelism=parallelism,
+    )
+    return templates.TemplateResponse(
+        request,
+        "admin_advanced_settings.html",
+        {
+            "user": admin,
+            "sc": sc,
+            "keep_conf_options": _KEEP_CONF_OPTIONS,
+            "advisory_conf_options": _ADVISORY_CONF_OPTIONS,
+            "flash": "ok:Advanced settings saved. The next scan will use the new configuration.",
+        },
+        headers=_NO_STORE_HEADERS,
+    )
 
 
 # ---------------------------------------------------------------------------

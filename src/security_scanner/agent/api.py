@@ -299,7 +299,7 @@ async def scan(
     try:
         await _persist_ci_scan(result, started_at)
     except Exception:
-        log.exception("failed to persist ci_scan_record for scan_id=%s", result.scan_id)
+        log.error("failed to persist ci_scan_record", scan_id=result.scan_id)
 
     return result
 

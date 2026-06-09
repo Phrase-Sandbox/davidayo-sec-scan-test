@@ -99,6 +99,28 @@ class TokenLimitError(Exception):
         self.threshold = threshold
 
 
+async def _load_active_scanner_settings():
+    """Return latest ScannerSettings row, or None if none exist.
+
+    None means no admin has saved settings yet, DATABASE_URL is not configured,
+    or the DB is unreachable — callers fall back to env-var / module-level defaults,
+    preserving behaviour identical to the pre-feature state.
+    """
+    try:
+        from sqlalchemy import select  # noqa: PLC0415
+
+        from security_scanner.tokens.db import get_session_factory  # noqa: PLC0415
+        from security_scanner.tokens.models import ScannerSettings  # noqa: PLC0415
+
+        factory = get_session_factory()
+        async with factory() as session:
+            stmt = select(ScannerSettings).order_by(ScannerSettings.id.desc()).limit(1)
+            return (await session.execute(stmt)).scalar_one_or_none()
+    except Exception:  # noqa: BLE001
+        # DB not configured (test env), unreachable, or no table yet.
+        return None
+
+
 class ScanPipeline:
     """Composable pipeline used by both the agent (gate) and skill (on-demand) paths."""
 
@@ -132,12 +154,59 @@ class ScanPipeline:
 
         is_gate = self._mode == ScanType.deployment_gate
 
-        # Feature-flag for multi-scanner layer.  Default: on for gate path,
-        # off for /scan/local (ENABLE_MULTI_SCANNER env overrides both).
-        _default_scanner = "true" if is_gate else "false"
-        _enable_scanner = (
-            os.environ.get("ENABLE_MULTI_SCANNER", _default_scanner).lower() == "true"
-        )
+        # Load scanner settings from DB. Returns None when no admin has saved
+        # settings yet — all per-call vars below default to None in that case,
+        # which tells each subsystem to use its own env-var / module-level default.
+        sc = await _load_active_scanner_settings()
+
+        # Feature-flag for multi-scanner layer.  DB row wins; falls back to env.
+        if sc is not None:
+            _enable_scanner = (
+                sc.enable_semgrep or sc.enable_bandit or sc.enable_gosec or sc.enable_eslint
+            )
+        else:
+            _default_scanner = "true" if is_gate else "false"
+            _enable_scanner = (
+                os.environ.get("ENABLE_MULTI_SCANNER", _default_scanner).lower() == "true"
+            )
+
+        # Per-scan tuning derived from DB settings (None = subsystem env defaults).
+        if sc is not None:
+            enabled_adapters: set[str] | None = {
+                name for name, flag in [
+                    ("semgrep", sc.enable_semgrep),
+                    ("bandit", sc.enable_bandit),
+                    ("gosec", sc.enable_gosec),
+                    ("eslint", sc.enable_eslint),
+                ] if flag
+            }
+            semgrep_rules: set[str] | None = (
+                {
+                    name for name, flag in [
+                        ("owasp", sc.semgrep_owasp),
+                        ("audit", sc.semgrep_audit),
+                        ("upload", sc.semgrep_upload),
+                    ] if flag
+                }
+                if sc.enable_semgrep else None
+            )
+            _keep_conf = frozenset(
+                v.strip() for v in sc.keep_confidences.split(",") if v.strip()
+            )
+            _advisory_conf = frozenset(
+                v.strip() for v in sc.advisory_confidences.split(",") if v.strip()
+            )
+            _parallelism: int | None = sc.vuln_verifier_parallelism
+            _high_risk_paths: list[str] | None = (
+                [p.strip() for p in sc.high_risk_paths.splitlines() if p.strip()] or None
+            )
+        else:
+            enabled_adapters = None      # all adapters (binary-available)
+            semgrep_rules = None         # all rule packs
+            _keep_conf = None            # module-level env default
+            _advisory_conf = None        # module-level env default
+            _parallelism = None          # module-level env default
+            _high_risk_paths = None      # YAML file default
 
         # Step 1: parse owner/repo.
         parsed = _parse_repo_url(repo_url)
@@ -229,7 +298,13 @@ class ScanPipeline:
         if _enable_scanner:
             # Run chunked Claude first-pass and Layer-1 scanners concurrently.
             llm_task = asyncio.create_task(self._claude.analyse_async_chunked(files))
-            scanner_task = asyncio.create_task(run_layer1(files, scan_id))
+            scanner_task = asyncio.create_task(
+                run_layer1(
+                    files, scan_id,
+                    enabled_adapters=enabled_adapters,
+                    semgrep_rules=semgrep_rules,
+                )
+            )
             try:
                 (raw_findings, partial_files), aggregated_candidates = await asyncio.gather(
                     llm_task, scanner_task, return_exceptions=False
@@ -348,6 +423,10 @@ class ScanPipeline:
         kept = await asyncio.to_thread(
             verify_vuln_candidates, candidates, files, self._claude,
             bundles=bundles,
+            keep_confidences=_keep_conf,
+            advisory_confidences=_advisory_conf,
+            parallelism=_parallelism,
+            high_risk_paths=_high_risk_paths,
         )
 
         # Step 14: BR-009 defense-in-depth — only for Claude-only Critical findings.

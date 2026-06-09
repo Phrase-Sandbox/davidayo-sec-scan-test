@@ -28,36 +28,59 @@ _OWASP_CONFIG = _CONFIGS_DIR / "owasp-top-ten.yaml"
 _AUDIT_CONFIG = _CONFIGS_DIR / "security-audit.yaml"
 _UPLOAD_CONFIG = _CONFIGS_DIR / "upload-security.yaml"
 
+# Maps rule-pack name → config path. "upload" is best-effort; others are required.
+_CONFIG_MAP: dict[str, Path] = {
+    "owasp": _OWASP_CONFIG,
+    "audit": _AUDIT_CONFIG,
+    "upload": _UPLOAD_CONFIG,
+}
+
 TOOL = "semgrep"
 
 
-async def scan(workspace: ScannerWorkspace) -> list[ScannerCandidate]:
-    """Run Semgrep against the workspace and return normalised candidates."""
+async def scan(
+    workspace: ScannerWorkspace,
+    *,
+    rules: set[str] | None = None,
+) -> list[ScannerCandidate]:
+    """Run Semgrep against the workspace and return normalised candidates.
+
+    Parameters
+    ----------
+    rules:
+        Set of rule-pack names to run: ``{"owasp", "audit", "upload"}``.
+        ``None`` (default) runs all three — identical to the previous behaviour.
+        An empty set skips Semgrep entirely.
+    """
     if shutil.which("semgrep") is None:
         log.warning("semgrep adapter: binary not found — skipping")
         return []
 
-    if not _OWASP_CONFIG.exists() or not _AUDIT_CONFIG.exists():
-        log.warning(
-            "semgrep adapter: vendored configs missing — skipping",
-            owasp=str(_OWASP_CONFIG),
-            audit=str(_AUDIT_CONFIG),
-        )
+    selected = {k: v for k, v in _CONFIG_MAP.items() if rules is None or k in rules}
+    if not selected:
+        log.info("semgrep adapter: no rule sets enabled — skipping")
         return []
 
-    cmd = [
-        "semgrep",
-        "--json",
-        "--quiet",
-        "--metrics=off",
-        "--error",
-        "--config", str(_OWASP_CONFIG),
-        "--config", str(_AUDIT_CONFIG),
-    ]
+    cmd = ["semgrep", "--json", "--quiet", "--metrics=off", "--error"]
+    for name, path in selected.items():
+        if name == "upload":
+            # upload is always best-effort — skip silently if file missing
+            if path.exists():
+                cmd.extend(["--config", str(path)])
+        else:
+            if not path.exists():
+                log.warning(
+                    "semgrep adapter: required config missing — skipping",
+                    config=name,
+                    path=str(path),
+                )
+                return []
+            cmd.extend(["--config", str(path)])
 
-    # Add upload config if present (best-effort — not required for scan to proceed).
-    if _UPLOAD_CONFIG.exists():
-        cmd.extend(["--config", str(_UPLOAD_CONFIG)])
+    if "--config" not in cmd:
+        # Only upload was selected and its file is absent
+        log.info("semgrep adapter: no valid configs to run — skipping")
+        return []
 
     cmd.append(".")
 

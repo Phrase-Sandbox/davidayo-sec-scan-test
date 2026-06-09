@@ -289,6 +289,65 @@ def test_no_bundle_does_not_emit_context_sections() -> None:
     assert "OWNERSHIP CHECKS:" not in block
 
 
+def test_parallelism_param_is_respected() -> None:
+    """verify_vuln_candidates with parallelism=1 completes without error."""
+    mock_client = MagicMock()
+    mock_client.ask.return_value = "VERDICT #1: real\nCONFIDENCE #1: high\nREASON #1: SQL inject.\n"
+    candidate = _make_candidate(file="db.py")
+    results = verify_vuln_candidates(
+        [candidate], {"db.py": "query = f'SELECT * FROM users WHERE id={user_id}'"}, mock_client,
+        keep_confidences=frozenset({"high"}),
+        parallelism=1,
+    )
+    assert len(results) == 1
+
+
+def test_high_risk_paths_override_promotes_medium_to_blocking() -> None:
+    """A medium-confidence real finding in a path on the custom list is kept as blocking."""
+    mock_client = MagicMock()
+    # Return medium confidence for the candidate
+    mock_client.ask.return_value = "VERDICT #1: real\nCONFIDENCE #1: medium\nREASON #1: IDOR found.\n"
+
+    candidate = _make_candidate(file="auth/login.py")
+    results = verify_vuln_candidates(
+        [candidate], {"auth/login.py": "def login(): pass"}, mock_client,
+        keep_confidences=frozenset({"high"}),    # medium is NOT in the base keep set
+        high_risk_paths=["auth/"],               # but auth/ is a high-risk path → medium promoted
+    )
+    assert len(results) == 1
+    assert results[0].verification_status.value in ("verified",)
+
+
+def test_high_risk_paths_empty_list_no_promotion() -> None:
+    """An empty high_risk_paths list disables path-based promotion entirely."""
+    mock_client = MagicMock()
+    mock_client.ask.return_value = "VERDICT #1: real\nCONFIDENCE #1: medium\nREASON #1: IDOR found.\n"
+
+    candidate = _make_candidate(file="auth/login.py")
+    results = verify_vuln_candidates(
+        [candidate], {"auth/login.py": "def login(): pass"}, mock_client,
+        keep_confidences=frozenset({"high"}),   # medium NOT in keep set
+        advisory_confidences=frozenset({"medium"}),
+        high_risk_paths=[],                     # empty = no high-risk paths at all
+    )
+    # medium not in keep → should land in advisory lane, not blocking
+    assert len(results) == 1
+    assert results[0].verification_status.value == "advisory_real"
+
+
+def test_high_risk_paths_none_falls_back_to_yaml_list() -> None:
+    """high_risk_paths=None (default) uses the YAML-loaded list (no crash)."""
+    mock_client = MagicMock()
+    mock_client.ask.return_value = "VERDICT #1: real\nCONFIDENCE #1: high\nREASON #1: SQLi.\n"
+    candidate = _make_candidate(file="some/file.py")
+    results = verify_vuln_candidates(
+        [candidate], {"some/file.py": "x = 1"}, mock_client,
+        keep_confidences=frozenset({"high"}),
+        high_risk_paths=None,
+    )
+    assert len(results) == 1
+
+
 def test_candidate_source_code_tags_defanged(capsys) -> None:
     """``</source_code>`` in candidate content does not appear unescaped in the LLM user message."""
     captured_user_message: list[str] = []

@@ -79,3 +79,30 @@ async def test_scan_skips_if_binary_missing(monkeypatch) -> None:
     async with ScannerWorkspace(scan_id="test-semgrep-missing") as ws:
         result = await scan(ws)
     assert result == []
+
+
+@pytest.mark.asyncio
+async def test_scan_empty_rules_returns_empty(monkeypatch) -> None:
+    """scan(rules=set()) skips subprocess and returns [] immediately."""
+    import shutil as _shutil
+    monkeypatch.setattr(_shutil, "which", lambda _: "/usr/bin/semgrep")
+    from security_scanner.shared.scanners.adapters.semgrep import scan
+    from security_scanner.shared.scanners.workdir import ScannerWorkspace
+
+    async with ScannerWorkspace(scan_id="test-semgrep-empty-rules") as ws:
+        result = await scan(ws, rules=set())
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_scan_none_rules_identical_to_default(monkeypatch) -> None:
+    """scan(rules=None) and scan() must use the same config-selection path."""
+    import shutil as _shutil
+    monkeypatch.setattr(_shutil, "which", lambda _: None)
+    from security_scanner.shared.scanners.adapters.semgrep import scan
+    from security_scanner.shared.scanners.workdir import ScannerWorkspace
+
+    async with ScannerWorkspace(scan_id="test-semgrep-none-rules") as ws:
+        r_default = await scan(ws)
+        r_none = await scan(ws, rules=None)
+    assert r_default == r_none == []

@@ -34,8 +34,16 @@ def _check_binary(name: str, binary: str) -> bool:
     return False
 
 
-def get_adapters() -> dict[str, Callable[..., Any]]:
-    """Return a dict of ``{adapter_name: scan_fn}`` for available adapters."""
+def get_adapters(enabled: set[str] | None = None) -> dict[str, Callable[..., Any]]:
+    """Return a dict of ``{adapter_name: scan_fn}`` for available adapters.
+
+    Parameters
+    ----------
+    enabled:
+        When ``None`` (default), return all binary-available adapters — identical
+        to the previous behaviour. When a set is provided, only adapters whose
+        name is in the set are returned. An empty set returns ``{}``.
+    """
     from security_scanner.shared.scanners.adapters import bandit as _bandit
     from security_scanner.shared.scanners.adapters import eslint_security as _eslint
     from security_scanner.shared.scanners.adapters import gosec as _gosec
@@ -54,5 +62,8 @@ def get_adapters() -> dict[str, Callable[..., Any]]:
 
     if _check_binary("gosec", "gosec"):
         adapters["gosec"] = _gosec.scan
+
+    if enabled is not None:
+        adapters = {k: v for k, v in adapters.items() if k in enabled}
 
     return adapters

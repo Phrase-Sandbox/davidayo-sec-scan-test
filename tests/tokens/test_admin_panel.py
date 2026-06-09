@@ -482,3 +482,87 @@ def test_admin_usage_shows_all_nav_links(client, session_factory):
     assert "/admin/users" in r.text
     assert "/admin/ci-token" in r.text
     assert "/admin/audit" in r.text
+
+
+# ---------------------------------------------------------------------------
+# Advanced settings (/admin/advanced-settings)
+# ---------------------------------------------------------------------------
+
+
+def test_admin_advanced_settings_401_without_auth(client):
+    r = client.get("/admin/advanced-settings")
+    assert r.status_code == 401
+
+
+def test_admin_advanced_settings_403_for_non_admin(client, session_factory):
+    r = client.get("/admin/advanced-settings", headers=_user_headers())
+    assert r.status_code == 403
+
+
+def test_admin_advanced_settings_200_for_admin(client, session_factory):
+    r = client.get("/admin/advanced-settings", headers=_admin_headers())
+    assert r.status_code == 200
+    assert "Advanced Settings" in r.text
+    assert "blocking" in r.text.lower() or "confidence" in r.text.lower()
+
+
+def test_admin_advanced_settings_shows_nav_link(client, session_factory):
+    """Advanced settings page must link back to itself and to other sections."""
+    r = client.get("/admin/advanced-settings", headers=_admin_headers())
+    assert r.status_code == 200
+    assert "/admin/advanced-settings" in r.text
+    assert "/admin/org-settings" in r.text
+    assert "/admin/audit" in r.text
+
+
+async def test_admin_advanced_settings_post_inserts_row(client, session_factory):
+    """POST with valid form inserts a ScannerSettings row."""
+    from sqlalchemy import select
+    from security_scanner.tokens.models import ScannerSettings
+
+    form_data = {
+        "keep_confidences": "high,medium",
+        "advisory_confidences": "low",
+        "vuln_verifier_parallelism": "2",
+        "high_risk_paths": "auth/\npayments/",
+        "enable_semgrep": "on",
+        "enable_bandit": "on",
+        "semgrep_owasp": "on",
+        "semgrep_audit": "on",
+    }
+    r = client.post(
+        "/admin/advanced-settings",
+        headers=_admin_headers(),
+        data=form_data,
+    )
+    assert r.status_code == 200
+    assert "saved" in r.text.lower()
+
+    async with session_factory() as session:
+        row = (await session.execute(
+            select(ScannerSettings).order_by(ScannerSettings.id.desc()).limit(1)
+        )).scalar_one_or_none()
+
+    assert row is not None
+    assert row.keep_confidences == "high,medium"
+    assert row.enable_semgrep is True
+    assert row.enable_bandit is True
+    assert row.enable_gosec is False   # not submitted → unchecked → False
+    assert row.vuln_verifier_parallelism == 2
+    assert "auth/" in row.high_risk_paths
+    assert row.updated_by_email == "admin@phrase.com"
+
+
+async def test_admin_advanced_settings_post_invalid_confidence_422(client, session_factory):
+    """POST with an unknown keep_confidences value returns 422."""
+    form_data = {
+        "keep_confidences": "invalid_value",
+        "advisory_confidences": "low",
+        "vuln_verifier_parallelism": "2",
+    }
+    r = client.post(
+        "/admin/advanced-settings",
+        headers=_admin_headers(),
+        data=form_data,
+    )
+    assert r.status_code == 422

@@ -246,6 +246,45 @@ class OrgSettings(Base):
     updated_by_email: Mapped[str] = mapped_column(String(320), nullable=False)
 
 
+class ScannerSettings(Base):
+    """Append-only scanner tuning config. Latest row (MAX id) is authoritative.
+
+    Admin saves → INSERT a new row. The pipeline reads MAX(id) on every scan
+    request, so changes propagate to the next scan with no restart required.
+    When no row exists, the pipeline falls back to env-var / hardcoded defaults
+    (identical to the behaviour before this table existed).
+    """
+
+    __tablename__ = "scanner_settings"
+
+    id: Mapped[int] = mapped_column(Integer(), primary_key=True, autoincrement=True)
+    # Confidence routing
+    keep_confidences: Mapped[str] = mapped_column(
+        String(64), nullable=False, server_default="high,medium"
+    )
+    advisory_confidences: Mapped[str] = mapped_column(
+        String(64), nullable=False, server_default="low"
+    )
+    # Per-scanner toggles
+    enable_semgrep: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default="true")
+    enable_bandit: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default="true")
+    enable_gosec: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default="true")
+    enable_eslint: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default="true")
+    # Semgrep rule packs
+    semgrep_owasp: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default="true")
+    semgrep_audit: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default="true")
+    semgrep_upload: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default="true")
+    # Verifier tuning
+    vuln_verifier_parallelism: Mapped[int] = mapped_column(
+        Integer(), nullable=False, server_default="2"
+    )
+    # High-risk path prefixes — newline-separated; empty = use built-in YAML list
+    high_risk_paths: Mapped[str] = mapped_column(Text(), nullable=False, server_default="")
+    # Audit trail
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_by_email: Mapped[str] = mapped_column(String(320), nullable=False)
+
+
 class CiScanRecord(Base):
     """Persisted CI pipeline scan result (one row per /agent/scan call).
 
