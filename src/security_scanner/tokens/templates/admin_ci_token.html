@@ -1,6 +1,6 @@
-{% extends "base.html" %}
+{% extends "admin_base.html" %}
 {% block title %}Admin &mdash; CI Token{% endblock %}
-{% block content %}
+{% block admin_content %}
 <div class="card">
   <h2>CI Token Management</h2>
   <p class="muted">
@@ -8,13 +8,6 @@
     <code>/agent/scan</code>. Rotate it if the token is compromised or as part of a
     scheduled credential rotation. After rotating, update the <code>SCANNER_API_TOKEN</code>
     secret in every consuming GitHub Actions workflow before the next CI run.
-  </p>
-  <p>
-    <a href="/admin/tokens" class="btn">Tokens</a>
-    <a href="/admin/users" class="btn">Users</a>
-    <a href="/admin/org-settings" class="btn">Org settings</a>
-    <a href="/admin/audit" class="btn">Audit log</a>
-    <a href="/admin/usage" class="btn">Usage</a>
   </p>
 </div>
 
