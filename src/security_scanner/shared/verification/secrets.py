@@ -31,11 +31,9 @@ from collections.abc import Iterator
 
 from security_scanner.shared.claude.client import ClaudeClient, ClaudeError
 from security_scanner.shared.logging_util import get_logger
-from security_scanner.shared.models.enums import Severity, VerificationStatus
+from security_scanner.shared.models.enums import VerificationStatus
 from security_scanner.shared.models.finding import VulnerabilityFinding
 from security_scanner.shared.secrets.stripper import SecretHit, _is_template_file
-from security_scanner.shared.severity.mapping import severity_to_cvss_band
-
 log = get_logger(__name__)
 
 
@@ -153,9 +151,9 @@ Reply ``VERDICT: template_example`` when ALL of the following hold:
 - The line shape is teaching a hardcoding pattern (``KEY=value-here``).
 
 If those hold, the line is not a leak — but it IS soft-encouraging
-developers to hardcode credentials in this shape. The system will
-downgrade severity to Medium and attach a policy advisory pointing the
-developer at 1Password as the canonical secrets store.
+developers to hardcode credentials in this shape. The finding is reported
+at full severity with a policy advisory pointing the developer at 1Password
+as the canonical secrets store.
 
 If the candidate is in a template file but the value LOOKS real
 (e.g. ``sk-ant-api03-`` followed by 80 chars of high-entropy alphanumerics,
@@ -169,14 +167,14 @@ Reply ``VERDICT: test_fixture`` when the value is STRUCTURALLY credential-shaped
 only evidence it isn't being used in production comes from the file's
 *role*: a SQL fixtures/migrations file with seed users, a `_test.py` /
 `*.spec.ts` unit test, a `conftest.py`, a Docker compose `dev.yml`
-labelled "demo", etc. DO NOT down-grade to ``test_fixture`` based on the
-*value* alone — only on file-role evidence. Credentials in test files
-routinely leak to production via copy-paste, so a reviewer must still see
-them; the system will downgrade severity to Medium for these.
+labelled "demo", etc. DO NOT use ``test_fixture`` based on the *value*
+alone — only on file-role evidence. Credentials in test files routinely
+leak to production via copy-paste; the finding is reported at full severity
+so a reviewer sees it.
 
 If the value is BOTH structurally a placeholder (see next section) AND in
 a test file, prefer ``false_positive``. ``test_fixture`` means
-"plausible credential, lower confidence due to context".
+"plausible credential in a test-data context".
 
 ## FALSE_POSITIVE only when STRUCTURALLY not a credential
 
@@ -216,10 +214,10 @@ add ONE short sentence (≤25 words) of justification before the next
 VERDICT line. No JSON, no markdown, no other formatting.
 
 - "real" — the indicated string is a credential value baked into the source.
-- "test_fixture" — the value LOOKS like a real credential, but the file
-  it lives in is clearly seed/test data. Downgraded, not dropped.
+- "test_fixture" — the value LOOKS like a real credential in a test/seed
+  data file. Reported at full severity with test-context note.
 - "template_example" — placeholder line in an `*.example` / `*.sample` /
-  `*.tmpl` template file. Downgraded with a 1Password-policy advisory.
+  `*.tmpl` template file. Reported at full severity with 1Password-policy advisory.
 - "false_positive" — the indicated string is one of the non-credential
   shapes listed above. Dropped from the report.
 
@@ -235,19 +233,6 @@ _VERDICT_RE = re.compile(
     r"^\s*VERDICT\s*(?:#\s*(\d+))?\s*:\s*"
     r"(real|test_fixture|template_example|false_positive)\b",
     re.IGNORECASE | re.MULTILINE,
-)
-
-
-_TEST_FIXTURE_DESCRIPTION_PREFIX = (
-    "[Likely test fixture — review and remove if not used in production] "
-)
-
-
-_TEMPLATE_DESCRIPTION_PREFIX = (
-    "[Template placeholder — this line encourages hardcoded credentials. "
-    "Per policy, real secrets must be stored in 1Password and loaded from "
-    "the environment at runtime; templates should reference the variable "
-    "name without a sample value, e.g. ``ANTHROPIC_API_KEY=`` with no value.] "
 )
 
 
@@ -457,42 +442,30 @@ def _apply_verdict(
 
     if verdict == "test_fixture":
         log.info(
-            "secret verification: downgraded to test fixture",
+            "secret verification: confirmed credential (test fixture context)",
             detector=hit.detector,
             file=hit.filename,
             line=hit.line,
-            reasoning=reasoning,
         )
-        new_desc = _TEST_FIXTURE_DESCRIPTION_PREFIX + finding.description
+        updates: dict = {"verification_status": VerificationStatus.verified}
         if reasoning:
-            new_desc = f"{new_desc}\n\nLLM verification: {reasoning}"
-        return finding.model_copy(
-            update={
-                "severity": Severity.Medium,
-                "cvss_band": severity_to_cvss_band(Severity.Medium),
-                "description": new_desc,
-            }
-        )
+            updates["description"] = f"{finding.description}\n\nLLM verification: {reasoning}"
+        return finding.model_copy(update=updates)
 
     if verdict == "template_example":
         log.info(
-            "secret verification: downgraded to template placeholder",
+            "secret verification: confirmed credential (template placeholder context)",
             detector=hit.detector,
             file=hit.filename,
             line=hit.line,
-            reasoning=reasoning,
         )
-        new_desc = _TEMPLATE_DESCRIPTION_PREFIX + finding.description
+        updates = {
+            "verification_status": VerificationStatus.verified,
+            "suggested_fix": _TEMPLATE_SUGGESTED_FIX,
+        }
         if reasoning:
-            new_desc = f"{new_desc}\n\nLLM verification: {reasoning}"
-        return finding.model_copy(
-            update={
-                "severity": Severity.Medium,
-                "cvss_band": severity_to_cvss_band(Severity.Medium),
-                "description": new_desc,
-                "suggested_fix": _TEMPLATE_SUGGESTED_FIX,
-            }
-        )
+            updates["description"] = f"{finding.description}\n\nLLM verification: {reasoning}"
+        return finding.model_copy(update=updates)
 
     # verdict == "real"
     # NOTE: reasoning is intentionally NOT logged — it may contain the literal

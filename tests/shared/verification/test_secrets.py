@@ -150,10 +150,8 @@ def test_missing_file_keeps_finding_failsafe():
     client.ask.assert_not_called()
 
 
-def test_test_fixture_verdict_downgrades_to_medium():
-    """A test_fixture verdict keeps the finding but lowers severity to Medium."""
-    from security_scanner.shared.severity.mapping import severity_to_cvss_band
-
+def test_test_fixture_verdict_keeps_original_severity():
+    """A test_fixture verdict keeps the finding at its original severity."""
     client = MagicMock(spec=ClaudeClient)
     client.ask.return_value = (
         "VERDICT: test_fixture\nPlausible password in a SQL fixture file."
@@ -166,14 +164,13 @@ def test_test_fixture_verdict_downgrades_to_medium():
     out = verify_secret_findings(findings, hits, files, client)
 
     assert len(out) == 1
-    assert out[0].severity == Severity.Medium
-    assert out[0].cvss_band == severity_to_cvss_band(Severity.Medium)
-    assert out[0].description.startswith("[Likely test fixture")
+    assert out[0].severity == Severity.Critical
+    assert out[0].verification_status.value == "verified"
     assert "LLM verification:" in out[0].description
 
 
 def test_mixed_verdicts_keep_real_and_test_fixture_drop_fp():
-    """Real → kept Critical; test_fixture → kept Medium; false_positive → dropped."""
+    """Real → kept Critical; test_fixture → kept Critical; false_positive → dropped."""
     client = MagicMock(spec=ClaudeClient)
     # All three findings now fit in one batched call (batch size 5).
     client.ask.return_value = (
@@ -198,7 +195,7 @@ def test_mixed_verdicts_keep_real_and_test_fixture_drop_fp():
 
     assert [(f.affected_file, f.severity) for f in out] == [
         ("prod.env", Severity.Critical),
-        ("fixtures.sql", Severity.Medium),
+        ("fixtures.sql", Severity.Critical),
     ]
 
 
@@ -242,9 +239,7 @@ def test_layer1_hit_in_non_template_file_still_auto_verifies():
     client.ask.assert_not_called()
 
 
-def test_template_example_verdict_downgrades_to_medium_with_policy():
-    from security_scanner.shared.severity.mapping import severity_to_cvss_band
-
+def test_template_example_verdict_keeps_original_severity_with_policy():
     client = MagicMock(spec=ClaudeClient)
     client.ask.return_value = (
         "VERDICT: template_example\nObvious placeholder in env template."
@@ -257,9 +252,8 @@ def test_template_example_verdict_downgrades_to_medium_with_policy():
     out = verify_secret_findings(findings, hits, files, client)
 
     assert len(out) == 1
-    assert out[0].severity == Severity.Medium
-    assert out[0].cvss_band == severity_to_cvss_band(Severity.Medium)
-    assert out[0].description.startswith("[Template placeholder")
+    assert out[0].severity == Severity.Critical
+    assert out[0].verification_status.value == "verified"
     assert "1Password" in out[0].suggested_fix
 
 
@@ -406,7 +400,7 @@ def test_batched_response_with_misordered_verdicts():
     out = verify_secret_findings(findings, hits, files, client)
 
     severities = {(f.affected_file, f.severity) for f in out}
-    assert severities == {("f2.py", Severity.Medium), ("f3.py", Severity.Critical)}
+    assert severities == {("f2.py", Severity.Critical), ("f3.py", Severity.Critical)}
 
 
 def test_unbatched_single_finding_response_still_parses():
