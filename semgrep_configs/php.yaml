@@ -1,0 +1,398 @@
+rules:
+
+  # ---------------------------------------------------------------------------
+  # PHP SQL injection
+  # ---------------------------------------------------------------------------
+
+  - id: php-sqli-mysql-concat
+    patterns:
+      - pattern: mysql_query("..." . $USERINPUT)
+      - pattern: mysql_query($QUERY . $USERINPUT)
+    message: >
+      SQL query constructed by string concatenation with potentially user-controlled
+      input (SQL Injection — CWE-89). The deprecated mysql_* API has no parameterized
+      query support. Migrate to PDO or MySQLi with prepared statements.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      vuln_class: sqli
+      owasp: A03:2021
+      cwe: CWE-89
+
+  - id: php-sqli-mysqli-concat
+    patterns:
+      - pattern: mysqli_query($CONN, "..." . $USERINPUT)
+      - pattern: mysqli_query($CONN, $QUERY . $USERINPUT)
+      - pattern: $CONN->query("..." . $USERINPUT)
+    message: >
+      SQL query constructed by string concatenation (SQL Injection — CWE-89).
+      Use prepared statements: $stmt = $mysqli->prepare("SELECT ... WHERE id = ?");
+      $stmt->bind_param("s", $id); $stmt->execute();
+    languages: [php]
+    severity: ERROR
+    metadata:
+      vuln_class: sqli
+      owasp: A03:2021
+      cwe: CWE-89
+
+  - id: php-sqli-pdo-exec-concat
+    patterns:
+      - pattern: $PDO->query("..." . $USERINPUT)
+      - pattern: $PDO->exec("..." . $USERINPUT)
+    message: >
+      PDO::query/exec() with string concatenation bypasses parameterization
+      (SQL Injection — CWE-89). Use PDO::prepare() with bound parameters instead.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      vuln_class: sqli
+      owasp: A03:2021
+      cwe: CWE-89
+
+  - id: php-sqli-variable-query
+    patterns:
+      - pattern: |
+          $SQL = "..." . $_GET[$KEY]
+          ...
+          $DB->query($SQL)
+      - pattern: |
+          $SQL = "..." . $_POST[$KEY]
+          ...
+          $DB->query($SQL)
+      - pattern: |
+          $SQL = "..." . $_REQUEST[$KEY]
+          ...
+          $DB->query($SQL)
+    message: >
+      SQL query built from a $_GET/$_POST/$_REQUEST value without parameterization
+      (SQL Injection — CWE-89). Use prepared statements with bind_param().
+    languages: [php]
+    severity: ERROR
+    metadata:
+      vuln_class: sqli
+      owasp: A03:2021
+      cwe: CWE-89
+
+  # ---------------------------------------------------------------------------
+  # PHP XSS
+  # ---------------------------------------------------------------------------
+
+  - id: php-echo-xss-get
+    pattern: echo $_GET[$KEY]
+    message: >
+      Reflected XSS: $_GET value echoed directly without encoding (CWE-79).
+      An attacker can inject HTML/JavaScript via the URL parameter.
+      Use htmlspecialchars($_GET[$KEY], ENT_QUOTES, 'UTF-8') before echoing.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      vuln_class: xss
+      owasp: A03:2021
+      cwe: CWE-79
+
+  - id: php-echo-xss-post
+    pattern: echo $_POST[$KEY]
+    message: >
+      Reflected XSS: $_POST value echoed directly without encoding (CWE-79).
+      Use htmlspecialchars($_POST[$KEY], ENT_QUOTES, 'UTF-8') before echoing.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      vuln_class: xss
+      owasp: A03:2021
+      cwe: CWE-79
+
+  - id: php-echo-xss-request
+    pattern: echo $_REQUEST[$KEY]
+    message: >
+      Reflected XSS: $_REQUEST value echoed directly without HTML encoding (CWE-79).
+      Use htmlspecialchars() before echoing any user-supplied value.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      vuln_class: xss
+      owasp: A03:2021
+      cwe: CWE-79
+
+  - id: php-print-xss
+    patterns:
+      - pattern: print($_GET[$KEY])
+      - pattern: print($_POST[$KEY])
+      - pattern: print($_REQUEST[$KEY])
+    message: >
+      Reflected XSS: user-supplied value printed without HTML encoding.
+      Use htmlspecialchars() before outputting any request data.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      vuln_class: xss
+      owasp: A03:2021
+      cwe: CWE-79
+
+  # ---------------------------------------------------------------------------
+  # PHP Local File Inclusion (LFI / RFI)
+  # ---------------------------------------------------------------------------
+
+  - id: php-lfi-include
+    patterns:
+      - pattern: include($_GET[$KEY])
+      - pattern: include($_POST[$KEY])
+      - pattern: include($_REQUEST[$KEY])
+      - pattern: include($BASEVAR . $_GET[$KEY])
+      - pattern: include($BASEVAR . $_POST[$KEY])
+    message: >
+      Local File Inclusion: include() called with a user-controlled filename
+      (CWE-22 / CWE-98). An attacker can include arbitrary server-side files
+      (e.g. /etc/passwd, ../config.php) or, if allow_url_include is on, a
+      remote URL for RCE. Use an allowlist of permitted template names and
+      never pass user input directly to include().
+    languages: [php]
+    severity: ERROR
+    metadata:
+      vuln_class: path_traversal
+      owasp: A01:2021
+      cwe: CWE-98
+
+  - id: php-lfi-require
+    patterns:
+      - pattern: require($_GET[$KEY])
+      - pattern: require($_POST[$KEY])
+      - pattern: require($BASEVAR . $_GET[$KEY])
+    message: >
+      Local File Inclusion: require() with user-controlled input enables LFI/RFI
+      (CWE-98). Use an allowlist of permitted file names.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      vuln_class: path_traversal
+      owasp: A01:2021
+      cwe: CWE-98
+
+  - id: php-lfi-include-once
+    patterns:
+      - pattern: include_once($_GET[$KEY])
+      - pattern: include_once($BASEVAR . $_GET[$KEY])
+      - pattern: require_once($_GET[$KEY])
+      - pattern: require_once($BASEVAR . $_GET[$KEY])
+    message: >
+      LFI: include_once/require_once with user-controlled input (CWE-98).
+      Use an allowlist of allowed template identifiers.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      vuln_class: path_traversal
+      owasp: A01:2021
+      cwe: CWE-98
+
+  # ---------------------------------------------------------------------------
+  # PHP Command / OS injection
+  # ---------------------------------------------------------------------------
+
+  - id: php-cmd-injection-system
+    patterns:
+      - pattern: system($_GET[$KEY])
+      - pattern: system($_POST[$KEY])
+      - pattern: system("..." . $_GET[$KEY])
+      - pattern: system("..." . $_POST[$KEY])
+    message: >
+      Command injection: system() called with user-controlled input (CWE-78).
+      An attacker can execute arbitrary OS commands. Avoid system() entirely;
+      if a shell call is necessary, use escapeshellarg() on every argument.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      vuln_class: command_injection
+      owasp: A03:2021
+      cwe: CWE-78
+
+  - id: php-cmd-injection-exec
+    patterns:
+      - pattern: exec($_GET[$KEY], ...)
+      - pattern: exec($_POST[$KEY], ...)
+      - pattern: exec("..." . $_GET[$KEY], ...)
+    message: >
+      Command injection: exec() with user-controlled input (CWE-78).
+      Use escapeshellarg() on every argument or avoid shell execution entirely.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      vuln_class: command_injection
+      owasp: A03:2021
+      cwe: CWE-78
+
+  - id: php-cmd-injection-shell-exec
+    patterns:
+      - pattern: shell_exec($_GET[$KEY])
+      - pattern: shell_exec($_POST[$KEY])
+      - pattern: shell_exec("..." . $_GET[$KEY])
+    message: >
+      Command injection: shell_exec() with user-controlled input (CWE-78).
+      An attacker can run arbitrary OS commands.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      vuln_class: command_injection
+      owasp: A03:2021
+      cwe: CWE-78
+
+  - id: php-cmd-injection-passthru
+    patterns:
+      - pattern: passthru($_GET[$KEY])
+      - pattern: passthru("..." . $_GET[$KEY])
+    message: >
+      Command injection: passthru() with user-controlled input (CWE-78).
+    languages: [php]
+    severity: ERROR
+    metadata:
+      vuln_class: command_injection
+      owasp: A03:2021
+      cwe: CWE-78
+
+  - id: php-cmd-injection-popen
+    patterns:
+      - pattern: popen("..." . $_GET[$KEY], ...)
+      - pattern: popen("..." . $_POST[$KEY], ...)
+    message: >
+      Command injection: popen() with user-controlled input (CWE-78).
+    languages: [php]
+    severity: ERROR
+    metadata:
+      vuln_class: command_injection
+      owasp: A03:2021
+      cwe: CWE-78
+
+  # ---------------------------------------------------------------------------
+  # PHP Code injection / eval
+  # ---------------------------------------------------------------------------
+
+  - id: php-code-injection-eval
+    patterns:
+      - pattern: eval($_GET[$KEY])
+      - pattern: eval($_POST[$KEY])
+      - pattern: eval($_REQUEST[$KEY])
+    message: >
+      Code injection: eval() with user-controlled input executes arbitrary PHP
+      (CWE-94). There is no safe use of eval() with untrusted data.
+      Remove eval() and replace with a safe, sandboxed alternative.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      vuln_class: code_injection
+      owasp: A03:2021
+      cwe: CWE-94
+
+  - id: php-create-function-injection
+    patterns:
+      - pattern: create_function($ARGS, $_GET[$KEY])
+      - pattern: create_function($ARGS, $_POST[$KEY])
+    message: >
+      create_function() with user-controlled body string executes arbitrary PHP
+      (equivalent to eval — CWE-94). Deprecated since PHP 7.2. Remove it.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      vuln_class: code_injection
+      owasp: A03:2021
+      cwe: CWE-94
+
+  # ---------------------------------------------------------------------------
+  # PHP insecure deserialization
+  # ---------------------------------------------------------------------------
+
+  - id: php-deserialization-get
+    patterns:
+      - pattern: unserialize($_GET[$KEY])
+      - pattern: unserialize($_POST[$KEY])
+      - pattern: unserialize($_COOKIE[$KEY])
+      - pattern: unserialize($_REQUEST[$KEY])
+    message: >
+      Insecure deserialization: unserialize() with user-controlled input allows
+      PHP Object Injection (CWE-502). An attacker can chain magic methods
+      (__destruct, __wakeup) to achieve remote code execution. Use JSON for
+      data interchange instead of serialized PHP objects.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      vuln_class: deserialization
+      owasp: A08:2021
+      cwe: CWE-502
+
+  # ---------------------------------------------------------------------------
+  # PHP file upload
+  # ---------------------------------------------------------------------------
+
+  - id: php-file-upload-unsafe
+    patterns:
+      - pattern: move_uploaded_file($_FILES[$FIELD]["tmp_name"], $DEST . $_FILES[$FIELD]["name"])
+      - pattern: move_uploaded_file($_FILES[$FIELD]["tmp_name"], $_FILES[$FIELD]["name"])
+    message: >
+      Unsafe file upload: move_uploaded_file() using the attacker-controlled
+      original filename (CWE-434). The attacker can supply '../../../etc/cron.d/evil'
+      to write to arbitrary paths, or 'shell.php' to create a webshell if stored
+      in a web-accessible directory. Generate a server-side UUID filename instead.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      vuln_class: unsafe_file_upload
+      owasp: A01:2021
+      cwe: CWE-434
+
+  # ---------------------------------------------------------------------------
+  # PHP open redirect
+  # ---------------------------------------------------------------------------
+
+  - id: php-open-redirect
+    patterns:
+      - pattern: header("Location: " . $_GET[$KEY])
+      - pattern: header("Location: " . $_POST[$KEY])
+      - pattern: header("location: " . $_GET[$KEY])
+    message: >
+      Open redirect: Location header set from user-controlled input (CWE-601).
+      An attacker can craft a URL that redirects victims to a phishing site.
+      Validate the destination against an allowlist of permitted URLs or paths.
+    languages: [php]
+    severity: WARNING
+    metadata:
+      vuln_class: open_redirect
+      owasp: A01:2021
+      cwe: CWE-601
+
+  # ---------------------------------------------------------------------------
+  # PHP HTTP response header injection
+  # ---------------------------------------------------------------------------
+
+  - id: php-header-injection
+    patterns:
+      - pattern: header($HEADER . $_GET[$KEY])
+      - pattern: header($HEADER . $_POST[$KEY])
+    message: >
+      HTTP response header injection: user-controlled data in header() call
+      allows CRLF injection / HTTP response splitting (CWE-113).
+      Strip all \r and \n characters from any user input placed in headers.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      vuln_class: xss
+      owasp: A03:2021
+      cwe: CWE-113
+
+  # ---------------------------------------------------------------------------
+  # PHP path traversal via file functions
+  # ---------------------------------------------------------------------------
+
+  - id: php-file-get-contents-traversal
+    patterns:
+      - pattern: file_get_contents($_GET[$KEY])
+      - pattern: file_get_contents($_POST[$KEY])
+      - pattern: file_get_contents($BASE . $_GET[$KEY])
+    message: >
+      Path traversal / SSRF: file_get_contents() with user-controlled path can
+      read arbitrary local files (CWE-22) or make server-side requests to
+      http:// URLs (CWE-918). Validate path against an allowlist or use
+      realpath() + commonpath() containment check.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      vuln_class: path_traversal
+      owasp: A01:2021
+      cwe: CWE-22

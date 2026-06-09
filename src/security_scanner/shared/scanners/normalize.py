@@ -10,7 +10,9 @@ Taxonomy members
 sqli, xss, command_injection, path_traversal, ssrf, deserialization,
 weak_crypto, xxe, csrf, open_redirect, auth_bypass, code_injection,
 insecure_random, unsafe_yaml, unsafe_file_upload, injection_generic,
-redos, runtime_panic
+redos, runtime_panic, subprocess_usage, insecure_network_config, poor_error_handling,
+info_disclosure, insecure_design, security_misconfiguration, vulnerable_components,
+logging_monitoring_failure, memory_safety
 
 ``injection_generic`` is the fallback for OWASP A03:2021 ("Injection") when
 description-based inference in merge.py cannot identify the specific subtype.
@@ -21,6 +23,33 @@ risk distinct from code injection. No special verifier rubric; generic prompt ap
 
 ``runtime_panic`` covers Go runtime panic / DoS issues (e.g. out-of-bounds slice
 access, memory aliasing) that are distinct from injection or traversal vulnerabilities.
+
+``subprocess_usage`` covers subprocess module imports — potential for shell execution
+but not confirmed command injection until actual usage is observed (B404).
+
+``insecure_network_config`` covers dangerous network binding (e.g. listen on all
+interfaces) — exposure risk, not server-side request forgery.
+
+``poor_error_handling`` covers unhandled or suppressed errors that may mask security
+failures — broad Go/Python rule, evaluated generically by the verifier.
+
+``info_disclosure`` covers endpoints or code paths that expose sensitive runtime or
+internal data (e.g. pprof profiling endpoints, stack traces in responses).
+
+``insecure_design`` maps OWASP A04:2021 — broad insecure design patterns that do not
+fit a more specific injection or crypto class.
+
+``security_misconfiguration`` maps OWASP A05:2021 — misconfigured security settings,
+default credentials, or unnecessary features enabled.
+
+``vulnerable_components`` maps OWASP A06:2021 — use of components with known
+vulnerabilities; verifier evaluates exploitability in context.
+
+``logging_monitoring_failure`` maps OWASP A09:2021 — insufficient logging or monitoring
+that could allow attacks to go undetected.
+
+``memory_safety`` covers Node.js buffer misuse and similar memory-padding / uninitialized
+memory issues that are distinct from code injection.
 """
 
 from __future__ import annotations
@@ -67,7 +96,7 @@ _BANDIT_MAP: dict[str, str] = {
     "B401": "ssrf",                 # import_telnetlib
     "B402": "ssrf",                 # import_ftplib
     "B403": "deserialization",      # import_pickle
-    "B404": "command_injection",    # import_subprocess
+    "B404": "subprocess_usage",      # import_subprocess — import alone is not injection
     "B405": "xxe",                  # import_xml_etree
     "B406": "xxe",                  # import_xml_sax
     "B407": "xxe",                  # import_xml_expat
@@ -83,7 +112,7 @@ _BANDIT_MAP: dict[str, str] = {
     "B505": "weak_crypto",          # weak_cryptographic_key
     "B202": "unsafe_file_upload",   # tarfile_unsafe_extract
     "B506": "unsafe_yaml",          # yaml_load
-    "B507": "ssrf",                 # ssh_no_host_key_verification
+    "B507": "weak_crypto",           # ssh_no_host_key_verification — MITM/crypto risk, not SSRF
     "B601": "command_injection",    # paramiko_calls
     "B602": "command_injection",    # subprocess_popen_with_shell_equals_true
     "B603": "command_injection",    # subprocess_without_shell_equals_true
@@ -105,12 +134,12 @@ _BANDIT_MAP: dict[str, str] = {
 # ---------------------------------------------------------------------------
 _GOSEC_MAP: dict[str, str] = {
     "G101": "auth_bypass",          # hardcoded credentials
-    "G102": "ssrf",                 # bind to all interfaces
-    "G103": "code_injection",       # unsafe block
-    "G104": "auth_bypass",          # errors unhandled
+    "G102": "insecure_network_config",  # bind to all interfaces — exposure, not SSRF
+    "G103": "code_injection",          # unsafe block
+    "G104": "poor_error_handling",     # errors unhandled — broad; verifier evaluates security impact
     "G106": "weak_crypto",          # ssh InsecureIgnoreHostKey
     "G107": "ssrf",                 # url provided to HTTP request as taint
-    "G108": "path_traversal",       # profiling endpoint
+    "G108": "info_disclosure",         # profiling endpoint — exposes runtime data, not traversal
     "G109": "code_injection",       # Potential Integer overflow
     "G110": "path_traversal",       # potential DoS (zip slip)
     "G111": "path_traversal",       # file path provided as taint
@@ -195,6 +224,171 @@ _SEMGREP_MAP: dict[str, str] = {
     "code-injection": "code_injection",
     "insecure-random": "insecure_random",
     "unsafe-yaml": "unsafe_yaml",
+    # ssrf.yaml — Python SSRF
+    "python-requests-ssrf": "ssrf",
+    "python-urllib-ssrf": "ssrf",
+    "python-urllib2-urlopen-ssrf": "ssrf",
+    "python-httpx-ssrf": "ssrf",
+    "python-aiohttp-ssrf": "ssrf",
+    "python-requests-url-format": "ssrf",
+    "python-requests-url-fstring": "ssrf",
+    # ssrf.yaml — JS/TS SSRF
+    "js-fetch-ssrf": "ssrf",
+    "js-axios-ssrf": "ssrf",
+    "js-node-http-ssrf": "ssrf",
+    "js-node-https-ssrf": "ssrf",
+    "js-got-ssrf": "ssrf",
+    # ssrf.yaml — Ruby SSRF
+    "ruby-net-http-ssrf": "ssrf",
+    "ruby-open-uri-ssrf": "ssrf",
+    # path-traversal.yaml — Python
+    "python-open-path-traversal": "path_traversal",
+    "python-open-concat-traversal": "path_traversal",
+    "python-open-fstring-traversal": "path_traversal",
+    "python-pathlib-traversal": "path_traversal",
+    "python-send-file-traversal": "path_traversal",
+    "python-send-from-directory-traversal": "path_traversal",
+    "python-os-listdir-traversal": "path_traversal",
+    "python-shutil-copy-traversal": "path_traversal",
+    "python-os-path-join-user-input": "path_traversal",
+    # path-traversal.yaml — JS/TS
+    "js-fs-readfile-traversal": "path_traversal",
+    "js-fs-readfilesync-traversal": "path_traversal",
+    "js-fs-writefile-traversal": "path_traversal",
+    "js-fs-createreadstream-traversal": "path_traversal",
+    "js-path-join-traversal": "path_traversal",
+    "js-express-res-download-traversal": "path_traversal",
+    "js-express-res-sendfile-traversal": "path_traversal",
+    # path-traversal.yaml — Ruby
+    "ruby-file-read-traversal": "path_traversal",
+    "ruby-file-open-traversal": "path_traversal",
+    # injection.yaml — SSTI (Python)
+    "python-render-template-string-ssti": "code_injection",
+    "python-render-template-string-import-ssti": "code_injection",
+    "python-jinja2-from-string-ssti": "code_injection",
+    "python-jinja2-template-ssti": "code_injection",
+    "python-mako-template-ssti": "code_injection",
+    # injection.yaml — SSTI (JS)
+    "js-handlebars-compile-ssti": "code_injection",
+    "js-pug-compile-ssti": "code_injection",
+    "js-ejs-render-ssti": "code_injection",
+    "js-vm-runinthiscontext-ssti": "code_injection",
+    "js-new-function-injection": "code_injection",
+    # injection.yaml — header injection
+    "python-flask-header-injection": "xss",
+    "js-express-header-injection": "xss",
+    "js-express-setHeader-injection": "xss",
+    # injection.yaml — NoSQL injection
+    "python-pymongo-nosql-injection": "sqli",
+    "js-mongoose-nosql-injection": "sqli",
+    # injection.yaml — LDAP injection
+    "python-ldap-injection": "sqli",
+    # injection.yaml — format_map injection
+    "python-format-map-injection": "code_injection",
+    # auth.yaml — JWT weaknesses
+    "python-jwt-decode-no-verify": "auth_bypass",
+    "python-jwt-decode-algorithms-none": "auth_bypass",
+    "python-jwt-decode-complete-unverified": "auth_bypass",
+    "python-python-jose-no-verify": "auth_bypass",
+    "js-jwt-no-verify": "auth_bypass",
+    "js-jwt-verify-algorithms-none": "auth_bypass",
+    # auth.yaml — hardcoded secrets
+    "python-flask-hardcoded-secret": "auth_bypass",
+    "python-django-hardcoded-secret": "auth_bypass",
+    "js-hardcoded-jwt-secret": "auth_bypass",
+    "python-hardcoded-password-in-db-url": "auth_bypass",
+    # auth.yaml — CORS
+    "python-cors-wildcard-credentials": "auth_bypass",
+    "python-cors-echo-origin": "auth_bypass",
+    "js-cors-wildcard-credentials": "auth_bypass",
+    "js-cors-echo-origin": "auth_bypass",
+    # auth.yaml — timing attack, debug mode, cookies
+    "python-timing-attack-password-compare": "auth_bypass",
+    "python-flask-debug-mode": "security_misconfiguration",
+    "python-django-debug-true": "security_misconfiguration",
+    "python-flask-cookie-no-httponly": "auth_bypass",
+    "python-flask-cookie-no-secure": "auth_bypass",
+    # php.yaml — SQL injection
+    "php-sqli-mysql-concat": "sqli",
+    "php-sqli-mysqli-concat": "sqli",
+    "php-sqli-pdo-exec-concat": "sqli",
+    "php-sqli-variable-query": "sqli",
+    # php.yaml — XSS
+    "php-echo-xss-get": "xss",
+    "php-echo-xss-post": "xss",
+    "php-echo-xss-request": "xss",
+    "php-print-xss": "xss",
+    # php.yaml — LFI
+    "php-lfi-include": "path_traversal",
+    "php-lfi-require": "path_traversal",
+    "php-lfi-include-once": "path_traversal",
+    # php.yaml — command injection
+    "php-cmd-injection-system": "command_injection",
+    "php-cmd-injection-exec": "command_injection",
+    "php-cmd-injection-shell-exec": "command_injection",
+    "php-cmd-injection-passthru": "command_injection",
+    "php-cmd-injection-popen": "command_injection",
+    # php.yaml — code injection / deserialization / file upload
+    "php-code-injection-eval": "code_injection",
+    "php-create-function-injection": "code_injection",
+    "php-deserialization-get": "deserialization",
+    "php-file-upload-unsafe": "unsafe_file_upload",
+    # php.yaml — misc
+    "php-open-redirect": "open_redirect",
+    "php-header-injection": "xss",
+    "php-file-get-contents-traversal": "path_traversal",
+    # java.yaml — SQL injection
+    "java-sqli-statement-concat": "sqli",
+    "java-sqli-string-format": "sqli",
+    "java-sqli-jpa-concat": "sqli",
+    # java.yaml — command injection
+    "java-cmd-injection-runtime-exec": "command_injection",
+    "java-cmd-injection-processbuilder": "command_injection",
+    # java.yaml — path traversal
+    "java-path-traversal-new-file": "path_traversal",
+    "java-path-traversal-fileinputstream": "path_traversal",
+    "java-path-traversal-paths-get": "path_traversal",
+    # java.yaml — XXE
+    "java-xxe-documentbuilder": "xxe",
+    "java-xxe-saxparser": "xxe",
+    "java-xxe-xmlinputfactory": "xxe",
+    # java.yaml — deserialization / SSRF / redirect / XSS / LDAP / EL
+    "java-deserialization-objectinputstream": "deserialization",
+    "java-ssrf-url": "ssrf",
+    "java-ssrf-url-read": "ssrf",
+    "java-open-redirect": "open_redirect",
+    "java-xss-printwriter": "xss",
+    "java-ldap-injection": "sqli",
+    "java-el-injection": "code_injection",
+    # java.yaml — weak crypto
+    "java-weak-crypto-md5": "weak_crypto",
+    "java-weak-crypto-sha1": "weak_crypto",
+    "java-weak-cipher-des": "weak_crypto",
+    "java-tls-insecure-skip-verify": "weak_crypto",
+    # Prefix-based catch-all for registry rule IDs (p/owasp-top-ten etc.)
+    # These use patterns like "python.lang.security.audit.sqli.*"
+    # The normalize() prefix/substring logic handles the rest.
+    "php-sqli": "sqli",           # prefix for any php-sqli-* variant
+    "php-xss": "xss",
+    "php-echo-xss": "xss",
+    "php-lfi": "path_traversal",
+    "php-cmd": "command_injection",
+    "php-code-injection": "code_injection",
+    "php-deserialization": "deserialization",
+    "php-file-upload": "unsafe_file_upload",
+    "php-open-redirect": "open_redirect",
+    "php-header": "xss",
+    "java-sqli": "sqli",
+    "java-xxe": "xxe",
+    "java-cmd": "command_injection",
+    "java-path-traversal": "path_traversal",
+    "java-deserialization": "deserialization",
+    "java-ssrf": "ssrf",
+    "java-open-redirect": "open_redirect",
+    "java-xss": "xss",
+    "java-ldap": "sqli",
+    "java-el": "code_injection",
+    "java-weak": "weak_crypto",
     # upload-security.yaml rule IDs
     "upload-attacker-filename": "unsafe_file_upload",
     "upload-extension-only": "unsafe_file_upload",
@@ -225,15 +419,15 @@ _ESLINT_MAP: dict[str, str] = {
     "security/detect-non-literal-fs-filename": "path_traversal",
     "security/detect-non-literal-require": "code_injection",
     "security/detect-eval-with-expression": "code_injection",
-    "security/detect-new-buffer": "code_injection",
+    "security/detect-new-buffer": "memory_safety",
     "security/detect-no-csrf-before-method-override": "csrf",
     "security/detect-possible-timing-attacks": "auth_bypass",
     "security/detect-pseudoRandomBytes": "insecure_random",
     "security/detect-unsafe-regex": "redos",
-    "security/detect-buffer-noassert": "code_injection",
+    "security/detect-buffer-noassert": "memory_safety",
     "security/detect-child-process": "command_injection",
     "security/detect-disable-mustache-escape": "xss",
-    "security/detect-object-injection": "code_injection",
+    "security/detect-object-injection": "auth_bypass",
     "no-unsanitized/method": "xss",
     "no-unsanitized/property": "xss",
 }
@@ -256,12 +450,12 @@ _OWASP_MAP: dict[str, str] = {
     "a01:2021": "auth_bypass",       # Broken Access Control
     "a02:2021": "weak_crypto",       # Cryptographic Failures
     "a03:2021": "injection_generic",  # Injection — specific class inferred from description in merge.py
-    "a04:2021": "code_injection",    # Insecure Design
-    "a05:2021": "code_injection",    # Security Misconfiguration
-    "a06:2021": "code_injection",    # Vulnerable Components
-    "a07:2021": "auth_bypass",       # Auth Failures
-    "a08:2021": "deserialization",   # Software & Data Integrity Failures
-    "a09:2021": "code_injection",    # Security Logging Failures
+    "a04:2021": "insecure_design",              # Insecure Design
+    "a05:2021": "security_misconfiguration",    # Security Misconfiguration
+    "a06:2021": "vulnerable_components",        # Vulnerable and Outdated Components
+    "a07:2021": "auth_bypass",                  # Identification and Authentication Failures
+    "a08:2021": "deserialization",              # Software and Data Integrity Failures
+    "a09:2021": "logging_monitoring_failure",   # Security Logging and Monitoring Failures
     "a10:2021": "ssrf",              # SSRF
     "secret-001": "weak_crypto",     # hardcoded credential
 }

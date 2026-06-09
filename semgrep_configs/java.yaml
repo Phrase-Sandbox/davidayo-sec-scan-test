@@ -1,0 +1,379 @@
+rules:
+
+  # ---------------------------------------------------------------------------
+  # Java SQL injection
+  # ---------------------------------------------------------------------------
+
+  - id: java-sqli-statement-concat
+    patterns:
+      - pattern: $STMT.execute($SQL + $USERINPUT)
+      - pattern: $STMT.execute($SQL)
+      - pattern: $STMT.executeQuery($SQL + $USERINPUT)
+      - pattern: $STMT.executeUpdate($SQL + $USERINPUT)
+    message: >
+      SQL query constructed by string concatenation (SQL Injection — CWE-89).
+      Use PreparedStatement with parameterized queries:
+      PreparedStatement ps = conn.prepareStatement("SELECT ... WHERE id = ?");
+      ps.setString(1, id);
+    languages: [java]
+    severity: ERROR
+    metadata:
+      vuln_class: sqli
+      owasp: A03:2021
+      cwe: CWE-89
+
+  - id: java-sqli-string-format
+    patterns:
+      - pattern: $CONN.prepareStatement(String.format($SQL, $USERINPUT))
+      - pattern: $CONN.createStatement().execute(String.format($SQL, $USERINPUT))
+    message: >
+      SQL query built with String.format() and user input (SQL Injection — CWE-89).
+      Pass the format string to PreparedStatement and bind parameters instead.
+    languages: [java]
+    severity: ERROR
+    metadata:
+      vuln_class: sqli
+      owasp: A03:2021
+      cwe: CWE-89
+
+  - id: java-sqli-jpa-concat
+    patterns:
+      - pattern: $EM.createQuery($QUERY + $USERINPUT)
+      - pattern: $EM.createNativeQuery($QUERY + $USERINPUT)
+    message: >
+      JPA/Hibernate query constructed by concatenation (SQL/JPQL Injection).
+      Use parameterized JPQL: em.createQuery("... WHERE u.name = :name")
+      .setParameter("name", name)
+    languages: [java]
+    severity: ERROR
+    metadata:
+      vuln_class: sqli
+      owasp: A03:2021
+      cwe: CWE-89
+
+  # ---------------------------------------------------------------------------
+  # Java command injection
+  # ---------------------------------------------------------------------------
+
+  - id: java-cmd-injection-runtime-exec
+    patterns:
+      - pattern: Runtime.getRuntime().exec($CMD + $USERINPUT)
+      - pattern: Runtime.getRuntime().exec(new String[]{..., $USERINPUT})
+    message: >
+      Command injection: Runtime.exec() with user-controlled input (CWE-78).
+      An attacker can execute arbitrary OS commands. Use ProcessBuilder with
+      a fixed command array and no shell expansion instead.
+    languages: [java]
+    severity: ERROR
+    metadata:
+      vuln_class: command_injection
+      owasp: A03:2021
+      cwe: CWE-78
+
+  - id: java-cmd-injection-processbuilder
+    patterns:
+      - pattern: new ProcessBuilder($USERINPUT, ...)
+    message: >
+      Command injection: ProcessBuilder constructed with a potentially
+      user-controlled executable path or arguments (CWE-78).
+      Use a fixed allowlist of permitted executables.
+    languages: [java]
+    severity: WARNING
+    metadata:
+      vuln_class: command_injection
+      owasp: A03:2021
+      cwe: CWE-78
+
+  # ---------------------------------------------------------------------------
+  # Java path traversal
+  # ---------------------------------------------------------------------------
+
+  - id: java-path-traversal-new-file
+    patterns:
+      - pattern: new File($USERINPUT)
+      - pattern-not: new File("...")
+    message: >
+      Path traversal: java.io.File() constructed with potentially user-controlled
+      input (CWE-22). An attacker can supply '../../../etc/passwd' to access
+      arbitrary filesystem paths. Canonicalize the path with getCanonicalPath()
+      and verify it starts with the permitted base directory.
+    languages: [java]
+    severity: WARNING
+    metadata:
+      vuln_class: path_traversal
+      owasp: A01:2021
+      cwe: CWE-22
+
+  - id: java-path-traversal-fileinputstream
+    patterns:
+      - pattern: new FileInputStream($USERINPUT)
+      - pattern-not: new FileInputStream("...")
+    message: >
+      Path traversal: FileInputStream with potentially user-controlled path
+      (CWE-22). Canonicalize and validate the path before opening.
+    languages: [java]
+    severity: WARNING
+    metadata:
+      vuln_class: path_traversal
+      owasp: A01:2021
+      cwe: CWE-22
+
+  - id: java-path-traversal-paths-get
+    patterns:
+      - pattern: Paths.get($USERINPUT)
+      - pattern-not: Paths.get("...")
+    message: >
+      Path traversal: Paths.get() with potentially user-controlled input (CWE-22).
+      Use .normalize().toAbsolutePath() and verify it starts within the allowed base.
+    languages: [java]
+    severity: WARNING
+    metadata:
+      vuln_class: path_traversal
+      owasp: A01:2021
+      cwe: CWE-22
+
+  # ---------------------------------------------------------------------------
+  # Java XXE (XML External Entity)
+  # ---------------------------------------------------------------------------
+
+  - id: java-xxe-documentbuilder
+    patterns:
+      - pattern: DocumentBuilderFactory.newInstance()
+    message: >
+      XXE risk: DocumentBuilderFactory created without disabling external entity
+      processing (CWE-611). An attacker can include external entities to read
+      server files or make SSRF requests. Set features:
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+    languages: [java]
+    severity: ERROR
+    metadata:
+      vuln_class: xxe
+      owasp: A05:2021
+      cwe: CWE-611
+
+  - id: java-xxe-saxparser
+    patterns:
+      - pattern: SAXParserFactory.newInstance()
+    message: >
+      XXE risk: SAXParserFactory created without disabling external entity resolution
+      (CWE-611). Set setFeature("http://xml.org/sax/features/external-general-entities", false)
+      on the factory before using it.
+    languages: [java]
+    severity: ERROR
+    metadata:
+      vuln_class: xxe
+      owasp: A05:2021
+      cwe: CWE-611
+
+  - id: java-xxe-xmlinputfactory
+    patterns:
+      - pattern: XMLInputFactory.newInstance()
+    message: >
+      XXE risk: XMLInputFactory created without disabling external entity
+      resolution (CWE-611). Set
+      factory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false).
+    languages: [java]
+    severity: WARNING
+    metadata:
+      vuln_class: xxe
+      owasp: A05:2021
+      cwe: CWE-611
+
+  # ---------------------------------------------------------------------------
+  # Java insecure deserialization
+  # ---------------------------------------------------------------------------
+
+  - id: java-deserialization-objectinputstream
+    patterns:
+      - pattern: new ObjectInputStream($STREAM).readObject()
+      - pattern: |
+          ObjectInputStream $OIS = new ObjectInputStream($STREAM);
+          ...
+          $OIS.readObject()
+    message: >
+      Insecure deserialization: ObjectInputStream.readObject() deserializes
+      arbitrary Java classes from untrusted data (CWE-502). Combined with
+      classes in the classpath (gadget chains), this enables RCE.
+      Use a whitelisting ObjectInputFilter or replace serialization with JSON.
+    languages: [java]
+    severity: ERROR
+    metadata:
+      vuln_class: deserialization
+      owasp: A08:2021
+      cwe: CWE-502
+
+  # ---------------------------------------------------------------------------
+  # Java SSRF
+  # ---------------------------------------------------------------------------
+
+  - id: java-ssrf-url
+    patterns:
+      - pattern: new URL($USERINPUT).openConnection()
+      - pattern-not: new URL("...").openConnection()
+    message: >
+      SSRF: new URL().openConnection() with a potentially user-controlled URL
+      (CWE-918). An attacker can target internal services or cloud metadata
+      endpoints. Validate the URL host against an allowlist before opening.
+    languages: [java]
+    severity: WARNING
+    metadata:
+      vuln_class: ssrf
+      owasp: A10:2021
+      cwe: CWE-918
+
+  - id: java-ssrf-url-read
+    patterns:
+      - pattern: new URL($USERINPUT).openStream()
+      - pattern-not: new URL("...").openStream()
+    message: >
+      SSRF: URL.openStream() with a potentially user-controlled URL (CWE-918).
+      Validate the URL host against an allowlist before fetching.
+    languages: [java]
+    severity: WARNING
+    metadata:
+      vuln_class: ssrf
+      owasp: A10:2021
+      cwe: CWE-918
+
+  # ---------------------------------------------------------------------------
+  # Java open redirect
+  # ---------------------------------------------------------------------------
+
+  - id: java-open-redirect
+    patterns:
+      - pattern: $RESPONSE.sendRedirect($USERINPUT)
+      - pattern-not: $RESPONSE.sendRedirect("...")
+    message: >
+      Open redirect: sendRedirect() with a potentially user-controlled URL
+      (CWE-601). An attacker can redirect victims to a phishing site.
+      Validate the destination against an allowlist of permitted URLs.
+    languages: [java]
+    severity: WARNING
+    metadata:
+      vuln_class: open_redirect
+      owasp: A01:2021
+      cwe: CWE-601
+
+  # ---------------------------------------------------------------------------
+  # Java XSS
+  # ---------------------------------------------------------------------------
+
+  - id: java-xss-printwriter
+    patterns:
+      - pattern: $RESPONSE.getWriter().println($USERINPUT)
+      - pattern: $RESPONSE.getWriter().print($USERINPUT)
+      - pattern: $RESPONSE.getWriter().write($USERINPUT)
+    message: >
+      Reflected XSS: writing user-controlled data directly to the HTTP response
+      without HTML encoding (CWE-79). Use StringEscapeUtils.escapeHtml4() or
+      equivalent before writing any user-supplied content.
+    languages: [java]
+    severity: ERROR
+    metadata:
+      vuln_class: xss
+      owasp: A03:2021
+      cwe: CWE-79
+
+  # ---------------------------------------------------------------------------
+  # Java LDAP injection
+  # ---------------------------------------------------------------------------
+
+  - id: java-ldap-injection
+    patterns:
+      - pattern: $CTX.search($BASE, $FILTER, ...)
+      - pattern-not: $CTX.search($BASE, "...", ...)
+    message: >
+      LDAP injection: search filter constructed with potentially user-controlled
+      input (CWE-90). An attacker can modify the filter to bypass authentication
+      or dump directory entries. Encode all user input with
+      LdapEncoder.filterEncode() before embedding in LDAP filters.
+    languages: [java]
+    severity: ERROR
+    metadata:
+      vuln_class: sqli
+      owasp: A03:2021
+      cwe: CWE-90
+
+  # ---------------------------------------------------------------------------
+  # Java Expression Language injection
+  # ---------------------------------------------------------------------------
+
+  - id: java-el-injection
+    patterns:
+      - pattern: ExpressionFactory.newInstance().createValueExpression($CTX, $EXPR, ...)
+      - pattern-not: ExpressionFactory.newInstance().createValueExpression($CTX, "...", ...)
+    message: >
+      Expression Language Injection: createValueExpression() with user-controlled
+      input (CWE-94). EL expressions can access beans, static methods, and
+      potentially execute arbitrary code. Never pass user input to EL.
+    languages: [java]
+    severity: ERROR
+    metadata:
+      vuln_class: code_injection
+      owasp: A03:2021
+      cwe: CWE-94
+
+  # ---------------------------------------------------------------------------
+  # Java cryptographic weaknesses
+  # ---------------------------------------------------------------------------
+
+  - id: java-weak-crypto-md5
+    patterns:
+      - pattern: MessageDigest.getInstance("MD5")
+    message: >
+      MD5 is a broken cryptographic hash function. Do not use for security
+      purposes (password hashing, integrity checks, digital signatures).
+      Use SHA-256 or stronger; for passwords use BCrypt, SCrypt, or Argon2.
+    languages: [java]
+    severity: WARNING
+    metadata:
+      vuln_class: weak_crypto
+      owasp: A02:2021
+      cwe: CWE-327
+
+  - id: java-weak-crypto-sha1
+    patterns:
+      - pattern: MessageDigest.getInstance("SHA-1")
+      - pattern: MessageDigest.getInstance("SHA1")
+    message: >
+      SHA-1 is a broken cryptographic hash function (collision attacks exist).
+      Upgrade to SHA-256 or stronger.
+    languages: [java]
+    severity: WARNING
+    metadata:
+      vuln_class: weak_crypto
+      owasp: A02:2021
+      cwe: CWE-327
+
+  - id: java-weak-cipher-des
+    patterns:
+      - pattern: Cipher.getInstance("DES")
+      - pattern: Cipher.getInstance("DESede")
+      - pattern: Cipher.getInstance("3DES")
+    message: >
+      DES and 3DES are deprecated symmetric ciphers with known weaknesses.
+      Migrate to AES-256-GCM.
+    languages: [java]
+    severity: ERROR
+    metadata:
+      vuln_class: weak_crypto
+      owasp: A02:2021
+      cwe: CWE-327
+
+  - id: java-tls-insecure-skip-verify
+    patterns:
+      - pattern: |
+          class $C implements X509TrustManager {
+            public void checkServerTrusted(...) {}
+          }
+    message: >
+      TLS trust manager with empty checkServerTrusted() accepts all certificates,
+      enabling MITM attacks (CWE-295). Use the default X509TrustManager or
+      implement proper certificate chain validation.
+    languages: [java]
+    severity: ERROR
+    metadata:
+      vuln_class: weak_crypto
+      owasp: A02:2021
+      cwe: CWE-295

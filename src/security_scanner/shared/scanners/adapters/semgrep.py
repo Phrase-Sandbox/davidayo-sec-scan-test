@@ -3,12 +3,18 @@
 Invokes ``semgrep --json --quiet --metrics=off --error`` with vendored local
 configs so scans do not depend on the Semgrep Registry being available.
 
+When SEMGREP_USE_REGISTRY=true the adapter also appends the official
+``p/owasp-top-ten`` and ``p/default`` registry packs for significantly broader
+language and vulnerability-class coverage. Registry packs require internet
+access; unavailability falls back gracefully (findings may be fewer).
+
 Binary missing → log warning + return [] (graceful degrade).
 """
 
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -27,13 +33,37 @@ _CONFIGS_DIR = Path(__file__).parents[5] / "semgrep_configs"
 _OWASP_CONFIG = _CONFIGS_DIR / "owasp-top-ten.yaml"
 _AUDIT_CONFIG = _CONFIGS_DIR / "security-audit.yaml"
 _UPLOAD_CONFIG = _CONFIGS_DIR / "upload-security.yaml"
+_SSRF_CONFIG = _CONFIGS_DIR / "ssrf.yaml"
+_PATH_TRAVERSAL_CONFIG = _CONFIGS_DIR / "path-traversal.yaml"
+_INJECTION_CONFIG = _CONFIGS_DIR / "injection.yaml"
+_AUTH_CONFIG = _CONFIGS_DIR / "auth.yaml"
+_PHP_CONFIG = _CONFIGS_DIR / "php.yaml"
+_JAVA_CONFIG = _CONFIGS_DIR / "java.yaml"
 
-# Maps rule-pack name → config path. "upload" is best-effort; others are required.
+# Maps rule-pack name → config path.
+# "required" packs abort the scan when missing; "best-effort" packs are skipped silently.
+_REQUIRED_PACKS = {"owasp", "audit"}
 _CONFIG_MAP: dict[str, Path] = {
+    # Core packs (required)
     "owasp": _OWASP_CONFIG,
     "audit": _AUDIT_CONFIG,
+    # Best-effort packs — skipped silently when file missing
     "upload": _UPLOAD_CONFIG,
+    "ssrf": _SSRF_CONFIG,
+    "path_traversal": _PATH_TRAVERSAL_CONFIG,
+    "injection": _INJECTION_CONFIG,
+    "auth": _AUTH_CONFIG,
+    "php": _PHP_CONFIG,
+    "java": _JAVA_CONFIG,
 }
+
+# When SEMGREP_USE_REGISTRY=true, append official registry packs for broad
+# multi-language coverage. Requires internet access inside the container.
+_USE_REGISTRY = os.environ.get("SEMGREP_USE_REGISTRY", "false").lower() in ("1", "true", "yes")
+_REGISTRY_PACKS: list[str] = [
+    "p/owasp-top-ten",   # 500+ rules, all languages — maintained by Semgrep
+    "p/default",          # curated high-confidence rules per language
+]
 
 TOOL = "semgrep"
 
@@ -48,26 +78,27 @@ async def scan(
     Parameters
     ----------
     rules:
-        Set of rule-pack names to run: ``{"owasp", "audit", "upload"}``.
-        ``None`` (default) runs all three — identical to the previous behaviour.
+        Set of rule-pack names to run.  ``None`` (default) runs all packs.
         An empty set skips Semgrep entirely.
+
+        Recognised names: ``owasp``, ``audit``, ``upload``, ``ssrf``,
+        ``path_traversal``, ``injection``, ``auth``, ``php``, ``java``.
+        Registry packs (``p/owasp-top-ten``, ``p/default``) are added
+        automatically when ``SEMGREP_USE_REGISTRY=true`` regardless of this
+        parameter.
     """
     if shutil.which("semgrep") is None:
         log.warning("semgrep adapter: binary not found — skipping")
         return []
 
     selected = {k: v for k, v in _CONFIG_MAP.items() if rules is None or k in rules}
-    if not selected:
+    if not selected and not _USE_REGISTRY:
         log.info("semgrep adapter: no rule sets enabled — skipping")
         return []
 
     cmd = ["semgrep", "--json", "--quiet", "--metrics=off", "--error"]
     for name, path in selected.items():
-        if name == "upload":
-            # upload is always best-effort — skip silently if file missing
-            if path.exists():
-                cmd.extend(["--config", str(path)])
-        else:
+        if name in _REQUIRED_PACKS:
             if not path.exists():
                 log.warning(
                     "semgrep adapter: required config missing — skipping",
@@ -76,9 +107,20 @@ async def scan(
                 )
                 return []
             cmd.extend(["--config", str(path)])
+        else:
+            # Best-effort packs — skip silently when file missing
+            if path.exists():
+                cmd.extend(["--config", str(path)])
+            else:
+                log.debug("semgrep adapter: best-effort config absent — skipping", config=name)
+
+    # Optional registry packs (requires network; best-effort)
+    if _USE_REGISTRY:
+        for pack in _REGISTRY_PACKS:
+            cmd.extend(["--config", pack])
+        log.info("semgrep adapter: registry packs enabled", packs=_REGISTRY_PACKS)
 
     if "--config" not in cmd:
-        # Only upload was selected and its file is absent
         log.info("semgrep adapter: no valid configs to run — skipping")
         return []
 

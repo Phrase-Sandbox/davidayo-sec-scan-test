@@ -1,0 +1,221 @@
+rules:
+
+  # ---------------------------------------------------------------------------
+  # Python SSRF
+  # ---------------------------------------------------------------------------
+
+  - id: python-requests-ssrf
+    patterns:
+      - pattern: requests.$METHOD($URL, ...)
+      - pattern-not: requests.$METHOD("...", ...)
+    message: >
+      HTTP request with a potentially user-controlled URL (SSRF — CWE-918).
+      An attacker can supply an internal URL (e.g. http://169.254.169.254/latest/meta-data/
+      or http://internal-service/) to reach internal infrastructure.
+      Validate the URL against an allowlist of approved schemes and hostnames
+      before making the request; block private/link-local IP ranges.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      vuln_class: ssrf
+      owasp: A10:2021
+      cwe: CWE-918
+
+  - id: python-urllib-ssrf
+    patterns:
+      - pattern: urllib.request.urlopen($URL)
+      - pattern-not: urllib.request.urlopen("...")
+    message: >
+      urllib.request.urlopen() with a potentially user-controlled URL enables SSRF.
+      Validate the URL against an allowlist of approved schemes and hosts.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      vuln_class: ssrf
+      owasp: A10:2021
+      cwe: CWE-918
+
+  - id: python-urllib2-urlopen-ssrf
+    patterns:
+      - pattern: urllib2.urlopen($URL)
+      - pattern-not: urllib2.urlopen("...")
+    message: >
+      urllib2.urlopen() with a potentially user-controlled URL enables SSRF.
+      Validate the URL against an allowlist before making the request.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      vuln_class: ssrf
+      owasp: A10:2021
+      cwe: CWE-918
+
+  - id: python-httpx-ssrf
+    patterns:
+      - pattern: httpx.$METHOD($URL, ...)
+      - pattern-not: httpx.$METHOD("...", ...)
+    message: >
+      httpx request with a potentially user-controlled URL enables SSRF.
+      Validate the URL against an allowlist before making the request.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      vuln_class: ssrf
+      owasp: A10:2021
+      cwe: CWE-918
+
+  - id: python-aiohttp-ssrf
+    patterns:
+      - pattern: aiohttp.ClientSession().$METHOD($URL, ...)
+      - pattern-not: aiohttp.ClientSession().$METHOD("...", ...)
+    message: >
+      aiohttp request with a potentially user-controlled URL enables SSRF.
+      Validate the URL against an allowlist of approved hosts before making the request.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      vuln_class: ssrf
+      owasp: A10:2021
+      cwe: CWE-918
+
+  - id: python-requests-url-format
+    patterns:
+      - pattern: |
+          $URL = $BASE + $USER_INPUT
+          ...
+          requests.$METHOD($URL, ...)
+    message: >
+      HTTP request URL built by concatenating user-controlled input.
+      An attacker can redirect the request to an internal service (SSRF).
+      Validate the complete URL against an allowlist of approved hostnames.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: ssrf
+      owasp: A10:2021
+      cwe: CWE-918
+
+  - id: python-requests-url-fstring
+    patterns:
+      - pattern: requests.$METHOD(f"...{$VAR}...", ...)
+    message: >
+      HTTP request URL built with an f-string containing a variable.
+      If the variable contains user input, an attacker can redirect the request
+      to internal infrastructure (SSRF — CWE-918).
+    languages: [python]
+    severity: WARNING
+    metadata:
+      vuln_class: ssrf
+      owasp: A10:2021
+      cwe: CWE-918
+
+  # ---------------------------------------------------------------------------
+  # JavaScript / TypeScript SSRF
+  # ---------------------------------------------------------------------------
+
+  - id: js-fetch-ssrf
+    patterns:
+      - pattern: fetch($URL, ...)
+      - pattern-not: fetch("...", ...)
+    message: >
+      fetch() called with a potentially user-controlled URL (SSRF — CWE-918).
+      Validate the URL against an allowlist of approved origins before making the request.
+    languages: [javascript, typescript]
+    severity: WARNING
+    metadata:
+      vuln_class: ssrf
+      owasp: A10:2021
+      cwe: CWE-918
+
+  - id: js-axios-ssrf
+    pattern-either:
+      - pattern: axios($URL, ...)
+      - pattern: axios.get($URL, ...)
+      - pattern: axios.post($URL, ...)
+      - pattern: axios.put($URL, ...)
+      - pattern: axios.patch($URL, ...)
+      - pattern: axios.delete($URL, ...)
+      - pattern: axios.request({url: $URL, ...})
+    message: >
+      axios request with a potentially user-controlled URL enables SSRF.
+      Validate the URL against an allowlist before making the request.
+    languages: [javascript, typescript]
+    severity: WARNING
+    metadata:
+      vuln_class: ssrf
+      owasp: A10:2021
+      cwe: CWE-918
+
+  - id: js-node-http-ssrf
+    patterns:
+      - pattern: http.get($URL, ...)
+      - pattern-not: http.get("...", ...)
+    message: >
+      Node.js http.get() with a potentially user-controlled URL enables SSRF.
+      Validate the URL against an allowlist before making the request.
+    languages: [javascript, typescript]
+    severity: WARNING
+    metadata:
+      vuln_class: ssrf
+      owasp: A10:2021
+      cwe: CWE-918
+
+  - id: js-node-https-ssrf
+    patterns:
+      - pattern: https.get($URL, ...)
+      - pattern-not: https.get("...", ...)
+    message: >
+      Node.js https.get() with a potentially user-controlled URL enables SSRF.
+      Validate the URL against an allowlist before making the request.
+    languages: [javascript, typescript]
+    severity: WARNING
+    metadata:
+      vuln_class: ssrf
+      owasp: A10:2021
+      cwe: CWE-918
+
+  - id: js-got-ssrf
+    patterns:
+      - pattern: got($URL, ...)
+      - pattern-not: got("...", ...)
+    message: >
+      got() HTTP client called with a potentially user-controlled URL.
+      Validate the URL against an allowlist before making the request.
+    languages: [javascript, typescript]
+    severity: WARNING
+    metadata:
+      vuln_class: ssrf
+      owasp: A10:2021
+      cwe: CWE-918
+
+  # ---------------------------------------------------------------------------
+  # Ruby SSRF
+  # ---------------------------------------------------------------------------
+
+  - id: ruby-net-http-ssrf
+    patterns:
+      - pattern: Net::HTTP.get(URI($URL))
+      - pattern-not: Net::HTTP.get(URI("..."))
+    message: >
+      Net::HTTP request with a potentially user-controlled URL enables SSRF.
+      Validate the URL against an allowlist before making the request.
+    languages: [ruby]
+    severity: WARNING
+    metadata:
+      vuln_class: ssrf
+      owasp: A10:2021
+      cwe: CWE-918
+
+  - id: ruby-open-uri-ssrf
+    patterns:
+      - pattern: open($URL)
+      - pattern-not: open("...")
+    message: >
+      Kernel#open() with a potentially user-controlled URL enables SSRF.
+      If the URL begins with |, it also enables command injection.
+      Use Net::HTTP with an allowlist check instead.
+    languages: [ruby]
+    severity: ERROR
+    metadata:
+      vuln_class: ssrf
+      owasp: A10:2021
+      cwe: CWE-918

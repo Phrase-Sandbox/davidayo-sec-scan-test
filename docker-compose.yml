@@ -85,6 +85,10 @@ services:
       - SEMGREP_SETTINGS_FILE=/tmp/semgrep-settings.yml
       - SEMGREP_LOG_FILE=/tmp/semgrep.log
       - SEMGREP_VERSION_CACHE_PATH=/tmp/semgrep-version-cache
+      # Enable semgrep registry packs (p/owasp-top-ten + p/default) for broad
+      # multi-language coverage. Requires internet access from the container.
+      # Set to false to run with vendored local configs only (air-gapped mode).
+      - SEMGREP_USE_REGISTRY=${SEMGREP_USE_REGISTRY:-true}
       - XDG_CACHE_HOME=/tmp/xdg-cache
     read_only: true
     tmpfs:

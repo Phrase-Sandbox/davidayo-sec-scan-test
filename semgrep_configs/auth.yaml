@@ -1,0 +1,298 @@
+rules:
+
+  # ---------------------------------------------------------------------------
+  # JWT authentication weaknesses
+  # ---------------------------------------------------------------------------
+
+  - id: python-jwt-decode-no-verify
+    patterns:
+      - pattern: jwt.decode($TOKEN, options={"verify_signature": False, ...}, ...)
+    message: >
+      JWT signature verification is disabled (verify_signature: False).
+      An attacker can forge arbitrary tokens by modifying the payload and
+      signing with any key. Remove the options override and always verify
+      signatures with the correct public key or shared secret.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: auth_bypass
+      owasp: A07:2021
+      cwe: CWE-347
+
+  - id: python-jwt-decode-algorithms-none
+    patterns:
+      - pattern: jwt.decode($TOKEN, ..., algorithms=["none"], ...)
+      - pattern: jwt.decode($TOKEN, ..., algorithms=["HS256", "none"], ...)
+    message: >
+      JWT decoded with the "none" algorithm accepted. The "none" algorithm allows
+      tokens without any signature, enabling trivial authentication bypass.
+      Remove "none" from the algorithms list.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: auth_bypass
+      owasp: A07:2021
+      cwe: CWE-347
+
+  - id: python-jwt-decode-complete-unverified
+    patterns:
+      - pattern: jwt.decode($TOKEN, ..., complete=True, options={"verify_signature": False}, ...)
+    message: >
+      JWT decoded without signature verification. Tokens can be forged by an attacker.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: auth_bypass
+      owasp: A07:2021
+      cwe: CWE-347
+
+  - id: python-python-jose-no-verify
+    patterns:
+      - pattern: jose.jwt.decode($TOKEN, $KEY, options={"verify_signature": False, ...}, ...)
+    message: >
+      python-jose JWT decoded without signature verification. Token forgery is possible.
+      Remove the options override.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: auth_bypass
+      owasp: A07:2021
+      cwe: CWE-347
+
+  - id: js-jwt-no-verify
+    patterns:
+      - pattern: jwt.decode($TOKEN, {complete: true})
+    message: >
+      jsonwebtoken.decode() returns the decoded token without verifying the signature.
+      Use jwt.verify() instead to validate authenticity before trusting claims.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      vuln_class: auth_bypass
+      owasp: A07:2021
+      cwe: CWE-347
+
+  - id: js-jwt-verify-algorithms-none
+    patterns:
+      - pattern: jwt.verify($TOKEN, $KEY, {algorithms: ["none"], ...}, ...)
+    message: >
+      JWT verification allows the "none" algorithm, enabling trivial token forgery.
+      Remove "none" from the algorithms list.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      vuln_class: auth_bypass
+      owasp: A07:2021
+      cwe: CWE-347
+
+  # ---------------------------------------------------------------------------
+  # Hardcoded secrets / keys
+  # ---------------------------------------------------------------------------
+
+  - id: python-flask-hardcoded-secret
+    patterns:
+      - pattern: app.secret_key = "..."
+      - pattern: app.config["SECRET_KEY"] = "..."
+      - pattern: app.config['SECRET_KEY'] = "..."
+    message: >
+      Flask secret key hardcoded in source code. Anyone with read access to the
+      repository can forge session cookies. Load the secret key from an environment
+      variable: app.secret_key = os.environ["SECRET_KEY"]
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: auth_bypass
+      owasp: A07:2021
+      cwe: CWE-798
+
+  - id: python-django-hardcoded-secret
+    patterns:
+      - pattern: SECRET_KEY = "..."
+    message: >
+      Django SECRET_KEY hardcoded in settings file. This key is used to sign
+      cookies, sessions, and CSRF tokens. Exposure allows an attacker to forge
+      any signed value. Load it from an environment variable instead.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: auth_bypass
+      owasp: A07:2021
+      cwe: CWE-798
+
+  - id: js-hardcoded-jwt-secret
+    patterns:
+      - pattern: jwt.sign($PAYLOAD, "...", ...)
+      - pattern: jwt.verify($TOKEN, "...", ...)
+    message: >
+      JWT signed or verified with a hardcoded secret. Exposure of the source code
+      allows an attacker to forge tokens. Load the secret from an environment
+      variable (process.env.JWT_SECRET) instead.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      vuln_class: auth_bypass
+      owasp: A07:2021
+      cwe: CWE-798
+
+  - id: python-hardcoded-password-in-db-url
+    patterns:
+      - pattern-regex: '(mysql|postgres|postgresql|mongodb|redis|amqp)://[^:]+:[^@"'']+@'
+    message: >
+      Hardcoded database credentials detected in connection string.
+      Store credentials in environment variables or a secrets manager,
+      never in source code.
+    languages: [python, javascript, typescript]
+    severity: ERROR
+    metadata:
+      vuln_class: auth_bypass
+      owasp: A07:2021
+      cwe: CWE-798
+
+  # ---------------------------------------------------------------------------
+  # CORS misconfiguration
+  # ---------------------------------------------------------------------------
+
+  - id: python-cors-wildcard-credentials
+    patterns:
+      - pattern: flask_cors.CORS($APP, origins="*", supports_credentials=True, ...)
+      - pattern: flask_cors.CORS($APP, origins=['*'], supports_credentials=True, ...)
+    message: >
+      CORS wildcard origin (*) combined with credentials:true is rejected by
+      browsers but may be misconfigured to echo the Origin header with
+      Access-Control-Allow-Credentials: true, enabling cross-origin cookie theft.
+      Use an explicit allowlist of origins instead of '*'.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: auth_bypass
+      owasp: A05:2021
+      cwe: CWE-942
+
+  - id: python-cors-echo-origin
+    patterns:
+      - pattern: |
+          $ORIGIN = request.headers.get("Origin")
+          ...
+          response.headers["Access-Control-Allow-Origin"] = $ORIGIN
+    message: >
+      CORS: echoing the incoming Origin header without allowlist validation
+      allows any origin to make credentialed cross-origin requests.
+      Validate the origin against an explicit allowlist before reflecting it.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: auth_bypass
+      owasp: A05:2021
+      cwe: CWE-942
+
+  - id: js-cors-wildcard-credentials
+    patterns:
+      - pattern: cors({origin: "*", credentials: true, ...})
+    message: >
+      CORS wildcard origin with credentials:true is a security misconfiguration.
+      Replace '*' with an explicit list of allowed origins.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      vuln_class: auth_bypass
+      owasp: A05:2021
+      cwe: CWE-942
+
+  - id: js-cors-echo-origin
+    patterns:
+      - pattern: cors({origin: $REQ_ORIGIN, credentials: true, ...})
+    message: >
+      CORS: dynamically reflecting the request Origin with credentials enabled.
+      Verify the origin against an explicit allowlist before allowing it.
+    languages: [javascript, typescript]
+    severity: WARNING
+    metadata:
+      vuln_class: auth_bypass
+      owasp: A05:2021
+      cwe: CWE-942
+
+  # ---------------------------------------------------------------------------
+  # Timing attacks on authentication
+  # ---------------------------------------------------------------------------
+
+  - id: python-timing-attack-password-compare
+    patterns:
+      - pattern: $A == $B
+      - pattern-not-inside: |
+          if $A == $B:
+              ...
+    message: >
+      Direct string equality comparison of passwords or secrets is vulnerable to
+      timing attacks. Use hmac.compare_digest() or secrets.compare_digest() for
+      constant-time comparison of authentication values.
+    languages: [python]
+    severity: INFO
+    metadata:
+      vuln_class: auth_bypass
+      owasp: A07:2021
+      cwe: CWE-208
+
+  # ---------------------------------------------------------------------------
+  # Debug / development mode in production
+  # ---------------------------------------------------------------------------
+
+  - id: python-flask-debug-mode
+    patterns:
+      - pattern: app.run(..., debug=True, ...)
+      - pattern: app.run(debug=True)
+    message: >
+      Flask debug mode enabled. The Werkzeug debugger exposes an interactive
+      Python console that requires no authentication — remote code execution
+      is trivial. Remove debug=True or gate it on an environment variable.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: security_misconfiguration
+      owasp: A05:2021
+      cwe: CWE-94
+
+  - id: python-django-debug-true
+    patterns:
+      - pattern: DEBUG = True
+    message: >
+      Django DEBUG=True enables the interactive error page with full stack traces
+      and local variable values in HTTP responses. Never run with DEBUG=True in
+      production — set it via environment variable (DEBUG = env.bool("DEBUG", False)).
+    languages: [python]
+    severity: WARNING
+    metadata:
+      vuln_class: security_misconfiguration
+      owasp: A05:2021
+      cwe: CWE-489
+
+  # ---------------------------------------------------------------------------
+  # Insecure cookie settings
+  # ---------------------------------------------------------------------------
+
+  - id: python-flask-cookie-no-httponly
+    patterns:
+      - pattern: $RESPONSE.set_cookie($NAME, ..., httponly=False, ...)
+    message: >
+      Cookie set without HttpOnly flag. JavaScript can read this cookie, enabling
+      XSS attacks to steal session tokens. Set httponly=True on all authentication
+      cookies.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      vuln_class: auth_bypass
+      owasp: A05:2021
+      cwe: CWE-1004
+
+  - id: python-flask-cookie-no-secure
+    patterns:
+      - pattern: $RESPONSE.set_cookie($NAME, ..., secure=False, ...)
+    message: >
+      Cookie set without Secure flag. The cookie will be transmitted over plain
+      HTTP, exposing it to network interception. Set secure=True on all
+      authentication cookies.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      vuln_class: auth_bypass
+      owasp: A05:2021
+      cwe: CWE-614

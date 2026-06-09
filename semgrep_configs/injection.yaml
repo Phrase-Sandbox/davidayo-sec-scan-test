@@ -1,0 +1,285 @@
+rules:
+
+  # ---------------------------------------------------------------------------
+  # Server-Side Template Injection (SSTI)
+  # ---------------------------------------------------------------------------
+
+  - id: python-render-template-string-ssti
+    patterns:
+      - pattern: flask.render_template_string($TEMPLATE, ...)
+      - pattern-not: flask.render_template_string("...", ...)
+    message: >
+      render_template_string() called with a potentially user-controlled template
+      string (SSTI — CWE-94). An attacker can inject Jinja2 expressions like
+      {{ config.SECRET_KEY }} or {{ ''.__class__.__mro__[1].__subclasses__() }}
+      to read configuration secrets or achieve remote code execution.
+      Use render_template() with a static template file instead.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: code_injection
+      owasp: A03:2021
+      cwe: CWE-94
+
+  - id: python-render-template-string-import-ssti
+    patterns:
+      - pattern: render_template_string($TEMPLATE, ...)
+      - pattern-not: render_template_string("...", ...)
+    message: >
+      render_template_string() with a potentially user-controlled template enables
+      Server-Side Template Injection (SSTI). Use render_template() with a static
+      file instead.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: code_injection
+      owasp: A03:2021
+      cwe: CWE-94
+
+  - id: python-jinja2-from-string-ssti
+    patterns:
+      - pattern: jinja2.Environment().from_string($TEMPLATE).render(...)
+      - pattern-not: jinja2.Environment().from_string("...").render(...)
+    message: >
+      jinja2.Environment().from_string() with a user-controlled template string
+      enables SSTI. An attacker can escape the sandbox and execute arbitrary code.
+      Use static template files loaded via Environment.get_template().
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: code_injection
+      owasp: A03:2021
+      cwe: CWE-94
+
+  - id: python-jinja2-template-ssti
+    patterns:
+      - pattern: jinja2.Template($TEMPLATE).render(...)
+      - pattern-not: jinja2.Template("...").render(...)
+    message: >
+      jinja2.Template() constructed with a potentially user-controlled string
+      enables SSTI. Use static template files instead.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: code_injection
+      owasp: A03:2021
+      cwe: CWE-94
+
+  - id: python-mako-template-ssti
+    patterns:
+      - pattern: mako.template.Template($TEMPLATE).render(...)
+      - pattern-not: mako.template.Template("...").render(...)
+    message: >
+      Mako Template() compiled from a potentially user-controlled string enables
+      SSTI. Mako templates execute arbitrary Python — use TemplateLookup with
+      static template files instead.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: code_injection
+      owasp: A03:2021
+      cwe: CWE-94
+
+  # ---------------------------------------------------------------------------
+  # SSTI — JavaScript / TypeScript
+  # ---------------------------------------------------------------------------
+
+  - id: js-handlebars-compile-ssti
+    patterns:
+      - pattern: Handlebars.compile($TEMPLATE)(...)
+      - pattern-not: Handlebars.compile("...")(...)
+    message: >
+      Handlebars.compile() called with a potentially user-controlled template
+      string enables SSTI. Use Handlebars.precompile() with static template files
+      to avoid passing untrusted content to the template engine.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      vuln_class: code_injection
+      owasp: A03:2021
+      cwe: CWE-94
+
+  - id: js-pug-compile-ssti
+    patterns:
+      - pattern: pug.compile($TEMPLATE)(...)
+      - pattern-not: pug.compile("...")(...)
+    message: >
+      pug.compile() with a potentially user-controlled template string enables
+      SSTI leading to arbitrary code execution. Use pug.renderFile() with a
+      static template path instead.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      vuln_class: code_injection
+      owasp: A03:2021
+      cwe: CWE-94
+
+  - id: js-ejs-render-ssti
+    patterns:
+      - pattern: ejs.render($TEMPLATE, ...)
+      - pattern-not: ejs.render("...", ...)
+    message: >
+      ejs.render() called with a potentially user-controlled template string
+      enables RCE through SSTI. Use ejs.renderFile() with a static file path.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      vuln_class: code_injection
+      owasp: A03:2021
+      cwe: CWE-94
+
+  - id: js-vm-runinthiscontext-ssti
+    patterns:
+      - pattern: vm.runInThisContext($CODE)
+      - pattern-not: vm.runInThisContext("...")
+    message: >
+      vm.runInThisContext() with a potentially user-controlled code string
+      executes arbitrary JavaScript in the current V8 context with full privileges.
+      This is equivalent to eval() and should never receive untrusted input.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      vuln_class: code_injection
+      owasp: A03:2021
+      cwe: CWE-94
+
+  - id: js-new-function-injection
+    patterns:
+      - pattern: new Function($CODE)
+      - pattern-not: new Function("...")
+    message: >
+      new Function() with a potentially user-controlled code string enables
+      arbitrary code execution equivalent to eval(). Never pass untrusted input
+      to the Function constructor.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      vuln_class: code_injection
+      owasp: A03:2021
+      cwe: CWE-94
+
+  # ---------------------------------------------------------------------------
+  # HTTP Response Header Injection
+  # ---------------------------------------------------------------------------
+
+  - id: python-flask-header-injection
+    patterns:
+      - pattern: flask.make_response(...).$METHOD($HEADER, $VALUE)
+      - pattern-not: flask.make_response(...).$METHOD($HEADER, "...")
+    message: >
+      HTTP response header set with a potentially user-controlled value
+      (Header Injection — CWE-113). An attacker can inject CRLF characters
+      (\r\n) to inject additional headers or split the HTTP response (response
+      splitting). Sanitize the value by stripping all CR/LF characters before
+      setting any response header.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: xss
+      owasp: A03:2021
+      cwe: CWE-113
+
+  - id: js-express-header-injection
+    patterns:
+      - pattern: $RES.set($HEADER, $VALUE)
+      - pattern-not: $RES.set($HEADER, "...")
+    message: >
+      Response header set with a potentially user-controlled value.
+      An attacker can inject CRLF sequences to perform HTTP response splitting.
+      Strip all \r and \n characters from the value before setting any header.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      vuln_class: xss
+      owasp: A03:2021
+      cwe: CWE-113
+
+  - id: js-express-setHeader-injection
+    patterns:
+      - pattern: $RES.setHeader($HEADER, $VALUE)
+      - pattern-not: $RES.setHeader($HEADER, "...")
+    message: >
+      Response header set with a potentially user-controlled value enables
+      HTTP response splitting (CWE-113). Sanitize CRLF before setting headers.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      vuln_class: xss
+      owasp: A03:2021
+      cwe: CWE-113
+
+  # ---------------------------------------------------------------------------
+  # NoSQL Injection
+  # ---------------------------------------------------------------------------
+
+  - id: python-pymongo-nosql-injection
+    patterns:
+      - pattern: $COLLECTION.find({$KEY: $VALUE})
+      - pattern-not: $COLLECTION.find({$KEY: "..."})
+    message: >
+      MongoDB query with a potentially user-controlled value (NoSQL Injection).
+      If $VALUE is a dict supplied by the user (e.g. from request.json), an
+      attacker can inject MongoDB operators like {"$gt": ""} to bypass equality
+      checks. Validate input type strictly (must be a scalar string/int, never a dict).
+    languages: [python]
+    severity: WARNING
+    metadata:
+      vuln_class: sqli
+      owasp: A03:2021
+      cwe: CWE-943
+
+  - id: js-mongoose-nosql-injection
+    patterns:
+      - pattern: $MODEL.find({$KEY: $VALUE})
+      - pattern-not: $MODEL.find({$KEY: "..."})
+    message: >
+      Mongoose find() query with a potentially user-controlled value.
+      If $VALUE is an object from req.body/query, an attacker can inject MongoDB
+      operators (e.g. {"$ne": null}) to bypass authentication or dump records.
+      Ensure query values are coerced to scalar types before querying.
+    languages: [javascript, typescript]
+    severity: WARNING
+    metadata:
+      vuln_class: sqli
+      owasp: A03:2021
+      cwe: CWE-943
+
+  # ---------------------------------------------------------------------------
+  # LDAP Injection
+  # ---------------------------------------------------------------------------
+
+  - id: python-ldap-injection
+    patterns:
+      - pattern: $CONN.search_s($BASE, $SCOPE, $FILTER)
+      - pattern-not: $CONN.search_s($BASE, $SCOPE, "...")
+    message: >
+      LDAP search filter constructed with a potentially user-controlled value
+      (LDAP Injection — CWE-90). An attacker can supply '*)(uid=*))(|(uid=*' to
+      bypass authentication or enumerate directory entries.
+      Use ldap.filter.escape_filter_chars() to sanitize all user-supplied
+      components of the LDAP filter.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      vuln_class: sqli
+      owasp: A03:2021
+      cwe: CWE-90
+
+  # ---------------------------------------------------------------------------
+  # Expression Language Injection (Python — Ognl/Spring-like patterns)
+  # ---------------------------------------------------------------------------
+
+  - id: python-format-map-injection
+    patterns:
+      - pattern: $TEMPLATE.format_map($USER_DATA)
+    message: >
+      str.format_map() with user-controlled data enables attribute-access
+      injection. An attacker can read private attributes via
+      {__class__.__bases__[0]...} if $USER_DATA is user-supplied.
+      Use str.format() with explicitly named arguments instead.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      vuln_class: code_injection
+      owasp: A03:2021
+      cwe: CWE-94

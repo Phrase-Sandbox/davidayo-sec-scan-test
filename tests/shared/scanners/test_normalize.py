@@ -147,3 +147,58 @@ def test_gosec_g601_maps_to_runtime_panic() -> None:
 
 def test_gosec_g602_maps_to_runtime_panic() -> None:
     assert normalize("gosec", "G602") == "runtime_panic"
+
+
+# ---------------------------------------------------------------------------
+# V5: taxonomy precision — subprocess_usage, insecure_network_config,
+#     poor_error_handling, info_disclosure, insecure_design,
+#     security_misconfiguration, vulnerable_components,
+#     logging_monitoring_failure, memory_safety
+# ---------------------------------------------------------------------------
+
+def test_bandit_b404_maps_to_subprocess_usage() -> None:
+    assert normalize("bandit", "B404") == "subprocess_usage"
+
+
+def test_bandit_b507_maps_to_weak_crypto() -> None:
+    assert normalize("bandit", "B507") == "weak_crypto"
+
+
+def test_gosec_g102_maps_to_insecure_network_config() -> None:
+    assert normalize("gosec", "G102") == "insecure_network_config"
+
+
+def test_gosec_g104_maps_to_poor_error_handling() -> None:
+    assert normalize("gosec", "G104") == "poor_error_handling"
+
+
+def test_gosec_g108_maps_to_info_disclosure() -> None:
+    assert normalize("gosec", "G108") == "info_disclosure"
+
+
+def test_owasp_a04_maps_to_insecure_design() -> None:
+    assert normalize("owasp", "a04:2021") == "insecure_design"
+
+
+def test_owasp_a05_maps_to_security_misconfiguration() -> None:
+    assert normalize("owasp", "a05:2021") == "security_misconfiguration"
+
+
+def test_owasp_a06_maps_to_vulnerable_components() -> None:
+    assert normalize("owasp", "a06:2021") == "vulnerable_components"
+
+
+def test_owasp_a09_maps_to_logging_monitoring_failure() -> None:
+    assert normalize("owasp", "a09:2021") == "logging_monitoring_failure"
+
+
+def test_eslint_detect_new_buffer_maps_to_memory_safety() -> None:
+    assert normalize("eslint", "security/detect-new-buffer") == "memory_safety"
+
+
+def test_eslint_detect_buffer_noassert_maps_to_memory_safety() -> None:
+    assert normalize("eslint", "security/detect-buffer-noassert") == "memory_safety"
+
+
+def test_eslint_detect_object_injection_maps_to_auth_bypass() -> None:
+    assert normalize("eslint", "security/detect-object-injection") == "auth_bypass"
