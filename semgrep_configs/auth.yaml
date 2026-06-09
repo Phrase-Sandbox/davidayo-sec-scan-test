@@ -61,7 +61,7 @@ rules:
 
   - id: js-jwt-no-verify
     patterns:
-      - pattern: jwt.decode($TOKEN, {complete: true})
+      - pattern: "jwt.decode($TOKEN, {complete: true})"
     message: >
       jsonwebtoken.decode() returns the decoded token without verifying the signature.
       Use jwt.verify() instead to validate authenticity before trusting claims.
@@ -74,7 +74,7 @@ rules:
 
   - id: js-jwt-verify-algorithms-none
     patterns:
-      - pattern: jwt.verify($TOKEN, $KEY, {algorithms: ["none"], ...}, ...)
+      - pattern: 'jwt.verify($TOKEN, $KEY, {algorithms: ["none"], ...}, ...)'
     message: >
       JWT verification allows the "none" algorithm, enabling trivial token forgery.
       Remove "none" from the algorithms list.
@@ -90,7 +90,7 @@ rules:
   # ---------------------------------------------------------------------------
 
   - id: python-flask-hardcoded-secret
-    patterns:
+    pattern-either:
       - pattern: app.secret_key = "..."
       - pattern: app.config["SECRET_KEY"] = "..."
       - pattern: app.config['SECRET_KEY'] = "..."
@@ -120,7 +120,7 @@ rules:
       cwe: CWE-798
 
   - id: js-hardcoded-jwt-secret
-    patterns:
+    pattern-either:
       - pattern: jwt.sign($PAYLOAD, "...", ...)
       - pattern: jwt.verify($TOKEN, "...", ...)
     message: >
@@ -153,7 +153,7 @@ rules:
   # ---------------------------------------------------------------------------
 
   - id: python-cors-wildcard-credentials
-    patterns:
+    pattern-either:
       - pattern: flask_cors.CORS($APP, origins="*", supports_credentials=True, ...)
       - pattern: flask_cors.CORS($APP, origins=['*'], supports_credentials=True, ...)
     message: >
@@ -187,7 +187,7 @@ rules:
 
   - id: js-cors-wildcard-credentials
     patterns:
-      - pattern: cors({origin: "*", credentials: true, ...})
+      - pattern: 'cors({origin: "*", credentials: true, ...})'
     message: >
       CORS wildcard origin with credentials:true is a security misconfiguration.
       Replace '*' with an explicit list of allowed origins.
@@ -200,7 +200,7 @@ rules:
 
   - id: js-cors-echo-origin
     patterns:
-      - pattern: cors({origin: $REQ_ORIGIN, credentials: true, ...})
+      - pattern: 'cors({origin: $REQ_ORIGIN, credentials: true, ...})'
     message: >
       CORS: dynamically reflecting the request Origin with credentials enabled.
       Verify the origin against an explicit allowlist before allowing it.
@@ -237,7 +237,7 @@ rules:
   # ---------------------------------------------------------------------------
 
   - id: python-flask-debug-mode
-    patterns:
+    pattern-either:
       - pattern: app.run(..., debug=True, ...)
       - pattern: app.run(debug=True)
     message: >
