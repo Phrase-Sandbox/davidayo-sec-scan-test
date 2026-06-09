@@ -201,8 +201,8 @@ async def _report_retention_loop() -> None:
     from security_scanner.tokens.db import get_session_factory  # noqa: PLC0415
     from security_scanner.tokens.models import (  # noqa: PLC0415
         CiScanRecord,
-        ScanRecord,
         ScannerSettings,
+        ScanRecord,
     )
 
     while True:
