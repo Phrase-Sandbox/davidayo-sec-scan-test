@@ -116,31 +116,32 @@ app.get('/users', (req, res) => {
 # Tests
 # ---------------------------------------------------------------------------
 
+
 class TestFlaskDetection:
     def test_detects_flask_request_files(self):
-        files = {'views.py': FLASK_CODE}
+        files = {"views.py": FLASK_CODE}
         handlers = find_upload_handlers(files)
         assert len(handlers) >= 1
         h = handlers[0]
-        assert h.file == 'views.py'
-        assert h.framework == 'flask'
+        assert h.file == "views.py"
+        assert h.framework == "flask"
 
     def test_function_name_extracted(self):
-        files = {'views.py': FLASK_CODE}
+        files = {"views.py": FLASK_CODE}
         handlers = find_upload_handlers(files)
-        assert any(h.function_name == 'upload_file' for h in handlers)
+        assert any(h.function_name == "upload_file" for h in handlers)
 
 
 class TestFastAPIDetection:
     def test_detects_upload_file_param(self):
-        files = {'main.py': FASTAPI_CODE}
+        files = {"main.py": FASTAPI_CODE}
         handlers = find_upload_handlers(files)
         assert len(handlers) >= 1
         frameworks = {h.framework for h in handlers}
-        assert 'fastapi' in frameworks
+        assert "fastapi" in frameworks
 
     def test_detects_file_ellipsis(self):
-        files = {'main.py': FASTAPI_CODE}
+        files = {"main.py": FASTAPI_CODE}
         handlers = find_upload_handlers(files)
         # UploadFile and File(...) may both fire
         assert len(handlers) >= 1
@@ -148,55 +149,55 @@ class TestFastAPIDetection:
 
 class TestDjangoDetection:
     def test_detects_request_FILES(self):
-        files = {'views.py': DJANGO_CODE}
+        files = {"views.py": DJANGO_CODE}
         handlers = find_upload_handlers(files)
         assert len(handlers) >= 1
-        assert any(h.framework == 'django' for h in handlers)
+        assert any(h.framework == "django" for h in handlers)
 
 
 class TestExpressMulterDetection:
     def test_detects_multer(self):
-        files = {'app.js': EXPRESS_CODE}
+        files = {"app.js": EXPRESS_CODE}
         handlers = find_upload_handlers(files)
         assert len(handlers) >= 1
         frameworks = {h.framework for h in handlers}
-        assert 'multer' in frameworks
+        assert "multer" in frameworks
 
     def test_detects_req_file(self):
-        files = {'app.js': EXPRESS_CODE}
+        files = {"app.js": EXPRESS_CODE}
         handlers = find_upload_handlers(files)
-        assert any(h.framework in ('multer', 'express') for h in handlers)
+        assert any(h.framework in ("multer", "express") for h in handlers)
 
 
 class TestBusboyDetection:
     def test_detects_busboy(self):
-        files = {'handler.js': BUSBOY_CODE}
+        files = {"handler.js": BUSBOY_CODE}
         handlers = find_upload_handlers(files)
         assert len(handlers) >= 1
-        assert any(h.framework == 'busboy' for h in handlers)
+        assert any(h.framework == "busboy" for h in handlers)
 
 
 class TestGoDetection:
     def test_detects_r_FormFile(self):
-        files = {'main.go': GO_CODE}
+        files = {"main.go": GO_CODE}
         handlers = find_upload_handlers(files)
         assert len(handlers) >= 1
-        assert any(h.framework in ('gin', 'go_multipart') for h in handlers)
+        assert any(h.framework in ("gin", "go_multipart") for h in handlers)
 
     def test_function_name_extracted(self):
-        files = {'main.go': GO_CODE}
+        files = {"main.go": GO_CODE}
         handlers = find_upload_handlers(files)
-        assert any(h.function_name == 'uploadHandler' for h in handlers)
+        assert any(h.function_name == "uploadHandler" for h in handlers)
 
 
 class TestNoFalsePositives:
     def test_no_handlers_in_plain_python(self):
-        files = {'db.py': NON_UPLOAD_CODE}
+        files = {"db.py": NON_UPLOAD_CODE}
         handlers = find_upload_handlers(files)
         assert handlers == []
 
     def test_no_handlers_in_plain_js(self):
-        files = {'api.js': JS_NON_UPLOAD_CODE}
+        files = {"api.js": JS_NON_UPLOAD_CODE}
         handlers = find_upload_handlers(files)
         assert handlers == []
 
@@ -204,7 +205,7 @@ class TestNoFalsePositives:
         assert find_upload_handlers({}) == []
 
     def test_non_source_files_skipped(self):
-        files = {'README.md': 'request.files is interesting', 'data.json': '{}'}
+        files = {"README.md": "request.files is interesting", "data.json": "{}"}
         handlers = find_upload_handlers(files)
         assert handlers == []
 
@@ -212,19 +213,19 @@ class TestNoFalsePositives:
 class TestMultipleFiles:
     def test_handles_multiple_languages(self):
         files = {
-            'upload.py': FLASK_CODE,
-            'upload.js': EXPRESS_CODE,
-            'upload.go': GO_CODE,
+            "upload.py": FLASK_CODE,
+            "upload.js": EXPRESS_CODE,
+            "upload.go": GO_CODE,
         }
         handlers = find_upload_handlers(files)
         # Each file should contribute at least one handler
         seen_files = {h.file for h in handlers}
-        assert 'upload.py' in seen_files
-        assert 'upload.js' in seen_files
-        assert 'upload.go' in seen_files
+        assert "upload.py" in seen_files
+        assert "upload.js" in seen_files
+        assert "upload.go" in seen_files
 
     def test_handler_is_named_tuple(self):
-        files = {'views.py': FLASK_CODE}
+        files = {"views.py": FLASK_CODE}
         handlers = find_upload_handlers(files)
         assert len(handlers) >= 1
         h = handlers[0]

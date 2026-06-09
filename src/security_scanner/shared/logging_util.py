@@ -32,23 +32,56 @@ def get_scan_id() -> str | None:
     """Return the scan_id for the current context, or None if not set."""
     return _SCAN_ID_VAR.get()
 
-REDACT_FIELDS: frozenset[str] = frozenset({
-    # Fields that carry raw scan payloads — original set.
-    "content", "source_code", "code", "file_content", "prompt", "payload", "api_key",
-    # Defense-in-depth: credential-bearing field names for future log callsites.
-    "password", "secret", "private_key", "access_token",
-    "session_token", "webhook_url", "token_value",
-})
+
+REDACT_FIELDS: frozenset[str] = frozenset(
+    {
+        # Fields that carry raw scan payloads — original set.
+        "content",
+        "source_code",
+        "code",
+        "file_content",
+        "prompt",
+        "payload",
+        "api_key",
+        # Defense-in-depth: credential-bearing field names for future log callsites.
+        "password",
+        "secret",
+        "private_key",
+        "access_token",
+        "session_token",
+        "webhook_url",
+        "token_value",
+    }
+)
 REDACTED_VALUE = "[REDACTED]"
 
 # LogRecord attributes that are NOT structured fields supplied by the caller.
 # Anything not in this set is treated as caller-supplied context.
 _STANDARD_RECORD_ATTRS: frozenset[str] = frozenset(
     {
-        "args", "asctime", "created", "exc_info", "exc_text", "filename",
-        "funcName", "levelname", "levelno", "lineno", "message", "module",
-        "msecs", "msg", "name", "pathname", "process", "processName",
-        "relativeCreated", "stack_info", "thread", "threadName", "taskName",
+        "args",
+        "asctime",
+        "created",
+        "exc_info",
+        "exc_text",
+        "filename",
+        "funcName",
+        "levelname",
+        "levelno",
+        "lineno",
+        "message",
+        "module",
+        "msecs",
+        "msg",
+        "name",
+        "pathname",
+        "process",
+        "processName",
+        "relativeCreated",
+        "stack_info",
+        "thread",
+        "threadName",
+        "taskName",
     }
 )
 

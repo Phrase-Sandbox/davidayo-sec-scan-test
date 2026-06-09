@@ -134,6 +134,7 @@ def test_django_middleware_kind():
 # Dispatcher
 # ---------------------------------------------------------------------------
 
+
 def test_dispatch_py_includes_decorators():
     matches = extract_middleware("views.py", PYTHON_DECORATOR_CONTENT)
     names = [m.name for m in matches]

@@ -56,9 +56,7 @@ _SLACK_WEBHOOK_PATTERN: re.Pattern[str] = re.compile(
 
 # --- BR-003 type 2: OAuth tokens --------------------------------------------
 # RFC 6750 Bearer scheme — replace the token, keep "Bearer" for context.
-_BEARER_TOKEN_PATTERN: re.Pattern[str] = re.compile(
-    r"(?i)\bBearer\s+([A-Za-z0-9_\-.+/=]{20,})\b"
-)
+_BEARER_TOKEN_PATTERN: re.Pattern[str] = re.compile(r"(?i)\bBearer\s+([A-Za-z0-9_\-.+/=]{20,})\b")
 # Google OAuth access tokens always start with ya29.
 _GOOGLE_OAUTH_PATTERN: re.Pattern[str] = re.compile(r"\bya29\.[A-Za-z0-9_\-.]{40,}\b")
 
@@ -115,10 +113,10 @@ class SecretHit:
     """
 
     filename: str
-    line: int            # 1-based start line of the secret
-    end_line: int        # 1-based end line; equals ``line`` except for PEM blocks
-    hint: str            # text on the same line, immediately before the secret
-    detector: str        # which rule matched: pem, github_pat, anthropic, …
+    line: int  # 1-based start line of the secret
+    end_line: int  # 1-based end line; equals ``line`` except for PEM blocks
+    hint: str  # text on the same line, immediately before the secret
+    detector: str  # which rule matched: pem, github_pat, anthropic, …
 
 
 @dataclass
@@ -198,9 +196,7 @@ def _strip_one(content: str, filename: str) -> tuple[str, list[SecretHit]]:
         content = pattern.sub(REDACTED, content)
 
     # Bearer <token> — keep "Bearer" prefix, redact only the token value.
-    content = _BEARER_TOKEN_PATTERN.sub(
-        lambda m: m.group(0).replace(m.group(1), REDACTED), content
-    )
+    content = _BEARER_TOKEN_PATTERN.sub(lambda m: m.group(0).replace(m.group(1), REDACTED), content)
 
     # password=/secret=/token=/api_key= — replace value, keep key and separator.
     content = _CONFIG_SECRET_PATTERN.sub(_make_redact_config_value(filename), content)
@@ -236,9 +232,7 @@ def _hint_before(content: str, offset: int, max_chars: int = 40) -> str:
     return content[line_start:offset][-max_chars:].rstrip()
 
 
-def _scan_for_hits(
-    content: str, filename: str, ds_values: list[str]
-) -> list[SecretHit]:
+def _scan_for_hits(content: str, filename: str, ds_values: list[str]) -> list[SecretHit]:
     """Scan ORIGINAL file content and return location metadata for each secret.
 
     Scanning is done before any redaction so line numbers map to the source

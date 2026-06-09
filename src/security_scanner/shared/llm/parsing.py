@@ -106,13 +106,9 @@ def parse_findings(
                         f"Could not parse model response as JSON: {inner_exc.msg}"
                     ) from inner_exc
             else:
-                raise error_cls(
-                    f"Could not parse model response as JSON: {exc.msg}"
-                ) from exc
+                raise error_cls(f"Could not parse model response as JSON: {exc.msg}") from exc
         else:
-            raise error_cls(
-                f"Could not parse model response as JSON: {exc.msg}"
-            ) from exc
+            raise error_cls(f"Could not parse model response as JSON: {exc.msg}") from exc
 
     if isinstance(parsed, dict):
         findings = parsed.get("findings")
@@ -120,9 +116,7 @@ def parse_findings(
             return findings
         if findings is None and "empty_findings_note" in parsed:
             return []
-        raise error_cls(
-            f"Response object missing 'findings' list (keys: {sorted(parsed)})"
-        )
+        raise error_cls(f"Response object missing 'findings' list (keys: {sorted(parsed)})")
     if isinstance(parsed, list):
         return parsed
     raise error_cls(f"Unexpected response shape: {type(parsed).__name__}")

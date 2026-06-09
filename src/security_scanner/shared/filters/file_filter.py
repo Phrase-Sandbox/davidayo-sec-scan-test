@@ -22,10 +22,25 @@ _BINARY_CHECK_CHARS = 8192
 
 _EXCLUDED_DIR_NAMES: frozenset[str] = frozenset(
     {
-        "dist", "build", ".next", "__pycache__", "node_modules", ".venv", "venv",
-        "static", "vendor", "vendored", "assets", "third_party", "third-party",
+        "dist",
+        "build",
+        ".next",
+        "__pycache__",
+        "node_modules",
+        ".venv",
+        "venv",
+        "static",
+        "vendor",
+        "vendored",
+        "assets",
+        "third_party",
+        "third-party",
         # CI / scanner output — never source code worth analysing
-        "sec-report", "reports", "coverage", "test-results", "artifacts",
+        "sec-report",
+        "reports",
+        "coverage",
+        "test-results",
+        "artifacts",
         "vuln-result",
     }
 )
@@ -37,8 +52,16 @@ _EXCLUDED_FILE_NAMES: frozenset[str] = frozenset(
 _EXCLUDED_EXTENSIONS: frozenset[str] = frozenset(
     {
         # Image / font / document assets
-        ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico",
-        ".woff", ".woff2", ".ttf", ".eot",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".svg",
+        ".ico",
+        ".woff",
+        ".woff2",
+        ".ttf",
+        ".eot",
         ".pdf",
         # Any .lock-suffixed file (catches lockfiles beyond the named list)
         ".lock",
@@ -46,24 +69,43 @@ _EXCLUDED_EXTENSIONS: frozenset[str] = frozenset(
 )
 
 _EXCLUDED_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"^\.env\..+$"),         # .env.local, .env.production
-    re.compile(r".+\.env$"),            # production.env, database.env
+    re.compile(r"^\.env\..+$"),  # .env.local, .env.production
+    re.compile(r".+\.env$"),  # production.env, database.env
     re.compile(r".+\.min\.js$"),
     re.compile(r".+\.min\.css$"),
-    re.compile(r".+\.pb\.go$"),         # protoc-generated Go
-    re.compile(r".+_pb2\.py$"),         # protoc-generated Python
+    re.compile(r".+\.pb\.go$"),  # protoc-generated Go
+    re.compile(r".+_pb2\.py$"),  # protoc-generated Python
     re.compile(r".+\.generated\..+$"),  # *.generated.*
 )
 
 _INCLUDED_EXTENSIONS: frozenset[str] = frozenset(
     {
         # Source
-        ".py", ".js", ".ts", ".tsx", ".jsx",
-        ".go", ".rb", ".java", ".cs", ".php", ".rs", ".swift", ".kt",
+        ".py",
+        ".js",
+        ".ts",
+        ".tsx",
+        ".jsx",
+        ".go",
+        ".rb",
+        ".java",
+        ".cs",
+        ".php",
+        ".rs",
+        ".swift",
+        ".kt",
         # Config that can carry logic
-        ".yml", ".yaml", ".toml", ".json", ".xml", ".tf", ".hcl",
+        ".yml",
+        ".yaml",
+        ".toml",
+        ".json",
+        ".xml",
+        ".tf",
+        ".hcl",
         # Shell
-        ".sh", ".bash", ".zsh",
+        ".sh",
+        ".bash",
+        ".zsh",
         # SQL — LLM can reason about inline queries; static scanners cannot
         ".sql",
     }

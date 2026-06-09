@@ -71,8 +71,7 @@ def is_high_risk_path(filepath: str, prefixes: list[str] | None = None) -> bool:
     """Return True if *filepath* matches any high-risk path prefix."""
     effective = prefixes if prefixes is not None else HIGH_RISK_PATHS
     lower = filepath.lower().replace("\\", "/")
-    return any(lower.startswith(p.lower()) or ("/" + p.lower()) in lower
-               for p in effective)
+    return any(lower.startswith(p.lower()) or ("/" + p.lower()) in lower for p in effective)
 
 
 class ContextPackager:
@@ -136,7 +135,9 @@ class ContextPackager:
         file_content = files.get(candidate.file, "")
         scanner_only = "claude" not in candidate.sources
         snippet = self._extract_snippet(
-            file_content, candidate.line_start, candidate.line_end,
+            file_content,
+            candidate.line_start,
+            candidate.line_end,
             scanner_only=scanner_only,
         )
 
@@ -221,20 +222,30 @@ class ContextPackager:
         results: list[RouteInfo] = []
         # Scan the candidate file first.
         for m in extract_routes(filepath, content)[:_MAX_ROUTES]:
-            results.append(RouteInfo(
-                file=filepath, line=m.line, method=m.method,
-                path=m.path, handler=m.handler,
-            ))
+            results.append(
+                RouteInfo(
+                    file=filepath,
+                    line=m.line,
+                    method=m.method,
+                    path=m.path,
+                    handler=m.handler,
+                )
+            )
         # Also scan other files if the candidate file had no routes.
         if not results:
             for fpath, fcontent in files.items():
                 if fpath == filepath:
                     continue
                 for m in extract_routes(fpath, fcontent):
-                    results.append(RouteInfo(
-                        file=fpath, line=m.line, method=m.method,
-                        path=m.path, handler=m.handler,
-                    ))
+                    results.append(
+                        RouteInfo(
+                            file=fpath,
+                            line=m.line,
+                            method=m.method,
+                            path=m.path,
+                            handler=m.handler,
+                        )
+                    )
                     if len(results) >= _MAX_ROUTES:
                         return results
         return results[:_MAX_ROUTES]
@@ -247,9 +258,14 @@ class ContextPackager:
     ) -> list[MiddlewareInfo]:
         results: list[MiddlewareInfo] = []
         for m in extract_middleware(filepath, content)[:_MAX_MIDDLEWARE]:
-            results.append(MiddlewareInfo(
-                file=filepath, line=m.line, name=m.name, kind=m.kind,
-            ))
+            results.append(
+                MiddlewareInfo(
+                    file=filepath,
+                    line=m.line,
+                    name=m.name,
+                    kind=m.kind,
+                )
+            )
         return results
 
     def _find_callers(
@@ -265,7 +281,8 @@ class ContextPackager:
         matches = find_callers(func_name, files, max_callers=_MAX_CALLERS)
         return [
             CallerInfo(
-                file=m.file, line=m.line,
+                file=m.file,
+                line=m.line,
                 function_name=m.function_name,
                 snippet=m.snippet,
             )
@@ -274,10 +291,7 @@ class ContextPackager:
 
     def _find_callees(self, snippet: str) -> list[CalleeInfo]:
         matches = find_callees(snippet)
-        return [
-            CalleeInfo(name=m.name, kind=m.kind)
-            for m in matches[:_MAX_CALLEES]
-        ]
+        return [CalleeInfo(name=m.name, kind=m.kind) for m in matches[:_MAX_CALLEES]]
 
     def _find_ownership(
         self,
@@ -289,11 +303,15 @@ class ContextPackager:
         content = files.get(filepath, "")
         if content:
             for m in scan_ownership_checks(filepath, content)[:_MAX_OWNERSHIP]:
-                results.append(OwnershipCheckInfo(
-                    file=filepath, line=m.line, pattern=m.pattern,
-                    identifier=m.identifier,
-                    current_user_derived=m.current_user_derived,
-                ))
+                results.append(
+                    OwnershipCheckInfo(
+                        file=filepath,
+                        line=m.line,
+                        pattern=m.pattern,
+                        identifier=m.identifier,
+                        current_user_derived=m.current_user_derived,
+                    )
+                )
         return results
 
     @staticmethod
@@ -302,6 +320,7 @@ class ContextPackager:
         if not content:
             return ""
         import re
+
         # Use search (not match) so we handle indented functions too.
         func_re = re.compile(r"""(?:async\s+)?def\s+(\w+)\s*\(""")
         lines = content.splitlines()

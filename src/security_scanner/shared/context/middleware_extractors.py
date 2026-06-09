@@ -14,9 +14,9 @@ from typing import NamedTuple
 
 
 class _MiddlewareMatch(NamedTuple):
-    line: int   # 1-based
+    line: int  # 1-based
     name: str
-    kind: str   # decorator | app.use | Depends | django_middleware
+    kind: str  # decorator | app.use | Depends | django_middleware
 
 
 # ---------------------------------------------------------------------------
@@ -49,9 +49,13 @@ def extract_python_decorators(filename: str, content: str) -> list[_MiddlewareMa
                 if dec_m:
                     name = dec_m.group(2)
                     if _AUTH_DECORATOR_NAMES.search(name):
-                        results.append(_MiddlewareMatch(
-                            line=j + 1, name=name, kind="decorator",
-                        ))
+                        results.append(
+                            _MiddlewareMatch(
+                                line=j + 1,
+                                name=name,
+                                kind="decorator",
+                            )
+                        )
                     j -= 1
                 else:
                     break
@@ -73,9 +77,13 @@ def extract_fastapi_depends(filename: str, content: str) -> list[_MiddlewareMatc
     results: list[_MiddlewareMatch] = []
     for i, line in enumerate(lines):
         for m in _FASTAPI_DEPENDS_RE.finditer(line):
-            results.append(_MiddlewareMatch(
-                line=i + 1, name=f"Depends({m.group(1)})", kind="Depends",
-            ))
+            results.append(
+                _MiddlewareMatch(
+                    line=i + 1,
+                    name=f"Depends({m.group(1)})",
+                    kind="Depends",
+                )
+            )
     return results
 
 
@@ -94,9 +102,13 @@ def extract_express_middleware(filename: str, content: str) -> list[_MiddlewareM
     for i, line in enumerate(lines):
         m = _EXPRESS_USE_RE.search(line)
         if m:
-            results.append(_MiddlewareMatch(
-                line=i + 1, name=m.group(1), kind="app.use",
-            ))
+            results.append(
+                _MiddlewareMatch(
+                    line=i + 1,
+                    name=m.group(1),
+                    kind="app.use",
+                )
+            )
     return results
 
 
@@ -119,15 +131,20 @@ def extract_django_middleware(filename: str, content: str) -> list[_MiddlewareMa
             if "]" in line:
                 break
             for m in _DJANGO_MW_ENTRY_RE.finditer(line):
-                results.append(_MiddlewareMatch(
-                    line=i + 1, name=m.group(1), kind="django_middleware",
-                ))
+                results.append(
+                    _MiddlewareMatch(
+                        line=i + 1,
+                        name=m.group(1),
+                        kind="django_middleware",
+                    )
+                )
     return results
 
 
 # ---------------------------------------------------------------------------
 # Dispatcher
 # ---------------------------------------------------------------------------
+
 
 def extract_middleware(filename: str, content: str) -> list[_MiddlewareMatch]:
     """Auto-detect framework and extract middleware from *content*."""

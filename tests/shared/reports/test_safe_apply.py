@@ -83,8 +83,7 @@ def test_introduced_forbidden_is_introduced_only():
     assert safe_apply.introduced_forbidden("safe_eval(x)", "eval(x)") == "eval("
     assert safe_apply.introduced_forbidden("run()", "run(shell=True)") == "shell=True"
     assert (
-        safe_apply.introduced_forbidden("a", "data = yaml.load(s)")
-        == "yaml.load( without Loader="
+        safe_apply.introduced_forbidden("a", "data = yaml.load(s)") == "yaml.load( without Loader="
     )
     # Already present in the replaced lines -> not this fix's regression.
     assert safe_apply.introduced_forbidden("eval(old)", "eval(new)") is None
@@ -128,18 +127,18 @@ _BLOCK_CASES = [
 # Must NOT hard-block: safe forms, the 3 deliberately-excluded ambiguous
 # patterns, introduced-only (already present), and look-alikes.
 _ALLOW_CASES = [
-    ("x=1", "y = ast.literal_eval(s)"),          # not eval(
+    ("x=1", "y = ast.literal_eval(s)"),  # not eval(
     ("x=1", "requests.get(u, verify=True)"),
     ("x=1", "client(ssl=ssl_ctx)"),
     ("x=1", "h = hashlib.md5(b, usedforsecurity=False)"),
     ("x=1", "yaml.safe_load(s)"),
     ("x=1", "yaml.load(s, Loader=yaml.SafeLoader)"),
-    ("x=1", 'app.run(host="0.0.0.0")'),          # EXCLUDED (bind-all)
-    ("x=1", "n = random.randint(1, 9)"),         # EXCLUDED (bare random)
-    ("x=1", "root = etree.fromstring(xml)"),      # EXCLUDED (broad XML)
-    ("x=1", "ctx = ssl.PROTOCOL_TLSv1_2"),       # TLS1.2 is fine
+    ("x=1", 'app.run(host="0.0.0.0")'),  # EXCLUDED (bind-all)
+    ("x=1", "n = random.randint(1, 9)"),  # EXCLUDED (bare random)
+    ("x=1", "root = etree.fromstring(xml)"),  # EXCLUDED (broad XML)
+    ("x=1", "ctx = ssl.PROTOCOL_TLSv1_2"),  # TLS1.2 is fine
     ("cursor.execute(q)", "cursor.execute(q, p)"),  # .execute != exec(
-    ("x=1", "algorithm = 'HS256'"),               # only "none" is bad
+    ("x=1", "algorithm = 'HS256'"),  # only "none" is bad
     ("requests.get(u, verify=False)", "requests.get(u, verify=False, timeout=5)"),  # pre-existing
 ]
 
@@ -184,7 +183,7 @@ def test_clean_fix_is_applied_and_compiles(tmp_path):
         tmp_path,
         "app/db.py",
         "def q(u):\n"
-        "    cur.execute(\"SELECT * FROM t WHERE u='\" + u + \"'\")\n"
+        '    cur.execute("SELECT * FROM t WHERE u=\'" + u + "\'")\n'
         "    return cur.fetchall()\n",
     )
     fx = _finding(
@@ -289,9 +288,7 @@ def test_protected_path_human_review_default_applies_with_risk_note(tmp_path):
 def test_oversized_fix_routed_to_manual(tmp_path):
     _write(tmp_path, "app/big.py", "x = 1\n")
     big = "```python\n" + "\n".join(f"a{i} = {i}" for i in range(40)) + "\n```"
-    fx = _finding(
-        affected_file="app/big.py", affected_lines="1", suggested_fix=big
-    )
+    fx = _finding(affected_file="app/big.py", affected_lines="1", suggested_fix=big)
     res = safe_apply.classify_and_apply([fx], root=str(tmp_path))
     assert res["applied"] == []
     assert any("fix too large" in m for m in res["manual"])
@@ -333,11 +330,13 @@ def test_floor_holds_in_human_review_default(tmp_path):
     _write(tmp_path, "app/a.py", "def f(u):\n    return clean(u)\n")
     _write(tmp_path, "app/b.py", "def g(u):\n    return ok(u)\n")
     regress = _finding(
-        affected_file="app/a.py", affected_lines="2",
+        affected_file="app/a.py",
+        affected_lines="2",
         suggested_fix="```python\n    return eval(u)\n```",
     )
     broken = _finding(
-        affected_file="app/b.py", affected_lines="2",
+        affected_file="app/b.py",
+        affected_lines="2",
         suggested_fix="```python\n    def (:\n```",
     )
     res = safe_apply.classify_and_apply([regress, broken], root=str(tmp_path))
@@ -413,10 +412,7 @@ def test_is_blocking_rules():
     # Critical needs verification_status == verified (BR-009).
     assert safe_apply.is_blocking(_bf("a.py", "A01:2021", sev="Critical")) is True
     assert (
-        safe_apply.is_blocking(
-            _bf("a.py", "A01:2021", sev="Critical", ver="conflicting")
-        )
-        is False
+        safe_apply.is_blocking(_bf("a.py", "A01:2021", sev="Critical", ver="conflicting")) is False
     )
 
 

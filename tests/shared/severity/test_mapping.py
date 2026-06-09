@@ -174,7 +174,9 @@ def test_is_advisory_only_false_for_high_severity_high_confidence():
         if vs == VerificationStatus.advisory_real:
             continue  # advisory_real is always advisory regardless of severity
         finding = _finding(Severity.High, Confidence.High, vs)
-        assert is_advisory_only(finding) is False, f"High/High should not be advisory for vs={vs.value}"
+        assert is_advisory_only(finding) is False, (
+            f"High/High should not be advisory for vs={vs.value}"
+        )
 
 
 def test_is_advisory_only_false_for_critical_high_confidence_unverified():
@@ -195,7 +197,11 @@ def test_is_advisory_only_false_for_medium_and_low_severity(severity, confidence
 
     v2 note: tests only non-advisory_real statuses; advisory_real has its own test.
     """
-    for vs in [VerificationStatus.verified, VerificationStatus.unverified, VerificationStatus.conflicting]:
+    for vs in [
+        VerificationStatus.verified,
+        VerificationStatus.unverified,
+        VerificationStatus.conflicting,
+    ]:
         finding = _finding(severity, confidence, vs)
         assert is_advisory_only(finding) is False, (
             f"Medium/Low severity should not be advisory_only for vs={vs.value}"
@@ -209,7 +215,9 @@ def test_is_advisory_only_false_for_medium_and_low_severity(severity, confidence
 @pytest.mark.parametrize("confidence", list(Confidence))
 @pytest.mark.parametrize("verification_status", list(VerificationStatus))
 def test_should_block_and_is_advisory_only_are_mutually_exclusive(
-    severity, confidence, verification_status,
+    severity,
+    confidence,
+    verification_status,
 ):
     """A finding can't simultaneously block *and* be flagged as demoted-to-advisory."""
     finding = _finding(severity, confidence, verification_status)

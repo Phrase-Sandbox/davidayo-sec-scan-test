@@ -96,11 +96,7 @@ class TestBR003Coverage:
 
     def test_br003_type_3_jwt_with_bearer_prefix(self):
         # Variant: Bearer-prefixed JWT (covers the spec's "Bearer prefix + ..." wording).
-        fake_jwt = (
-            "eyJhbGciOiJIUzI1NiJ9"
-            ".eyJzdWIiOiJhYmMifQ"
-            ".dummy_signature_value_for_test"
-        )
+        fake_jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhYmMifQ.dummy_signature_value_for_test"
         content = f"Authorization: Bearer {fake_jwt}"
         result = strip({"req.txt": content})
         assert result.secrets_found is True
@@ -172,9 +168,9 @@ class TestBR003Coverage:
     ):
         content = f'TOKEN = "{fake_credential}"'
         result = strip({filename: content})
-        assert (
-            result.secrets_found is True
-        ), f"Failed to detect credential format used in {filename}"
+        assert result.secrets_found is True, (
+            f"Failed to detect credential format used in {filename}"
+        )
         assert fake_credential not in result.cleaned_files[filename]
         assert REDACTED in result.cleaned_files[filename]
 
@@ -424,7 +420,7 @@ def test_is_template_file_recognises_common_suffixes():
 def test_slack_webhook_is_flagged_and_redacted():
     """Slack incoming-webhook URLs are credentials — caught by the Layer-1 regex."""
     url = "https://hooks.slack.com/services/T01234567/B89ABCDEF/aBcDeFgHiJkLmNoPqRsTuVwX"
-    content = f"WEBHOOK = \"{url}\"\n"
+    content = f'WEBHOOK = "{url}"\n'
     result = strip({"alerts.py": content})
     assert result.secrets_found is True
     assert url not in result.cleaned_files["alerts.py"]
@@ -440,10 +436,7 @@ def test_slack_webhook_partial_match_is_not_flagged():
 
 def test_dotted_vendor_token_is_flagged():
     """SendGrid-style ``SG.aaa.bbb`` tokens — ``.`` must be in value class."""
-    content = (
-        "SENDGRID_TOKEN=SG.aB1cD2eF3gH4iJ5kL6mN7oP."
-        "qR8sT9uV0wX1yZ2aB3cD4eF5gH6iJ7kL8mN9oP\n"
-    )
+    content = "SENDGRID_TOKEN=SG.aB1cD2eF3gH4iJ5kL6mN7oP.qR8sT9uV0wX1yZ2aB3cD4eF5gH6iJ7kL8mN9oP\n"
     result = strip({"prod.env": content})
     assert result.secrets_found is True
 

@@ -297,6 +297,7 @@ def test_circuit_breaker_transitions_to_half_open_after_recovery_timeout():
         if side_effect.fail:
             raise _status_error(anthropic.InternalServerError, 503)
         return success
+
     side_effect.fail = True
     mock.messages.create.side_effect = side_effect
 
@@ -341,9 +342,7 @@ def test_chunked_25_files_produces_3_calls_with_correct_chunk_sizes():
     client = _chunked_client()
 
     with patch.object(client, "analyse_async", side_effect=fake_analyse_async):
-        raw_findings, partial_files = _async_run(
-            client.analyse_async_chunked(files, chunk_size=10)
-        )
+        raw_findings, partial_files = _async_run(client.analyse_async_chunked(files, chunk_size=10))
 
     # 3 chunks: 10, 10, 5.
     assert len(call_args_list) == 3
@@ -380,9 +379,7 @@ def test_chunked_one_timeout_does_not_fail_other_chunks():
     client = _chunked_client()
 
     with patch.object(client, "analyse_async", side_effect=fake_analyse_async):
-        raw_findings, partial_files = _async_run(
-            client.analyse_async_chunked(files, chunk_size=5)
-        )
+        raw_findings, partial_files = _async_run(client.analyse_async_chunked(files, chunk_size=5))
 
     # 10 findings from chunks 1 and 3 (5 each); chunk 2's 5 files are partial.
     assert len(raw_findings) == 10
@@ -407,9 +404,7 @@ def test_chunked_single_chunk_fast_path_calls_analyse_async_once():
     client = _chunked_client()
 
     with patch.object(client, "analyse_async", side_effect=fake_analyse_async):
-        raw_findings, partial_files = _async_run(
-            client.analyse_async_chunked(files, chunk_size=12)
-        )
+        raw_findings, partial_files = _async_run(client.analyse_async_chunked(files, chunk_size=12))
 
     # Fast path: exactly one call, no chunking overhead.
     assert call_count[0] == 1
@@ -440,9 +435,7 @@ def test_chunked_parse_error_triggers_halve_retry_recovers_findings():
     client = _chunked_client()
 
     with patch.object(client, "analyse_async", side_effect=fake_analyse_async):
-        raw_findings, partial_files = _async_run(
-            client.analyse_async_chunked(files, chunk_size=8)
-        )
+        raw_findings, partial_files = _async_run(client.analyse_async_chunked(files, chunk_size=8))
 
     # 1 original call (8 files, failed) + 2 halved retries (4 files each, ok).
     assert len(call_log) == 3
@@ -471,9 +464,7 @@ def test_chunked_parse_error_both_halves_fail_marks_chunk_partial():
 
     client = _chunked_client()
     with patch.object(client, "analyse_async", side_effect=fake_analyse_async):
-        raw_findings, partial_files = _async_run(
-            client.analyse_async_chunked(files, chunk_size=5)
-        )
+        raw_findings, partial_files = _async_run(client.analyse_async_chunked(files, chunk_size=5))
 
     # Chunk 2 (5 files) succeeded; chunk 1 (5 files) flagged partial after retry.
     assert len(raw_findings) == 5

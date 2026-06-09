@@ -34,7 +34,7 @@ def _resolve_db_url() -> str:
     # we ship psycopg3 (psycopg[binary]). Normalise to postgresql+psycopg:// so
     # psycopg3 is used for both migrations (sync) and the runtime engine (async).
     if url.startswith("postgresql://"):
-        return "postgresql+psycopg://" + url[len("postgresql://"):]
+        return "postgresql+psycopg://" + url[len("postgresql://") :]
     return url
 
 

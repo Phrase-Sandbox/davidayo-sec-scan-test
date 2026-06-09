@@ -31,9 +31,7 @@ def _finding(file: str = "src/x.py", line: int = 1) -> VulnerabilityFinding:
 
 
 def _hit(detector: str, file: str = "src/x.py", line: int = 1) -> SecretHit:
-    return SecretHit(
-        filename=file, line=line, end_line=line, hint="api_key = ", detector=detector
-    )
+    return SecretHit(filename=file, line=line, end_line=line, hint="api_key = ", detector=detector)
 
 
 def test_layer1_detectors_skip_llm_and_pass_through():
@@ -153,9 +151,7 @@ def test_missing_file_keeps_finding_failsafe():
 def test_test_fixture_verdict_keeps_original_severity():
     """A test_fixture verdict keeps the finding at its original severity."""
     client = MagicMock(spec=ClaudeClient)
-    client.ask.return_value = (
-        "VERDICT: test_fixture\nPlausible password in a SQL fixture file."
-    )
+    client.ask.return_value = "VERDICT: test_fixture\nPlausible password in a SQL fixture file."
 
     findings = [_finding(file="fixtures.sql", line=2)]
     hits = [_hit("sql_credential", file="fixtures.sql", line=2)]
@@ -241,9 +237,7 @@ def test_layer1_hit_in_non_template_file_still_auto_verifies():
 
 def test_template_example_verdict_keeps_original_severity_with_policy():
     client = MagicMock(spec=ClaudeClient)
-    client.ask.return_value = (
-        "VERDICT: template_example\nObvious placeholder in env template."
-    )
+    client.ask.return_value = "VERDICT: template_example\nObvious placeholder in env template."
 
     findings = [_finding(file=".env.local.example", line=1)]
     hits = [_hit("config_secret", file=".env.local.example", line=1)]
@@ -310,6 +304,7 @@ def test_max_parallelism_default_is_2(monkeypatch):
     import importlib
 
     import security_scanner.shared.verification.secrets as secrets_mod
+
     importlib.reload(secrets_mod)
     assert secrets_mod._MAX_PARALLELISM == 2
 
@@ -319,6 +314,7 @@ def test_max_parallelism_env_var_override(monkeypatch):
     import importlib
 
     import security_scanner.shared.verification.secrets as secrets_mod
+
     importlib.reload(secrets_mod)
     assert secrets_mod._MAX_PARALLELISM == 6
 
@@ -349,9 +345,7 @@ def test_batch_of_three_findings_uses_one_llm_call():
     """Three LLM-bound findings fit in one batched call (BATCH_SIZE = 5)."""
     client = MagicMock(spec=ClaudeClient)
     client.ask.return_value = (
-        "VERDICT #1: real\nKey #1.\n"
-        "VERDICT #2: real\nKey #2.\n"
-        "VERDICT #3: real\nKey #3.\n"
+        "VERDICT #1: real\nKey #1.\nVERDICT #2: real\nKey #2.\nVERDICT #3: real\nKey #3.\n"
     )
 
     findings = [_finding(file=f"f{i}.py", line=i) for i in (1, 2, 3)]

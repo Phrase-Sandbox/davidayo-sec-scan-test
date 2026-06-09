@@ -36,10 +36,17 @@ _OVERLAP_TOLERANCE = 5
 # We try every A03 subclass when searching the scanner index so a mismatch
 # between the LLM's broad OWASP ID and the scanner's specific class does not
 # silently prevent the two findings from merging.
-_A03_CLASSES: frozenset[str] = frozenset({
-    "sqli", "xss", "command_injection", "code_injection", "unsafe_yaml",
-    "nosqli", "ldap_injection",
-})
+_A03_CLASSES: frozenset[str] = frozenset(
+    {
+        "sqli",
+        "xss",
+        "command_injection",
+        "code_injection",
+        "unsafe_yaml",
+        "nosqli",
+        "ldap_injection",
+    }
+)
 
 # Patterns used to infer the specific vuln_class from an LLM description when
 # a scanner match was not found and the OWASP ID alone is too broad.
@@ -48,61 +55,88 @@ _A03_CLASSES: frozenset[str] = frozenset({
 _DESCRIPTION_CLASS_HINTS: list[tuple[re.Pattern[str], str]] = [
     # XSS first — DOM sinks and XSS terminology before code_injection so that
     # descriptions mentioning "eval" in an XSS context are not misclassified.
-    (re.compile(
-        r"cross.site scripting|\bxss\b|innerHTML|outerHTML|dangerouslySetInnerHTML"
-        r"|document\.write|html.*inject|reflected.*html|stored.*html|autoescape.*false"
-        r"|jinja.*\bsafe\b",
-        re.IGNORECASE,
-    ), "xss"),
+    (
+        re.compile(
+            r"cross.site scripting|\bxss\b|innerHTML|outerHTML|dangerouslySetInnerHTML"
+            r"|document\.write|html.*inject|reflected.*html|stored.*html|autoescape.*false"
+            r"|jinja.*\bsafe\b",
+            re.IGNORECASE,
+        ),
+        "xss",
+    ),
     # Command injection — shell execution patterns.
-    (re.compile(
-        r"command.injection|subprocess.*shell|os\.system|os\.popen"
-        r"|child_process|shell=True|shell.*true",
-        re.IGNORECASE,
-    ), "command_injection"),
+    (
+        re.compile(
+            r"command.injection|subprocess.*shell|os\.system|os\.popen"
+            r"|child_process|shell=True|shell.*true",
+            re.IGNORECASE,
+        ),
+        "command_injection",
+    ),
     # Code injection / SSTI — eval, exec, server-side template injection.
-    (re.compile(
-        r"code.injection|\beval\b|\bexec\b|server.side template|\bssti\b|template.*inject",
-        re.IGNORECASE,
-    ), "code_injection"),
+    (
+        re.compile(
+            r"code.injection|\beval\b|\bexec\b|server.side template|\bssti\b|template.*inject",
+            re.IGNORECASE,
+        ),
+        "code_injection",
+    ),
     # Unsafe YAML deserialization.
     (re.compile(r"unsafe.yaml|yaml\.load", re.IGNORECASE), "unsafe_yaml"),
     # LDAP injection — directory service filter injection (must precede generic sqli).
-    (re.compile(
-        r"\bldap\b.*inject|inject.*\bldap\b|\bldap\b.*filter|directory.*inject"
-        r"|ldap\.search|ldap3\.|DirContext|escape_filter_chars",
-        re.IGNORECASE,
-    ), "ldap_injection"),
+    (
+        re.compile(
+            r"\bldap\b.*inject|inject.*\bldap\b|\bldap\b.*filter|directory.*inject"
+            r"|ldap\.search|ldap3\.|DirContext|escape_filter_chars",
+            re.IGNORECASE,
+        ),
+        "ldap_injection",
+    ),
     # NoSQL injection — MongoDB/document-store operator injection (must precede generic sqli).
-    (re.compile(
-        r"nosql.*inject|inject.*nosql|mongodb.*inject|pymongo|mongoose.*inject"
-        r"|\$where|\$ne|\$regex|\$gt|\$lt|document.*store.*inject",
-        re.IGNORECASE,
-    ), "nosqli"),
+    (
+        re.compile(
+            r"nosql.*inject|inject.*nosql|mongodb.*inject|pymongo|mongoose.*inject"
+            r"|\$where|\$ne|\$regex|\$gt|\$lt|document.*store.*inject",
+            re.IGNORECASE,
+        ),
+        "nosqli",
+    ),
     # SQL injection — explicit match so the fallback is never silently reached.
-    (re.compile(
-        r"\bsql\b.*inject|inject.*\bsql\b|\bsql.*quer|cursor\.execute"
-        r"|raw.*quer|orm.*raw|prepared.*statement",
-        re.IGNORECASE,
-    ), "sqli"),
+    (
+        re.compile(
+            r"\bsql\b.*inject|inject.*\bsql\b|\bsql.*quer|cursor\.execute"
+            r"|raw.*quer|orm.*raw|prepared.*statement",
+            re.IGNORECASE,
+        ),
+        "sqli",
+    ),
     # Path traversal / file inclusion (LLM sometimes tags these A03:2021).
-    (re.compile(
-        r"path.*travers|directory.*travers|zip.*slip|tar.*slip"
-        r"|arbitrary.*file|\blfi\b|\brfi\b|file.*inclus|\.\./",
-        re.IGNORECASE,
-    ), "path_traversal"),
+    (
+        re.compile(
+            r"path.*travers|directory.*travers|zip.*slip|tar.*slip"
+            r"|arbitrary.*file|\blfi\b|\brfi\b|file.*inclus|\.\./",
+            re.IGNORECASE,
+        ),
+        "path_traversal",
+    ),
     # Open redirect.
     (re.compile(r"open.*redirect|unvalidated.*redirect", re.IGNORECASE), "open_redirect"),
     # Deserialization (non-YAML).
-    (re.compile(
-        r"deserializ|pickle|marshal|java.*serial|untrusted.*object",
-        re.IGNORECASE,
-    ), "deserialization"),
+    (
+        re.compile(
+            r"deserializ|pickle|marshal|java.*serial|untrusted.*object",
+            re.IGNORECASE,
+        ),
+        "deserialization",
+    ),
     # File upload / MIME / extension checks.
-    (re.compile(
-        r"file.*upload|upload.*file|mime.*type|arbitrary.*upload|file.*ext(?:ension)?",
-        re.IGNORECASE,
-    ), "unsafe_file_upload"),
+    (
+        re.compile(
+            r"file.*upload|upload.*file|mime.*type|arbitrary.*upload|file.*ext(?:ension)?",
+            re.IGNORECASE,
+        ),
+        "unsafe_file_upload",
+    ),
 ]
 
 
@@ -203,26 +237,30 @@ def merge_with_llm_findings(
             for idx, cand in scanner_index.get((llm_f.affected_file, candidate_class), []):
                 if _overlap(l_start, l_end, cand.line_start, cand.line_end):
                     merged_sources = ["claude"] + [s for s in cand.sources if s != "claude"]
-                    result.append(CandidateForVerification(
-                        file=llm_f.affected_file,
-                        line_start=min(l_start, cand.line_start) if l_start else cand.line_start,
-                        line_end=max(l_end, cand.line_end) if l_end else cand.line_end,
-                        # Use the scanner's specific class — it is always more
-                        # precise than the LLM's broad OWASP-derived class.
-                        vuln_class=cand.vuln_class,
-                        vulnerability_id=llm_f.vulnerability_id,
-                        severity=llm_f.severity.value,
-                        confidence=llm_f.confidence.value,
-                        cvss_band=llm_f.cvss_band,
-                        description=llm_f.description,
-                        suggested_fix=llm_f.suggested_fix,
-                        owasp_reference=llm_f.owasp_reference,
-                        exploit_scenario=llm_f.exploit_scenario,
-                        sources=merged_sources,
-                        consensus_score=len(set(merged_sources)),
-                        raw_rule_ids=cand.raw_rule_ids,
-                        scanner_message=cand.message,
-                    ))
+                    result.append(
+                        CandidateForVerification(
+                            file=llm_f.affected_file,
+                            line_start=min(l_start, cand.line_start)
+                            if l_start
+                            else cand.line_start,
+                            line_end=max(l_end, cand.line_end) if l_end else cand.line_end,
+                            # Use the scanner's specific class — it is always more
+                            # precise than the LLM's broad OWASP-derived class.
+                            vuln_class=cand.vuln_class,
+                            vulnerability_id=llm_f.vulnerability_id,
+                            severity=llm_f.severity.value,
+                            confidence=llm_f.confidence.value,
+                            cvss_band=llm_f.cvss_band,
+                            description=llm_f.description,
+                            suggested_fix=llm_f.suggested_fix,
+                            owasp_reference=llm_f.owasp_reference,
+                            exploit_scenario=llm_f.exploit_scenario,
+                            sources=merged_sources,
+                            consensus_score=len(set(merged_sources)),
+                            raw_rule_ids=cand.raw_rule_ids,
+                            scanner_message=cand.message,
+                        )
+                    )
                     matched_scanner.add(idx)
                     matched = True
                     break  # merge with first match only
@@ -233,47 +271,51 @@ def merge_with_llm_findings(
             # Claude-only candidate.  Use the description-inferred class
             # (l_candidate_classes[0]) so the verifier receives the correct
             # label (e.g. "xss") rather than the OWASP fallback ("sqli").
-            result.append(CandidateForVerification(
-                file=llm_f.affected_file,
-                line_start=l_start,
-                line_end=l_end,
-                vuln_class=l_candidate_classes[0],
-                vulnerability_id=llm_f.vulnerability_id,
-                severity=llm_f.severity.value,
-                confidence=llm_f.confidence.value,
-                cvss_band=llm_f.cvss_band,
-                description=llm_f.description,
-                suggested_fix=llm_f.suggested_fix,
-                owasp_reference=llm_f.owasp_reference,
-                exploit_scenario=llm_f.exploit_scenario,
-                sources=["claude"],
-                consensus_score=1,
-                raw_rule_ids=[],
-                scanner_message="",
-            ))
+            result.append(
+                CandidateForVerification(
+                    file=llm_f.affected_file,
+                    line_start=l_start,
+                    line_end=l_end,
+                    vuln_class=l_candidate_classes[0],
+                    vulnerability_id=llm_f.vulnerability_id,
+                    severity=llm_f.severity.value,
+                    confidence=llm_f.confidence.value,
+                    cvss_band=llm_f.cvss_band,
+                    description=llm_f.description,
+                    suggested_fix=llm_f.suggested_fix,
+                    owasp_reference=llm_f.owasp_reference,
+                    exploit_scenario=llm_f.exploit_scenario,
+                    sources=["claude"],
+                    consensus_score=1,
+                    raw_rule_ids=[],
+                    scanner_message="",
+                )
+            )
 
     # Unmatched scanner candidates (scanner-only).
     for idx, cand in enumerate(aggregated):
         if idx in matched_scanner:
             continue
-        result.append(CandidateForVerification(
-            file=cand.file,
-            line_start=cand.line_start,
-            line_end=cand.line_end,
-            vuln_class=cand.vuln_class,
-            vulnerability_id="",
-            severity=cand.severity_hint.capitalize(),
-            confidence="Medium",
-            cvss_band="4.0-6.9",
-            description=cand.message,
-            suggested_fix="",
-            owasp_reference="",
-            exploit_scenario="",
-            sources=cand.sources,
-            consensus_score=cand.consensus_score,
-            raw_rule_ids=cand.raw_rule_ids,
-            scanner_message=cand.message,
-        ))
+        result.append(
+            CandidateForVerification(
+                file=cand.file,
+                line_start=cand.line_start,
+                line_end=cand.line_end,
+                vuln_class=cand.vuln_class,
+                vulnerability_id="",
+                severity=cand.severity_hint.capitalize(),
+                confidence="Medium",
+                cvss_band="4.0-6.9",
+                description=cand.message,
+                suggested_fix="",
+                owasp_reference="",
+                exploit_scenario="",
+                sources=cand.sources,
+                consensus_score=cand.consensus_score,
+                raw_rule_ids=cand.raw_rule_ids,
+                scanner_message=cand.message,
+            )
+        )
 
     log.debug(
         "merge_with_llm_findings",

@@ -69,6 +69,7 @@ _AUTHZ_PHRASE = "Trace how this code is reached (route/middleware)"
 # 1. build_upload_verifier_rubric() literal phrases
 # ---------------------------------------------------------------------------
 
+
 class TestUploadRubricPhrases:
     def test_phrase_1(self):
         rubric = build_upload_verifier_rubric()
@@ -95,6 +96,7 @@ class TestUploadRubricPhrases:
 # 2. System prompt inclusion/exclusion for unsafe_file_upload
 # ---------------------------------------------------------------------------
 
+
 class TestUploadSystemPromptInclusion:
     def test_upload_class_includes_upload_rubric(self):
         prompt = build_vuln_verifier_system_prompt(vuln_class="unsafe_file_upload")
@@ -107,9 +109,7 @@ class TestUploadSystemPromptInclusion:
 
     def test_upload_class_does_not_include_authz_rubric(self):
         prompt = build_vuln_verifier_system_prompt(vuln_class="unsafe_file_upload")
-        assert _AUTHZ_PHRASE not in prompt, (
-            "upload class must NOT include authz rubric"
-        )
+        assert _AUTHZ_PHRASE not in prompt, "upload class must NOT include authz rubric"
 
     def test_case_insensitive_upload_class(self):
         prompt = build_vuln_verifier_system_prompt(vuln_class="UNSAFE_FILE_UPLOAD")
@@ -128,6 +128,7 @@ class TestUploadSystemPromptInclusion:
 # 3. Authz class must NOT contain upload rubric (exclusive switching)
 # ---------------------------------------------------------------------------
 
+
 class TestAuthzClassExclusion:
     def test_auth_bypass_excludes_upload_rubric(self):
         prompt = build_vuln_verifier_system_prompt(vuln_class="auth_bypass")
@@ -143,6 +144,7 @@ class TestAuthzClassExclusion:
 # ---------------------------------------------------------------------------
 # 4. Batched response parser for unsafe_file_upload candidate
 # ---------------------------------------------------------------------------
+
 
 class TestBatchedParserForUpload:
     def test_parses_upload_batch_single_candidate(self):
@@ -184,6 +186,7 @@ class TestBatchedParserForUpload:
 # 5. Defang test — </source_code> injection in filenames
 # ---------------------------------------------------------------------------
 
+
 class TestDefangInjection:
     def _build_candidate_with_injection(self) -> CandidateForVerification:
         return CandidateForVerification(
@@ -200,12 +203,14 @@ class TestDefangInjection:
     def test_defang_prevents_injection_in_candidate_block(self):
         """The rendered candidate block must not contain literal </source_code>."""
         from security_scanner.shared.verification.vulns import _build_candidate_block
+
         candidate = self._build_candidate_with_injection()
         block = _build_candidate_block(1, candidate, {}, bundle=None)
         assert "</source_code>" not in block
 
     def test_defang_in_scanner_message(self):
         from security_scanner.shared.verification.vulns import _build_candidate_block
+
         candidate = CandidateForVerification(
             file="app.py",
             vuln_class="unsafe_file_upload",
@@ -220,6 +225,7 @@ class TestDefangInjection:
 # ---------------------------------------------------------------------------
 # 6. Fail-safe: ClaudeError → finding kept as unverified
 # ---------------------------------------------------------------------------
+
 
 class TestFailSafe:
     def test_claude_error_keeps_finding_as_unverified(self):

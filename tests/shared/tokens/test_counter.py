@@ -90,9 +90,9 @@ def test_trim_to_budget_high_risk_files_prioritised():
     # Each file is 200 001 chars.  Budget fits 2 files.
     chunk = "x" * 200_001
     files = {
-        "utils/helpers.py": chunk,       # normal
-        "auth/login.py": chunk,          # high-risk
-        "payments/checkout.py": chunk,   # high-risk
+        "utils/helpers.py": chunk,  # normal
+        "auth/login.py": chunk,  # high-risk
+        "payments/checkout.py": chunk,  # high-risk
     }
     kept, skipped = trim_to_budget(files, budget=150_000)
     assert "auth/login.py" in kept

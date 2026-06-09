@@ -266,12 +266,10 @@ def _logout(*, revoke_remote: bool = True) -> int:
 # --- Remote-mode scan --------------------------------------------------------
 
 
-def _collect_files(
-    root: Path, directory: str, *, respect_gitignore: bool = True
-) -> dict[str, str]:
-    return LocalFilesClient(
-        root, respect_gitignore=respect_gitignore
-    ).get_repo_files(path=directory)
+def _collect_files(root: Path, directory: str, *, respect_gitignore: bool = True) -> dict[str, str]:
+    return LocalFilesClient(root, respect_gitignore=respect_gitignore).get_repo_files(
+        path=directory
+    )
 
 
 def _scan_remote(
@@ -348,8 +346,7 @@ def _scan_remote(
                     )
                 elif "deactivated" in detail_lower:
                     print(
-                        "ERROR: your account has been deactivated. "
-                        "Contact your administrator.",
+                        "ERROR: your account has been deactivated. Contact your administrator.",
                         file=sys.stderr,
                     )
                 else:
@@ -466,18 +463,22 @@ def _build_scan_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
-        "path", nargs="?", default=".",
+        "path",
+        nargs="?",
+        default=".",
         help="Project directory to scan (default: current dir)",
     )
     p.add_argument(
-        "--directory", default="",
+        "--directory",
+        default="",
         help="Scan only this sub-path of the project (use for large repos)",
     )
     p.add_argument(
-        "--no-gitignore", action="store_true",
+        "--no-gitignore",
+        action="store_true",
         help="Do NOT exclude files matched by .gitignore at the scan root. "
-             "By default, gitignored files are skipped to avoid wasted work "
-             "and false positives on intentionally-uncommitted secrets.",
+        "By default, gitignored files are skipped to avoid wasted work "
+        "and false positives on intentionally-uncommitted secrets.",
     )
     return p
 
@@ -492,8 +493,11 @@ def _build_login_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument("--scanner-url", default=os.getenv("SCANNER_URL"))
-    p.add_argument("--manual", action="store_true",
-                   help="Paste a token from the portal instead of the browser flow.")
+    p.add_argument(
+        "--manual",
+        action="store_true",
+        help="Paste a token from the portal instead of the browser flow.",
+    )
     return p
 
 
@@ -515,8 +519,7 @@ def main(argv: list[str] | None = None) -> int:
             url = args.scanner_url or _load_config().get("scanner_url")
             if not url:
                 print(
-                    "ERROR: --scanner-url is required on first login "
-                    "(or set $SCANNER_URL).",
+                    "ERROR: --scanner-url is required on first login (or set $SCANNER_URL).",
                     file=sys.stderr,
                 )
                 return 2
@@ -545,7 +548,10 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     return _scan_remote(
-        root=root, directory=args.directory, scanner_url=scanner_url, token=token,
+        root=root,
+        directory=args.directory,
+        scanner_url=scanner_url,
+        token=token,
         respect_gitignore=respect_gitignore,
     )
 

@@ -18,14 +18,34 @@ THRESHOLD = 150_000
 # shared/context/packager.py so the most security-sensitive files are always
 # included in a partial scan.
 _HIGH_RISK_PREFIXES: tuple[str, ...] = (
-    "auth/", "authentication/", "authorisation/", "authorization/",
-    "login/", "session/", "oauth/", "sso/",
-    "payments/", "billing/", "checkout/", "stripe/",
-    "admin/", "management/", "internal/",
-    "api/", "endpoints/", "routes/",
-    "crypto/", "security/", "secrets/",
-    "upload/", "uploads/", "files/",
-    "db/", "database/", "models/", "migrations/",
+    "auth/",
+    "authentication/",
+    "authorisation/",
+    "authorization/",
+    "login/",
+    "session/",
+    "oauth/",
+    "sso/",
+    "payments/",
+    "billing/",
+    "checkout/",
+    "stripe/",
+    "admin/",
+    "management/",
+    "internal/",
+    "api/",
+    "endpoints/",
+    "routes/",
+    "crypto/",
+    "security/",
+    "secrets/",
+    "upload/",
+    "uploads/",
+    "files/",
+    "db/",
+    "database/",
+    "models/",
+    "migrations/",
 )
 
 
@@ -62,10 +82,7 @@ def trim_to_budget(
 
     def _is_high_risk(path: str) -> bool:
         lower = path.lower().replace("\\", "/")
-        return any(
-            lower.startswith(p) or ("/" + p) in lower
-            for p in _HIGH_RISK_PREFIXES
-        )
+        return any(lower.startswith(p) or ("/" + p) in lower for p in _HIGH_RISK_PREFIXES)
 
     high_risk = sorted(p for p in files if _is_high_risk(p))
     normal = sorted(p for p in files if not _is_high_risk(p))

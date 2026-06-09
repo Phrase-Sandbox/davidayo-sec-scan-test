@@ -47,7 +47,11 @@ _SKIP_DIRS = frozenset(
         "htmlcov",
         "vuln-result",  # our own output directory — never scan it
         # CI / scanner output directories — contain generated reports, not source
-        "sec-report", "reports", "coverage", "test-results", "artifacts",
+        "sec-report",
+        "reports",
+        "coverage",
+        "test-results",
+        "artifacts",
     }
 )
 
@@ -97,9 +101,7 @@ class LocalFilesClient:
                 # for ``build/`` style patterns to match.
                 rel_dir = Path(dirpath).relative_to(base).as_posix()
                 prefix = "" if rel_dir == "." else f"{rel_dir}/"
-                dirnames[:] = [
-                    d for d in dirnames if not spec.match_file(f"{prefix}{d}/")
-                ]
+                dirnames[:] = [d for d in dirnames if not spec.match_file(f"{prefix}{d}/")]
             for filename in filenames:
                 if filename == _REPORT_FILENAME or filename.endswith(_SKIP_SUFFIXES):
                     continue

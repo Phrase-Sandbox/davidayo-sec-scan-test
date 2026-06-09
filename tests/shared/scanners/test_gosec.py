@@ -79,6 +79,7 @@ def test_parse_output_low_confidence_skipped() -> None:
 async def test_scan_skips_if_binary_missing(monkeypatch) -> None:
     """scan() returns [] when gosec binary is not on PATH."""
     import shutil as _shutil
+
     monkeypatch.setattr(_shutil, "which", lambda _: None)
     from security_scanner.shared.scanners.adapters.gosec import scan
     from security_scanner.shared.scanners.workdir import ScannerWorkspace

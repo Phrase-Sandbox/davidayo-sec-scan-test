@@ -144,6 +144,7 @@ def test_attach_empty_candidates():
 # V7: source-aware snippet window
 # ---------------------------------------------------------------------------
 
+
 def _candidate_with_sources(
     sources: list[str],
     line_start: int = 20,

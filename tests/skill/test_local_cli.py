@@ -89,10 +89,13 @@ def _install_fake_urlopen(monkeypatch, response_payload: dict) -> dict:
     class _Resp:
         def __init__(self, payload: dict) -> None:
             self._body = json.dumps(payload).encode("utf-8")
+
         def __enter__(self):
             return self
+
         def __exit__(self, *_):
             return False
+
         def read(self) -> bytes:
             return self._body
 
@@ -189,9 +192,7 @@ def test_cli_scan_sends_minimal_payload_without_api_key(tmp_path, monkeypatch):
     No API key, no provider, no model is ever sent by the CLI — the server
     resolves those from the user's stored settings.
     """
-    monkeypatch.setattr(
-        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
-    )
+    monkeypatch.setattr(local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok"))
     monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
     (tmp_path / "app.py").write_text("print(1)\n")
 
@@ -211,9 +212,7 @@ def test_cli_scan_sends_minimal_payload_without_api_key(tmp_path, monkeypatch):
 
 def test_cli_writes_md_and_html_when_server_returns_both(tmp_path, monkeypatch):
     """Server response with markdown + html → both files written, exit 1 on High."""
-    monkeypatch.setattr(
-        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
-    )
+    monkeypatch.setattr(local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok"))
     monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
     (tmp_path / "app").mkdir()
     (tmp_path / "app" / "db.py").write_text(_SQLI)
@@ -238,9 +237,7 @@ def test_cli_writes_md_and_html_when_server_returns_both(tmp_path, monkeypatch):
 
 def test_cli_remote_mode_writes_both_md_and_html(tmp_path, monkeypatch):
     """Remote mode writes both files when the server returns both fields."""
-    monkeypatch.setattr(
-        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
-    )
+    monkeypatch.setattr(local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok"))
     monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
     (tmp_path / "app.py").write_text("print(1)\n")
 
@@ -261,10 +258,13 @@ def test_cli_remote_mode_writes_both_md_and_html(tmp_path, monkeypatch):
     class _FakeResp:
         def __init__(self, payload: dict) -> None:
             self._body = json.dumps(payload).encode("utf-8")
+
         def __enter__(self):
             return self
+
         def __exit__(self, *_):
             return False
+
         def read(self) -> bytes:
             return self._body
 
@@ -280,9 +280,7 @@ def test_cli_remote_mode_writes_both_md_and_html(tmp_path, monkeypatch):
 
 def test_cli_remote_mode_handles_legacy_server_without_html(tmp_path, monkeypatch):
     """Old servers don't return ``html`` — CLI still writes the .md cleanly."""
-    monkeypatch.setattr(
-        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
-    )
+    monkeypatch.setattr(local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok"))
     monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
     (tmp_path / "app.py").write_text("print(1)\n")
 
@@ -302,10 +300,13 @@ def test_cli_remote_mode_handles_legacy_server_without_html(tmp_path, monkeypatc
     class _FakeResp:
         def __init__(self, payload: dict) -> None:
             self._body = json.dumps(payload).encode("utf-8")
+
         def __enter__(self):
             return self
+
         def __exit__(self, *_):
             return False
+
         def read(self) -> bytes:
             return self._body
 
@@ -325,9 +326,7 @@ def test_cli_remote_mode_handles_legacy_server_without_html(tmp_path, monkeypatc
 
 def test_cli_no_gitignore_flag_disables_gitignore_filter(tmp_path, monkeypatch):
     """``--no-gitignore`` ships ignored files to the scanner."""
-    monkeypatch.setattr(
-        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
-    )
+    monkeypatch.setattr(local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok"))
     monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
     (tmp_path / ".gitignore").write_text("ignored.py\n")
     (tmp_path / "ignored.py").write_text("print('ignored')\n")
@@ -344,9 +343,7 @@ def test_cli_no_gitignore_flag_disables_gitignore_filter(tmp_path, monkeypatch):
 
 def test_cli_gitignore_default_excludes_ignored_files(tmp_path, monkeypatch):
     """Without --no-gitignore, gitignored files are filtered before upload."""
-    monkeypatch.setattr(
-        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
-    )
+    monkeypatch.setattr(local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok"))
     monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
     (tmp_path / ".gitignore").write_text("ignored.py\n")
     (tmp_path / "ignored.py").write_text("print('ignored')\n")
@@ -366,9 +363,7 @@ def test_cli_gitignore_default_excludes_ignored_files(tmp_path, monkeypatch):
 
 def test_cli_retries_once_on_429_with_retry_after(tmp_path, monkeypatch):
     """If the server returns 429+Retry-After, the CLI sleeps then retries once."""
-    monkeypatch.setattr(
-        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
-    )
+    monkeypatch.setattr(local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok"))
     monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
     (tmp_path / "app.py").write_text("print(1)\n")
 
@@ -399,10 +394,13 @@ def test_cli_retries_once_on_429_with_retry_after(tmp_path, monkeypatch):
     class _Success:
         def __init__(self, payload: dict) -> None:
             self._body = json.dumps(payload).encode("utf-8")
+
         def __enter__(self):
             return self
+
         def __exit__(self, *_):
             return False
+
         def read(self) -> bytes:
             return self._body
 
@@ -415,6 +413,7 @@ def test_cli_retries_once_on_429_with_retry_after(tmp_path, monkeypatch):
                 hdrs=_Headers({"Retry-After": "2"}),  # type: ignore[arg-type]
                 fp=None,
             )
+
         def read(self) -> bytes:
             return b"scanner busy"
 
@@ -448,6 +447,7 @@ def _make_http_error(code: int, body_bytes: bytes):
                 hdrs=None,  # type: ignore[arg-type]
                 fp=None,
             )
+
         def read(self) -> bytes:
             return body_bytes
 
@@ -456,15 +456,15 @@ def _make_http_error(code: int, body_bytes: bytes):
 
 def test_cli_401_expired_shows_reissue_message(tmp_path, monkeypatch, capsys):
     """401 with 'expired' in detail → token-expired + portal re-issue hint."""
-    monkeypatch.setattr(
-        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
-    )
+    monkeypatch.setattr(local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok"))
     monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
     (tmp_path / "app.py").write_text("print(1)\n")
 
     from urllib import request as _ureq
 
-    body = json.dumps({"detail": "Your scanner token has expired (30-day TTL). Visit /portal/ to re-issue."}).encode()
+    body = json.dumps(
+        {"detail": "Your scanner token has expired (30-day TTL). Visit /portal/ to re-issue."}
+    ).encode()
     ErrCls = _make_http_error(401, body)
 
     monkeypatch.setattr(_ureq, "urlopen", lambda *_a, **_kw: (_ for _ in ()).throw(ErrCls()))
@@ -479,15 +479,15 @@ def test_cli_401_expired_shows_reissue_message(tmp_path, monkeypatch, capsys):
 
 def test_cli_401_deactivated_shows_admin_message(tmp_path, monkeypatch, capsys):
     """401 with 'deactivated' in detail → account deactivated + admin contact."""
-    monkeypatch.setattr(
-        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
-    )
+    monkeypatch.setattr(local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok"))
     monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
     (tmp_path / "app.py").write_text("print(1)\n")
 
     from urllib import request as _ureq
 
-    body = json.dumps({"detail": "Your account has been deactivated. Contact your administrator."}).encode()
+    body = json.dumps(
+        {"detail": "Your account has been deactivated. Contact your administrator."}
+    ).encode()
     ErrCls = _make_http_error(401, body)
 
     monkeypatch.setattr(_ureq, "urlopen", lambda *_a, **_kw: (_ for _ in ()).throw(ErrCls()))
@@ -502,9 +502,7 @@ def test_cli_401_deactivated_shows_admin_message(tmp_path, monkeypatch, capsys):
 
 def test_cli_401_generic_shows_login_hint(tmp_path, monkeypatch, capsys):
     """Generic 401 → suggest re-running login."""
-    monkeypatch.setattr(
-        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
-    )
+    monkeypatch.setattr(local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok"))
     monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
     (tmp_path / "app.py").write_text("print(1)\n")
 
@@ -524,20 +522,20 @@ def test_cli_401_generic_shows_login_hint(tmp_path, monkeypatch, capsys):
 
 def test_cli_412_no_settings_shows_portal_settings_hint(tmp_path, monkeypatch, capsys):
     """412 Precondition Failed → user hasn't saved LLM settings → portal pointer."""
-    monkeypatch.setattr(
-        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
-    )
+    monkeypatch.setattr(local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok"))
     monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
     (tmp_path / "app.py").write_text("print(1)\n")
 
     from urllib import request as _ureq
 
-    body = json.dumps({
-        "detail": (
-            "No LLM provider configured for your account. "
-            "Visit /portal/settings to choose a provider and save your API key."
-        )
-    }).encode()
+    body = json.dumps(
+        {
+            "detail": (
+                "No LLM provider configured for your account. "
+                "Visit /portal/settings to choose a provider and save your API key."
+            )
+        }
+    ).encode()
     ErrCls = _make_http_error(412, body)
 
     monkeypatch.setattr(_ureq, "urlopen", lambda *_a, **_kw: (_ for _ in ()).throw(ErrCls()))
@@ -555,9 +553,7 @@ def test_cli_412_no_settings_shows_portal_settings_hint(tmp_path, monkeypatch, c
 
 def test_cli_502_quota_exhausted_shows_topup_message(tmp_path, monkeypatch, capsys):
     """When 502 detail.error == 'llm_quota_exhausted', show a top-up message."""
-    monkeypatch.setattr(
-        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
-    )
+    monkeypatch.setattr(local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok"))
     monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
     (tmp_path / "app.py").write_text("print(1)\n")
 
@@ -594,9 +590,7 @@ def test_cli_502_quota_exhausted_shows_topup_message(tmp_path, monkeypatch, caps
 
 def test_cli_502_from_server_exits_3(tmp_path, monkeypatch, capsys):
     """Server returns 502 (mid-scan LLM parse error) → CLI exits 3, not 2."""
-    monkeypatch.setattr(
-        local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok")
-    )
+    monkeypatch.setattr(local_cli, "_resolve_endpoint", lambda: ("http://fake-scanner", "tok"))
     monkeypatch.setattr(local_cli, "_triggered_by", lambda _root: "tester@phrase.com")
     (tmp_path / "app.py").write_text("print(1)\n")
 

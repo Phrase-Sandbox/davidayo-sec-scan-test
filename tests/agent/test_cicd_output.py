@@ -92,10 +92,7 @@ def test_pass_message_matches_spec_and_counts_medium_low_only():
         _finding(Severity.Low, "A09:2021"),
     ]
     msg = format_cicd_message(_result(findings, GateDecision.pass_))
-    assert msg == (
-        "Security scan passed. 3 Medium/Low findings noted — "
-        "see report for details."
-    )
+    assert msg == ("Security scan passed. 3 Medium/Low findings noted — see report for details.")
 
 
 def test_pass_with_no_findings_shows_zero():
@@ -124,8 +121,7 @@ def test_advisory_message_matches_spec_and_counts_total_findings():
 def test_scan_failed_message_matches_spec_verbatim():
     msg = format_cicd_message(_result([], GateDecision.scan_failed))
     assert msg == (
-        "Security scan unavailable. Deployment allowed to proceed — "
-        "scan manually before release."
+        "Security scan unavailable. Deployment allowed to proceed — scan manually before release."
     )
 
 

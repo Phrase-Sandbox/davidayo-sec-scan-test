@@ -132,11 +132,11 @@ def test_rule_3_accepts_owasp_id_formats(valid_id):
 @pytest.mark.parametrize(
     "bad_id",
     [
-        "A3:2021",       # missing leading zero
-        "A03-2021",      # wrong separator
-        "CVE-2024-1234", # wrong taxonomy
-        "secret-001",    # wrong case
-        "SECRET-002",    # not in allowed list (per BR-003 minimum is SECRET-001)
+        "A3:2021",  # missing leading zero
+        "A03-2021",  # wrong separator
+        "CVE-2024-1234",  # wrong taxonomy
+        "secret-001",  # wrong case
+        "SECRET-002",  # not in allowed list (per BR-003 minimum is SECRET-001)
         "",
         None,
         1234,
@@ -170,8 +170,7 @@ def test_rule_4_rejects_exploit_scenario_missing_affected_file_reference():
         affected_file="src/handlers/login.py",
         # Scenario doesn't mention src/handlers/login.py — should be rejected.
         exploit_scenario=(
-            "An attacker submits a payload that triggers an injection in "
-            "the login handler."
+            "An attacker submits a payload that triggers an injection in the login handler."
         ),
     )
     result = validate([raw], total_source_lines=100)
@@ -182,9 +181,7 @@ def test_rule_4_rejects_exploit_scenario_missing_affected_file_reference():
 def test_rule_4_rejects_exploit_scenario_missing_attacker_action_keyword():
     raw = _valid_raw_finding(
         # Mentions affected_file but no keyword from the required list.
-        exploit_scenario=(
-            "An attacker could exploit this in src/handlers/login.py."
-        ),
+        exploit_scenario=("An attacker could exploit this in src/handlers/login.py."),
     )
     result = validate([raw], total_source_lines=100)
     assert result.valid_findings == []
@@ -369,9 +366,7 @@ def test_rule_4_full_path_still_accepted():
     """The existing full-path match must continue to work after the basename change."""
     raw = _valid_raw_finding(
         affected_file="src/handlers/login.py",
-        exploit_scenario=(
-            "Attacker sends a query to src/handlers/login.py triggering SQLi."
-        ),
+        exploit_scenario=("Attacker sends a query to src/handlers/login.py triggering SQLi."),
     )
     result = validate([raw], total_source_lines=100)
     assert len(result.valid_findings) == 1

@@ -38,10 +38,7 @@ TOOL = "eslint"
 async def scan(workspace: ScannerWorkspace) -> list[ScannerCandidate]:
     """Run ESLint-security against JS/TS files in the workspace."""
     # Check JS/TS files exist.
-    js_files = [
-        f for f in workspace.root.rglob("*")
-        if f.suffix in _JS_EXTENSIONS and f.is_file()
-    ]
+    js_files = [f for f in workspace.root.rglob("*") if f.suffix in _JS_EXTENSIONS and f.is_file()]
     if not js_files:
         return []
 
@@ -60,10 +57,13 @@ async def scan(workspace: ScannerWorkspace) -> list[ScannerCandidate]:
 
     cmd = [
         *eslint_cmd,
-        "-f", "json",
+        "-f",
+        "json",
         "--no-eslintrc",
-        "-c", str(_ESLINT_CONFIG),
-        "--ext", ",".join(_JS_EXTENSIONS),
+        "-c",
+        str(_ESLINT_CONFIG),
+        "--ext",
+        ",".join(_JS_EXTENSIONS),
         ".",
     ]
 
@@ -97,7 +97,7 @@ def _parse_output(stdout: bytes, *, workspace_root: str) -> list[ScannerCandidat
     for file_result in data:
         filename = file_result.get("filePath", "")
         if filename.startswith(workspace_root):
-            filename = filename[len(workspace_root):].lstrip("/\\")
+            filename = filename[len(workspace_root) :].lstrip("/\\")
 
         for msg in file_result.get("messages", []):
             try:
@@ -109,16 +109,18 @@ def _parse_output(stdout: bytes, *, workspace_root: str) -> list[ScannerCandidat
                 severity = "high" if severity_int >= 2 else "medium"
 
                 vuln_class = normalize(TOOL, raw_rule_id)
-                candidates.append(ScannerCandidate(
-                    tool=TOOL,
-                    vuln_class=vuln_class,
-                    file=filename,
-                    line_start=line_start,
-                    line_end=line_end,
-                    message=message,
-                    raw_rule_id=raw_rule_id,
-                    severity_hint=severity,
-                ))
+                candidates.append(
+                    ScannerCandidate(
+                        tool=TOOL,
+                        vuln_class=vuln_class,
+                        file=filename,
+                        line_start=line_start,
+                        line_end=line_end,
+                        message=message,
+                        raw_rule_id=raw_rule_id,
+                        severity_hint=severity,
+                    )
+                )
             except Exception as exc:  # noqa: BLE001
                 log.debug("eslint adapter: skipping malformed message", error=str(exc))
                 continue

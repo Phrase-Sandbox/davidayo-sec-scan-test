@@ -20,6 +20,7 @@ def client(_env):
     # Importing the app re-runs lifespan setup; reimport to pick up the
     # current env vars.
     from security_scanner.main import app
+
     with TestClient(app) as c:
         yield c
 
@@ -51,6 +52,7 @@ def test_readyz_returns_503_when_anthropic_key_missing(monkeypatch):
     import importlib
 
     import security_scanner.main as main_mod
+
     importlib.reload(main_mod)
 
     # Lifespan startup will fail and SystemExit (sys.exit(1)).

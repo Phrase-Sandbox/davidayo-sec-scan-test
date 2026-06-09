@@ -1,4 +1,5 @@
 """Tests for the @phrase.com email domain restriction (OKTA_EMAIL_DOMAIN)."""
+
 from __future__ import annotations
 
 import base64
@@ -62,11 +63,11 @@ def _x_userinfo(email: str) -> dict:
 # X-Userinfo gateway path
 # ---------------------------------------------------------------------------
 
+
 def test_x_userinfo_blocked_when_domain_set(client, session_factory, monkeypatch):
     """@other.com email via X-Userinfo must be rejected when OKTA_EMAIL_DOMAIN=phrase.com."""
     monkeypatch.setenv("OKTA_EMAIL_DOMAIN", "phrase.com")
-    r = client.get("/portal/", headers=_x_userinfo("hacker@evil.com"),
-                   follow_redirects=False)
+    r = client.get("/portal/", headers=_x_userinfo("hacker@evil.com"), follow_redirects=False)
     assert r.status_code == 403
     assert "phrase.com" in r.json()["detail"]
 
@@ -89,22 +90,23 @@ def test_x_userinfo_phrase_com_always_allowed(client, session_factory, monkeypat
 # Local password path
 # ---------------------------------------------------------------------------
 
+
 def test_local_login_blocked_when_domain_set(client, session_factory, monkeypatch):
     """Local login with @other.com must be rejected when OKTA_EMAIL_DOMAIN=phrase.com."""
     monkeypatch.setenv("OKTA_EMAIL_DOMAIN", "phrase.com")
-    r = client.post("/portal/login",
-                    data={"email": "user@other.com",
-                          "password": "test-password",
-                          "next": "/portal/"})
+    r = client.post(
+        "/portal/login",
+        data={"email": "user@other.com", "password": "test-password", "next": "/portal/"},
+    )
     assert r.status_code == 403
 
 
 def test_local_login_allowed_when_restriction_off(client, session_factory, monkeypatch):
     """When OKTA_EMAIL_DOMAIN='', any email domain is accepted for local login."""
     monkeypatch.setenv("OKTA_EMAIL_DOMAIN", "")
-    r = client.post("/portal/login",
-                    data={"email": "user@other.com",
-                          "password": "test-password",
-                          "next": "/portal/"})
+    r = client.post(
+        "/portal/login",
+        data={"email": "user@other.com", "password": "test-password", "next": "/portal/"},
+    )
     # Should succeed (302 redirect to portal), not 403
     assert r.status_code == 302

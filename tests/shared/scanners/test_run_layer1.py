@@ -20,6 +20,7 @@ async def test_run_layer1_empty_files_returns_empty() -> None:
 async def test_run_layer1_no_adapters_enabled_returns_empty(monkeypatch) -> None:
     """enabled_adapters=set() means all tools disabled → returns []."""
     import shutil as _shutil
+
     monkeypatch.setattr(_shutil, "which", lambda _: "/usr/bin/tool")
 
     from security_scanner.shared.scanners import run_layer1
@@ -36,11 +37,14 @@ async def test_run_layer1_no_adapters_enabled_returns_empty(monkeypatch) -> None
 async def test_run_layer1_enabled_adapters_filters_to_subset(monkeypatch) -> None:
     """Only the named adapter runs; others are excluded."""
     import shutil as _shutil
+
     monkeypatch.setattr(_shutil, "which", lambda _: "/usr/bin/tool")
 
     mock_bandit = AsyncMock(return_value=[])
 
-    with patch("security_scanner.shared.scanners.get_adapters", return_value={"bandit": mock_bandit}) as mock_ga:
+    with patch(
+        "security_scanner.shared.scanners.get_adapters", return_value={"bandit": mock_bandit}
+    ) as mock_ga:
         from security_scanner.shared.scanners import run_layer1
 
         await run_layer1(

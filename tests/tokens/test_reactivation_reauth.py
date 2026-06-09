@@ -4,6 +4,7 @@ When an admin reactivates a previously deactivated user, any existing portal
 session cookies issued before the reactivation must be rejected — the user
 must re-authenticate to get a new session.
 """
+
 from __future__ import annotations
 
 import base64
@@ -55,12 +56,14 @@ async def session_factory(monkeypatch):
         monkeypatch.setattr(f"{mod}.get_session_factory", lambda: factory)
     # Seed the admin user so require_admin finds role=admin in the DB.
     async with factory() as session:
-        session.add(User(
-            email="admin@example.com",
-            role=UserRole.admin,
-            is_active=True,
-            created_at=datetime.now(UTC),
-        ))
+        session.add(
+            User(
+                email="admin@example.com",
+                role=UserRole.admin,
+                is_active=True,
+                created_at=datetime.now(UTC),
+            )
+        )
         await session.commit()
     try:
         yield factory
@@ -78,12 +81,14 @@ def client():
 
 def _admin_headers() -> dict:
     payload = base64.b64encode(
-        json.dumps({
-            "sub": "admin@example.com",
-            "email": "admin@example.com",
-            "name": "Admin",
-            "groups": ["security-scanner-admins"],
-        }).encode()
+        json.dumps(
+            {
+                "sub": "admin@example.com",
+                "email": "admin@example.com",
+                "name": "Admin",
+                "groups": ["security-scanner-admins"],
+            }
+        ).encode()
     ).decode()
     return {"X-Userinfo": payload}
 
@@ -91,17 +96,18 @@ def _admin_headers() -> dict:
 async def test_reactivate_sets_last_reactivation_at(client, session_factory):
     """Reactivating a user must stamp last_reactivation_at."""
     async with session_factory() as sess:
-        sess.add(User(
-            email="alice@example.com",
-            auth_provider="local",
-            role=UserRole.user,
-            is_active=False,
-            created_at=datetime.now(UTC),
-        ))
+        sess.add(
+            User(
+                email="alice@example.com",
+                auth_provider="local",
+                role=UserRole.user,
+                is_active=False,
+                created_at=datetime.now(UTC),
+            )
+        )
         await sess.commit()
 
-    r = client.post("/admin/users/alice%40example.com/reactivate",
-                    headers=_admin_headers())
+    r = client.post("/admin/users/alice%40example.com/reactivate", headers=_admin_headers())
     assert r.status_code == 200
 
     async with session_factory() as sess:
@@ -131,13 +137,16 @@ async def test_old_session_rejected_after_reactivation(client, session_factory):
     # Create a session cookie that was issued 10 seconds ago (before reactivation)
     # We need to manually craft the payload with the old timestamp
     from security_scanner.tokens.auth import _SESSION_TTL, _get_fernet
-    old_payload = json.dumps({
-        "e": "bob@example.com",
-        "n": "Bob",
-        "x": int(before_reactivation) + _SESSION_TTL,
-        "t": int(before_reactivation),  # issued BEFORE last_reactivation_at
-        "a": "local",
-    }).encode()
+
+    old_payload = json.dumps(
+        {
+            "e": "bob@example.com",
+            "n": "Bob",
+            "x": int(before_reactivation) + _SESSION_TTL,
+            "t": int(before_reactivation),  # issued BEFORE last_reactivation_at
+            "a": "local",
+        }
+    ).encode()
     old_cookie = _get_fernet().encrypt(old_payload).decode()
 
     # Set cookie on the client instance to avoid deprecation / routing issues
@@ -175,12 +184,14 @@ async def test_new_session_allowed_after_reactivation(client, session_factory):
 def test_reauth_check_skipped_for_x_userinfo(client, session_factory):
     """X-Userinfo path has no session_issued_at → reauth check is skipped."""
     payload = base64.b64encode(
-        json.dumps({
-            "sub": "dave@example.com",
-            "email": "dave@example.com",
-            "name": "Dave",
-            "groups": [],
-        }).encode()
+        json.dumps(
+            {
+                "sub": "dave@example.com",
+                "email": "dave@example.com",
+                "name": "Dave",
+                "groups": [],
+            }
+        ).encode()
     ).decode()
     # Even without a DB user or any reactivation_at, X-Userinfo always resolves
     r = client.get("/portal/", headers={"X-Userinfo": payload, "Accept": "text/html"})

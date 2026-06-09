@@ -239,7 +239,7 @@ def test_summary_bar_renders_severity_counts():
     assert 'class="summary-bar"' in html
     # Each severity pill carries its count + label so a quick scan triages.
     for sev_class in ("critical", "high", "medium", "low"):
-        assert f'summary-pill {sev_class}' in html
+        assert f"summary-pill {sev_class}" in html
 
 
 def test_finding_detail_is_collapsible_details_element():
@@ -295,9 +295,9 @@ def test_html_report_has_no_finding_id_gaps_vs_markdown():
 def test_findings_split_into_urgent_cleanup_advisory_buckets():
     findings = [
         _finding(severity=Severity.Critical, vulnerability_id="A03:2021"),
-        _finding(severity=Severity.High,     vulnerability_id="A01:2021"),
-        _finding(severity=Severity.Medium,   vulnerability_id="A05:2021"),
-        _finding(severity=Severity.Low,      vulnerability_id="A09:2021"),
+        _finding(severity=Severity.High, vulnerability_id="A01:2021"),
+        _finding(severity=Severity.Medium, vulnerability_id="A05:2021"),
+        _finding(severity=Severity.Low, vulnerability_id="A09:2021"),
     ]
     html = build_html_report(_result(findings=findings))
     assert "bucket-urgent" in html
@@ -313,12 +313,9 @@ def test_groups_findings_sharing_vulnerability_id_and_severity():
     # Three Medium SECRET-001 findings in different files collapse into one
     # group card with a combined fix-all-at-once prompt.
     findings = [
-        _finding(severity=Severity.Medium, vulnerability_id="SECRET-001",
-                 affected_file="src/a.py"),
-        _finding(severity=Severity.Medium, vulnerability_id="SECRET-001",
-                 affected_file="src/b.py"),
-        _finding(severity=Severity.Medium, vulnerability_id="SECRET-001",
-                 affected_file="src/c.py"),
+        _finding(severity=Severity.Medium, vulnerability_id="SECRET-001", affected_file="src/a.py"),
+        _finding(severity=Severity.Medium, vulnerability_id="SECRET-001", affected_file="src/b.py"),
+        _finding(severity=Severity.Medium, vulnerability_id="SECRET-001", affected_file="src/c.py"),
     ]
     html = build_html_report(_result(findings=findings))
     assert "All 3 are one problem" in html
@@ -341,7 +338,7 @@ def test_single_medium_finding_renders_as_individual_card_not_group():
 def test_ai_prompt_block_appears_in_every_finding_card():
     findings = [
         _finding(severity=Severity.Critical, vulnerability_id="A03:2021"),
-        _finding(severity=Severity.Medium,   vulnerability_id="A05:2021"),
+        _finding(severity=Severity.Medium, vulnerability_id="A05:2021"),
     ]
     html = build_html_report(_result(findings=findings))
     # The dark "paste this" block is rendered with a class hook so tests
@@ -386,9 +383,11 @@ def test_quick_fix_badge_heuristic_one_line_fix():
 
 def test_quick_fix_badge_heuristic_quick_fix_for_short_multiline():
     f = _finding(severity=Severity.Critical)
-    f = f.model_copy(update={
-        "suggested_fix": "Step one.\nStep two.\nStep three.",
-    })
+    f = f.model_copy(
+        update={
+            "suggested_fix": "Step one.\nStep two.\nStep three.",
+        }
+    )
     html = build_html_report(_result(findings=[f]))
     assert "quick fix" in html
     assert "1-line fix" not in html
@@ -396,9 +395,11 @@ def test_quick_fix_badge_heuristic_quick_fix_for_short_multiline():
 
 def test_no_badge_for_long_suggested_fix():
     f = _finding(severity=Severity.Critical)
-    f = f.model_copy(update={
-        "suggested_fix": "\n".join(f"step {i}" for i in range(1, 10)),
-    })
+    f = f.model_copy(
+        update={
+            "suggested_fix": "\n".join(f"step {i}" for i in range(1, 10)),
+        }
+    )
     html = build_html_report(_result(findings=[f]))
     # Neither badge label is emitted (the CSS class definition for .fix-badge
     # remains in the inlined stylesheet, so pin the label text instead).
@@ -413,10 +414,7 @@ def test_code_snippet_toggle_rendered_when_files_provided():
     f = _finding(severity=Severity.Critical, affected_file="src/db.py")
     f = f.model_copy(update={"affected_lines": "3"})
     files = {
-        "src/db.py": (
-            "line one\nline two\nVULNERABLE_LINE = 'secret'\n"
-            "line four\nline five\n"
-        ),
+        "src/db.py": ("line one\nline two\nVULNERABLE_LINE = 'secret'\nline four\nline five\n"),
     }
     html = build_html_report(_result(findings=[f]), files=files)
     assert "Show vulnerable code (lines 3)" in html
@@ -602,8 +600,9 @@ def test_upload_context_panel_rendered_on_non_gate_scan():
     )
     f = f.model_copy(update={"context_summary": upload_summary})
     # Use on_demand scan type (the /scan/local path) — not deployment_gate.
-    result = _result(findings=[f], scan_type=ScanType.on_demand,
-                     gate_decision=GateDecision.advisory)
+    result = _result(
+        findings=[f], scan_type=ScanType.on_demand, gate_decision=GateDecision.advisory
+    )
     html = build_html_report(result)
     assert "Upload context" in html
     assert "Validation:" in html

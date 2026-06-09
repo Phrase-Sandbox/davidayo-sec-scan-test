@@ -50,9 +50,7 @@ def upgrade() -> None:
             "ci_token_rotated",
         ]:
             bind.execute(
-                sa.text(
-                    f"ALTER TYPE audit_event_type ADD VALUE IF NOT EXISTS '{new_value}'"
-                )
+                sa.text(f"ALTER TYPE audit_event_type ADD VALUE IF NOT EXISTS '{new_value}'")
             )
 
     # ----- local_scan_tokens: add expires_at ----------------------------

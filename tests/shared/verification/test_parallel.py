@@ -60,9 +60,7 @@ def _high_finding(affected_file: str = "src/x.py") -> VulnerabilityFinding:
         suggested_fix="Fix it",
         owasp_reference="https://owasp.org/Top10/A05_2021-Security_Misconfiguration/",
         patch_file_path="patches/A05.patch",
-        exploit_scenario=(
-            f"Attacker sends a request to {affected_file} to bypass config."
-        ),
+        exploit_scenario=(f"Attacker sends a request to {affected_file} to bypass config."),
         verification_status=VerificationStatus.unverified,
     )
 
@@ -98,9 +96,7 @@ def test_verified_when_second_pass_says_yes():
 
 def test_conflicting_when_second_pass_says_no():
     finding = _critical_finding()
-    client = _mock_client_returning(
-        "VERDICT: no\nThe input is sanitised by middleware upstream."
-    )
+    client = _mock_client_returning("VERDICT: no\nThe input is sanitised by middleware upstream.")
 
     out = verify_critical_findings([finding], _FILES, client)
     assert out[0].verification_status is VerificationStatus.conflicting
@@ -125,12 +121,15 @@ def test_conflicting_on_parse_failure():
     assert out[0].verification_status is VerificationStatus.conflicting
 
 
-@pytest.mark.parametrize("verdict_text", [
-    "verdict: yes",
-    "VERDICT:yes",
-    "  VERDICT: YES",
-    "VERDICT: Yes\nreason ...",
-])
+@pytest.mark.parametrize(
+    "verdict_text",
+    [
+        "verdict: yes",
+        "VERDICT:yes",
+        "  VERDICT: YES",
+        "VERDICT: Yes\nreason ...",
+    ],
+)
 def test_verdict_parsing_is_case_and_whitespace_tolerant(verdict_text):
     finding = _critical_finding()
     client = _mock_client_returning(verdict_text)

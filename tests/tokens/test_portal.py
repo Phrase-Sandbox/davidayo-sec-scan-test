@@ -50,14 +50,10 @@ async def session_factory(monkeypatch):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     factory = async_sessionmaker(bind=engine, expire_on_commit=False)
-    monkeypatch.setattr(
-        "security_scanner.tokens.portal.get_session_factory", lambda: factory
-    )
+    monkeypatch.setattr("security_scanner.tokens.portal.get_session_factory", lambda: factory)
     # auth.py's _check_account_active also calls get_session_factory — patch it
     # so the is_active DB check uses the in-memory SQLite, not the fake postgres URL.
-    monkeypatch.setattr(
-        "security_scanner.tokens.auth.get_session_factory", lambda: factory
-    )
+    monkeypatch.setattr("security_scanner.tokens.auth.get_session_factory", lambda: factory)
     try:
         yield factory
     finally:
@@ -145,9 +141,7 @@ async def test_index_shows_no_token_then_issue_then_active(client, session_facto
         events = (
             (
                 await session.execute(
-                    select(AuditEvent).where(
-                        AuditEvent.event_type == AuditEventType.token_issued
-                    )
+                    select(AuditEvent).where(AuditEvent.event_type == AuditEventType.token_issued)
                 )
             )
             .scalars()
@@ -168,17 +162,11 @@ async def test_rotate_preserves_token_id_prefix(client, session_factory):
 
     async with session_factory() as session:
         rows = (
-            (
-                await session.execute(
-                    select(LocalScanToken).order_by(LocalScanToken.issued_at)
-                )
-            )
+            (await session.execute(select(LocalScanToken).order_by(LocalScanToken.issued_at)))
             .scalars()
             .all()
         )
-        events = (
-            (await session.execute(select(AuditEvent))).scalars().all()
-        )
+        events = (await session.execute(select(AuditEvent))).scalars().all()
     assert len(rows) == 2
     # Same token_id prefix preserved across rotation — audit continuity.
     assert rows[0].token_id == rows[1].token_id
@@ -248,9 +236,7 @@ def test_cli_consent_rejects_bad_hostname(client, session_factory):
     assert r.status_code == 400
 
 
-async def test_cli_complete_issues_and_redirects_to_loopback(
-    client, session_factory
-):
+async def test_cli_complete_issues_and_redirects_to_loopback(client, session_factory):
     headers = {"X-Userinfo": _userinfo("frank@phrase.com")}
     r = client.post(
         "/portal/cli/login/complete",

@@ -81,9 +81,7 @@ def generate_patch(finding: VulnerabilityFinding, file_content: str) -> str | No
     return "".join(diff_iter)
 
 
-def generate_all_patches(
-    result: ScanResult, files: dict[str, str]
-) -> dict[str, str]:
+def generate_all_patches(result: ScanResult, files: dict[str, str]) -> dict[str, str]:
     """Return ``{patch_filename: patch_text}`` for every findable patch in *result*.
 
     Filename format: ``{scan_id}_{finding_index}_{affected_file_basename}.patch``.

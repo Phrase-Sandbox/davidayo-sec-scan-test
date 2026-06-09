@@ -64,119 +64,119 @@ from __future__ import annotations
 # Bandit (Python)
 # ---------------------------------------------------------------------------
 _BANDIT_MAP: dict[str, str] = {
-    "B101": "code_injection",       # assert_used (not really a vuln_class but closest)
-    "B102": "code_injection",       # exec_used
-    "B103": "path_traversal",       # setting_nodev
+    "B101": "code_injection",  # assert_used (not really a vuln_class but closest)
+    "B102": "code_injection",  # exec_used
+    "B103": "path_traversal",  # setting_nodev
     "B104": "insecure_network_config",  # hardcoded_bind_all_interfaces — 0.0.0.0 exposure, not SSRF
-    "B105": "auth_bypass",          # hardcoded_password_string
-    "B106": "auth_bypass",          # hardcoded_password_funcarg
-    "B107": "auth_bypass",          # hardcoded_password_default
-    "B108": "path_traversal",       # hardcoded_tmp_directory
-    "B110": "auth_bypass",          # try_except_pass
-    "B112": "auth_bypass",          # try_except_continue
+    "B105": "auth_bypass",  # hardcoded_password_string
+    "B106": "auth_bypass",  # hardcoded_password_funcarg
+    "B107": "auth_bypass",  # hardcoded_password_default
+    "B108": "path_traversal",  # hardcoded_tmp_directory
+    "B110": "auth_bypass",  # try_except_pass
+    "B112": "auth_bypass",  # try_except_continue
     "B201": "security_misconfiguration",  # flask_debug_true — Werkzeug debugger, not injection
-    "B301": "deserialization",      # pickle
-    "B302": "deserialization",      # marshal
-    "B303": "weak_crypto",          # md5
-    "B304": "weak_crypto",          # des
-    "B305": "weak_crypto",          # cipher
-    "B306": "path_traversal",       # mktemp_q
-    "B307": "code_injection",       # eval
-    "B308": "xss",                  # mark_safe
-    "B310": "ssrf",                 # urllib_urlopen
-    "B311": "insecure_random",      # random
-    "B312": "ssrf",                 # telnetlib
-    "B313": "xxe",                  # xml_bad_cElementTree
-    "B314": "xxe",                  # xml_bad_ElementTree
-    "B315": "xxe",                  # xml_bad_expatreader
-    "B316": "xxe",                  # xml_bad_expatbuilder
-    "B317": "xxe",                  # xml_bad_sax
-    "B318": "xxe",                  # xml_bad_minidom
-    "B319": "xxe",                  # xml_bad_pulldom
-    "B320": "xxe",                  # xml_bad_etree
-    "B321": "ssrf",                 # ftp_lib
-    "B322": "code_injection",       # input  (Python 2)
-    "B323": "weak_crypto",          # unverified_context
-    "B324": "weak_crypto",          # hashlib
-    "B325": "insecure_random",      # tempnam
-    "B401": "ssrf",                 # import_telnetlib
-    "B402": "ssrf",                 # import_ftplib
-    "B403": "deserialization",      # import_pickle
-    "B404": "subprocess_usage",      # import_subprocess — import alone is not injection
-    "B405": "xxe",                  # import_xml_etree
-    "B406": "xxe",                  # import_xml_sax
-    "B407": "xxe",                  # import_xml_expat
-    "B408": "xxe",                  # import_xml_minidom
-    "B409": "xxe",                  # import_xml_pulldom
-    "B411": "ssrf",                 # import_xmlrpclib
-    "B412": "ssrf",                 # import_httpoxy
-    "B413": "weak_crypto",          # pycrypto
-    "B501": "weak_crypto",          # request_with_no_cert_validation
-    "B502": "weak_crypto",          # ssl_with_bad_version
-    "B503": "weak_crypto",          # ssl_with_bad_defaults
-    "B504": "weak_crypto",          # ssl_with_no_version
-    "B505": "weak_crypto",          # weak_cryptographic_key
-    "B202": "unsafe_file_upload",   # tarfile_unsafe_extract
-    "B506": "unsafe_yaml",          # yaml_load
-    "B507": "weak_crypto",           # ssh_no_host_key_verification — MITM/crypto risk, not SSRF
-    "B601": "command_injection",    # paramiko_calls
-    "B602": "command_injection",    # subprocess_popen_with_shell_equals_true
-    "B603": "command_injection",    # subprocess_without_shell_equals_true
-    "B604": "command_injection",    # any_other_function_with_shell_equals_true
-    "B605": "command_injection",    # start_process_with_a_shell
-    "B606": "command_injection",    # start_process_with_no_shell
-    "B607": "command_injection",    # start_process_with_partial_path
-    "B608": "sqli",                 # hardcoded_sql_expressions
-    "B609": "command_injection",    # linux_commands_wildcard_injection
-    "B610": "sqli",                 # django_extra_used
-    "B611": "sqli",                 # django_rawsql_used
-    "B701": "xss",                  # jinja2_autoescape_false
-    "B702": "xss",                  # use_of_mako_templates
-    "B703": "xss",                  # django_mark_safe
+    "B301": "deserialization",  # pickle
+    "B302": "deserialization",  # marshal
+    "B303": "weak_crypto",  # md5
+    "B304": "weak_crypto",  # des
+    "B305": "weak_crypto",  # cipher
+    "B306": "path_traversal",  # mktemp_q
+    "B307": "code_injection",  # eval
+    "B308": "xss",  # mark_safe
+    "B310": "ssrf",  # urllib_urlopen
+    "B311": "insecure_random",  # random
+    "B312": "ssrf",  # telnetlib
+    "B313": "xxe",  # xml_bad_cElementTree
+    "B314": "xxe",  # xml_bad_ElementTree
+    "B315": "xxe",  # xml_bad_expatreader
+    "B316": "xxe",  # xml_bad_expatbuilder
+    "B317": "xxe",  # xml_bad_sax
+    "B318": "xxe",  # xml_bad_minidom
+    "B319": "xxe",  # xml_bad_pulldom
+    "B320": "xxe",  # xml_bad_etree
+    "B321": "ssrf",  # ftp_lib
+    "B322": "code_injection",  # input  (Python 2)
+    "B323": "weak_crypto",  # unverified_context
+    "B324": "weak_crypto",  # hashlib
+    "B325": "insecure_random",  # tempnam
+    "B401": "ssrf",  # import_telnetlib
+    "B402": "ssrf",  # import_ftplib
+    "B403": "deserialization",  # import_pickle
+    "B404": "subprocess_usage",  # import_subprocess — import alone is not injection
+    "B405": "xxe",  # import_xml_etree
+    "B406": "xxe",  # import_xml_sax
+    "B407": "xxe",  # import_xml_expat
+    "B408": "xxe",  # import_xml_minidom
+    "B409": "xxe",  # import_xml_pulldom
+    "B411": "ssrf",  # import_xmlrpclib
+    "B412": "ssrf",  # import_httpoxy
+    "B413": "weak_crypto",  # pycrypto
+    "B501": "weak_crypto",  # request_with_no_cert_validation
+    "B502": "weak_crypto",  # ssl_with_bad_version
+    "B503": "weak_crypto",  # ssl_with_bad_defaults
+    "B504": "weak_crypto",  # ssl_with_no_version
+    "B505": "weak_crypto",  # weak_cryptographic_key
+    "B202": "unsafe_file_upload",  # tarfile_unsafe_extract
+    "B506": "unsafe_yaml",  # yaml_load
+    "B507": "weak_crypto",  # ssh_no_host_key_verification — MITM/crypto risk, not SSRF
+    "B601": "command_injection",  # paramiko_calls
+    "B602": "command_injection",  # subprocess_popen_with_shell_equals_true
+    "B603": "command_injection",  # subprocess_without_shell_equals_true
+    "B604": "command_injection",  # any_other_function_with_shell_equals_true
+    "B605": "command_injection",  # start_process_with_a_shell
+    "B606": "command_injection",  # start_process_with_no_shell
+    "B607": "command_injection",  # start_process_with_partial_path
+    "B608": "sqli",  # hardcoded_sql_expressions
+    "B609": "command_injection",  # linux_commands_wildcard_injection
+    "B610": "sqli",  # django_extra_used
+    "B611": "sqli",  # django_rawsql_used
+    "B701": "xss",  # jinja2_autoescape_false
+    "B702": "xss",  # use_of_mako_templates
+    "B703": "xss",  # django_mark_safe
 }
 
 # ---------------------------------------------------------------------------
 # gosec (Go)
 # ---------------------------------------------------------------------------
 _GOSEC_MAP: dict[str, str] = {
-    "G101": "auth_bypass",          # hardcoded credentials
+    "G101": "auth_bypass",  # hardcoded credentials
     "G102": "insecure_network_config",  # bind to all interfaces — exposure, not SSRF
-    "G103": "code_injection",          # unsafe block
-    "G104": "poor_error_handling",     # errors unhandled — broad; verifier checks impact
-    "G106": "weak_crypto",          # ssh InsecureIgnoreHostKey
-    "G107": "ssrf",                 # url provided to HTTP request as taint
-    "G108": "info_disclosure",         # profiling endpoint — exposes runtime data, not traversal
-    "G109": "code_injection",       # Potential Integer overflow
-    "G110": "path_traversal",       # potential DoS (zip slip)
-    "G111": "path_traversal",       # file path provided as taint
+    "G103": "code_injection",  # unsafe block
+    "G104": "poor_error_handling",  # errors unhandled — broad; verifier checks impact
+    "G106": "weak_crypto",  # ssh InsecureIgnoreHostKey
+    "G107": "ssrf",  # url provided to HTTP request as taint
+    "G108": "info_disclosure",  # profiling endpoint — exposes runtime data, not traversal
+    "G109": "code_injection",  # Potential Integer overflow
+    "G110": "path_traversal",  # potential DoS (zip slip)
+    "G111": "path_traversal",  # file path provided as taint
     "G112": "security_misconfiguration",  # ReadHeaderTimeout not configured — slowloris DoS
-    "G113": "weak_crypto",          # Rat math/big
-    "G114": "weak_crypto",          # deprecated ioutil
-    "G201": "sqli",                 # SQL query construction using format string
-    "G202": "sqli",                 # SQL query construction using string concatenation
-    "G203": "xss",                  # Use of unescaped data in HTML templates
-    "G204": "command_injection",    # Subprocess launched with variable
-    "G301": "path_traversal",       # Poor file permissions used when creating a directory
-    "G302": "path_traversal",       # Poor file permissions used with chmod
-    "G303": "path_traversal",       # Creating tempfile using a predictable path
-    "G304": "path_traversal",       # File path provided as taint input
-    "G305": "path_traversal",       # File traversal when extracting zip/tar archive
-    "G306": "path_traversal",       # Poor file permissions used when writing to a new file
-    "G307": "path_traversal",       # Deferring a method which returns an error
-    "G401": "weak_crypto",          # Use of weak cryptographic primitive (MD5/SHA1)
-    "G402": "weak_crypto",          # TLS InsecureSkipVerify
-    "G403": "weak_crypto",          # RSA key size < 2048
-    "G404": "insecure_random",      # Use of weak random number generator (math/rand)
-    "G405": "weak_crypto",          # Use of DES/3DES/RC4
-    "G406": "weak_crypto",          # Use of MD4 or RIPEMD160
-    "G407": "weak_crypto",          # Use of hardcoded IV/nonce
-    "G501": "weak_crypto",          # Import blocklist: crypto/md5
-    "G502": "weak_crypto",          # Import blocklist: crypto/des
-    "G503": "weak_crypto",          # Import blocklist: crypto/rc4
-    "G504": "deserialization",      # Import blocklist: net/http/cgi
-    "G505": "weak_crypto",          # Import blocklist: crypto/sha1
-    "G601": "runtime_panic",         # Implicit memory aliasing in for loop
-    "G602": "runtime_panic",         # Slice access can cause a panic
+    "G113": "weak_crypto",  # Rat math/big
+    "G114": "weak_crypto",  # deprecated ioutil
+    "G201": "sqli",  # SQL query construction using format string
+    "G202": "sqli",  # SQL query construction using string concatenation
+    "G203": "xss",  # Use of unescaped data in HTML templates
+    "G204": "command_injection",  # Subprocess launched with variable
+    "G301": "path_traversal",  # Poor file permissions used when creating a directory
+    "G302": "path_traversal",  # Poor file permissions used with chmod
+    "G303": "path_traversal",  # Creating tempfile using a predictable path
+    "G304": "path_traversal",  # File path provided as taint input
+    "G305": "path_traversal",  # File traversal when extracting zip/tar archive
+    "G306": "path_traversal",  # Poor file permissions used when writing to a new file
+    "G307": "path_traversal",  # Deferring a method which returns an error
+    "G401": "weak_crypto",  # Use of weak cryptographic primitive (MD5/SHA1)
+    "G402": "weak_crypto",  # TLS InsecureSkipVerify
+    "G403": "weak_crypto",  # RSA key size < 2048
+    "G404": "insecure_random",  # Use of weak random number generator (math/rand)
+    "G405": "weak_crypto",  # Use of DES/3DES/RC4
+    "G406": "weak_crypto",  # Use of MD4 or RIPEMD160
+    "G407": "weak_crypto",  # Use of hardcoded IV/nonce
+    "G501": "weak_crypto",  # Import blocklist: crypto/md5
+    "G502": "weak_crypto",  # Import blocklist: crypto/des
+    "G503": "weak_crypto",  # Import blocklist: crypto/rc4
+    "G504": "deserialization",  # Import blocklist: net/http/cgi
+    "G505": "weak_crypto",  # Import blocklist: crypto/sha1
+    "G601": "runtime_panic",  # Implicit memory aliasing in for loop
+    "G602": "runtime_panic",  # Slice access can cause a panic
 }
 
 # ---------------------------------------------------------------------------
@@ -197,29 +197,29 @@ _SEMGREP_MAP: dict[str, str] = {
     "python-jinja2-autoescape-false": "xss",
     "jinja2-safe-filter": "xss",
     "python-eval-input": "code_injection",
-    "python-exec-input": "code_injection",       # exec() arbitrary code execution (CWE-94)
+    "python-exec-input": "code_injection",  # exec() arbitrary code execution (CWE-94)
     "python-os-system-input": "command_injection",
     "python-pickle-loads": "deserialization",
-    "python-marshal-loads": "deserialization",    # marshal.loads() untrusted data (CWE-502)
+    "python-marshal-loads": "deserialization",  # marshal.loads() untrusted data (CWE-502)
     "python-xml-parse-no-defusedxml": "xxe",
     # OWASP top-ten vendored rules — JavaScript/TypeScript
-    "js-innerhtml-assignment": "xss",            # innerHTML/outerHTML DOM XSS sink (CWE-79)
-    "js-document-write": "xss",                  # document.write DOM XSS sink (CWE-79)
-    "js-eval-input": "code_injection",           # eval() code injection (CWE-94)
-    "js-dangerously-set-innerhtml": "xss",       # React dangerouslySetInnerHTML (CWE-79)
+    "js-innerhtml-assignment": "xss",  # innerHTML/outerHTML DOM XSS sink (CWE-79)
+    "js-document-write": "xss",  # document.write DOM XSS sink (CWE-79)
+    "js-eval-input": "code_injection",  # eval() code injection (CWE-94)
+    "js-dangerously-set-innerhtml": "xss",  # React dangerouslySetInnerHTML (CWE-79)
     "js-child-process-exec-concat": "command_injection",  # child_process.exec concat (CWE-78)
     # Security-audit vendored rules — Python
     "python-subprocess-shell-true": "command_injection",
     "python-hashlib-md5": "weak_crypto",
     "python-hashlib-sha1": "weak_crypto",
     "python-random-security": "insecure_random",
-    "python-ssl-no-verify": "weak_crypto",        # TLS cert validation disabled (CWE-295)
-    "python-requests-no-verify": "weak_crypto",   # requests verify=False (CWE-295, OWASP A02)
-    "python-assert-auth": "auth_bypass",          # assert for auth stripped by -O (OWASP A01)
-    "python-yaml-load-unsafe": "unsafe_yaml",     # yaml.load() unsafe Loader (CWE-502)
-    "python-tempfile-insecure": "path_traversal", # TOCTOU tempfile race (CWE-377)
+    "python-ssl-no-verify": "weak_crypto",  # TLS cert validation disabled (CWE-295)
+    "python-requests-no-verify": "weak_crypto",  # requests verify=False (CWE-295, OWASP A02)
+    "python-assert-auth": "auth_bypass",  # assert for auth stripped by -O (OWASP A01)
+    "python-yaml-load-unsafe": "unsafe_yaml",  # yaml.load() unsafe Loader (CWE-502)
+    "python-tempfile-insecure": "path_traversal",  # TOCTOU tempfile race (CWE-377)
     # Security-audit vendored rules — JavaScript/TypeScript
-    "js-localstorage-sensitive": "auth_bypass",    # sensitive tokens in localStorage (CWE-922)
+    "js-localstorage-sensitive": "auth_bypass",  # sensitive tokens in localStorage (CWE-922)
     # Generic semgrep community IDs (r2c / p/owasp-top-ten etc.)
     "sql-injection": "sqli",
     "xss": "xss",
@@ -406,7 +406,7 @@ _SEMGREP_MAP: dict[str, str] = {
     # Prefix-based catch-all for registry rule IDs (p/owasp-top-ten etc.)
     # These use patterns like "python.lang.security.audit.sqli.*"
     # The normalize() prefix/substring logic handles the rest.
-    "php-sqli": "sqli",           # prefix for any php-sqli-* variant
+    "php-sqli": "sqli",  # prefix for any php-sqli-* variant
     "php-xss": "xss",
     "php-echo-xss": "xss",
     "php-lfi": "path_traversal",
@@ -487,17 +487,17 @@ _TOOL_MAPS: dict[str, dict[str, str]] = {
 # OWASP ID → vuln_class mapping (for Claude finding normalization in merge.py)
 # ---------------------------------------------------------------------------
 _OWASP_MAP: dict[str, str] = {
-    "a01:2021": "auth_bypass",       # Broken Access Control
-    "a02:2021": "weak_crypto",       # Cryptographic Failures
+    "a01:2021": "auth_bypass",  # Broken Access Control
+    "a02:2021": "weak_crypto",  # Cryptographic Failures
     "a03:2021": "injection_generic",  # Injection — specific class inferred in merge.py
-    "a04:2021": "insecure_design",              # Insecure Design
-    "a05:2021": "security_misconfiguration",    # Security Misconfiguration
-    "a06:2021": "vulnerable_components",        # Vulnerable and Outdated Components
-    "a07:2021": "auth_bypass",                  # Identification and Authentication Failures
-    "a08:2021": "deserialization",              # Software and Data Integrity Failures
-    "a09:2021": "logging_monitoring_failure",   # Security Logging and Monitoring Failures
-    "a10:2021": "ssrf",              # SSRF
-    "secret-001": "weak_crypto",     # hardcoded credential
+    "a04:2021": "insecure_design",  # Insecure Design
+    "a05:2021": "security_misconfiguration",  # Security Misconfiguration
+    "a06:2021": "vulnerable_components",  # Vulnerable and Outdated Components
+    "a07:2021": "auth_bypass",  # Identification and Authentication Failures
+    "a08:2021": "deserialization",  # Software and Data Integrity Failures
+    "a09:2021": "logging_monitoring_failure",  # Security Logging and Monitoring Failures
+    "a10:2021": "ssrf",  # SSRF
+    "secret-001": "weak_crypto",  # hardcoded credential
 }
 
 # Add OWASP map to the tool maps so normalize() can handle it.

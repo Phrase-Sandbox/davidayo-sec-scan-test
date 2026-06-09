@@ -1,4 +1,5 @@
 """Tests for the Okta OIDC SSO routes (/portal/oauth/init and /portal/oauth/callback)."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
@@ -60,8 +61,9 @@ def client():
     return TestClient(app, follow_redirects=False)
 
 
-def _make_claims(email: str = "user@phrase.com", sub: str = "okta-sub-123",
-                 nonce: str = "test-nonce") -> dict:
+def _make_claims(
+    email: str = "user@phrase.com", sub: str = "okta-sub-123", nonce: str = "test-nonce"
+) -> dict:
     return {
         "email": email,
         "sub": sub,
@@ -74,6 +76,7 @@ def _make_claims(email: str = "user@phrase.com", sub: str = "okta-sub-123",
 # ---------------------------------------------------------------------------
 # /portal/oauth/init
 # ---------------------------------------------------------------------------
+
 
 def test_okta_init_redirects_to_okta(client):
     r = client.get("/portal/oauth/init")
@@ -94,6 +97,7 @@ def test_okta_init_503_when_not_configured(client, monkeypatch):
 # /portal/oauth/callback — CSRF validation
 # ---------------------------------------------------------------------------
 
+
 def test_okta_callback_missing_state_cookie(client):
     r = client.get("/portal/oauth/callback", params={"code": "abc", "state": "xyz"})
     assert r.status_code == 400
@@ -102,10 +106,10 @@ def test_okta_callback_missing_state_cookie(client):
 
 def test_okta_callback_wrong_state(client):
     from security_scanner.tokens.okta import _pack_state
+
     cookie = _pack_state("correct-state", "nonce-123")
     client.cookies.set("okta_oauth_state", cookie)
-    r = client.get("/portal/oauth/callback",
-                   params={"code": "abc", "state": "WRONG-STATE"})
+    r = client.get("/portal/oauth/callback", params={"code": "abc", "state": "WRONG-STATE"})
     assert r.status_code == 400
     assert "mismatch" in r.text.lower() or "state" in r.text.lower()
 
@@ -114,8 +118,10 @@ def test_okta_callback_wrong_state(client):
 # /portal/oauth/callback — successful provisioning
 # ---------------------------------------------------------------------------
 
+
 async def test_okta_callback_provisions_new_user(client, session_factory):
     from security_scanner.tokens.okta import _pack_state
+
     state = "test-state-abc"
     nonce = "test-nonce-xyz"
     cookie = _pack_state(state, nonce)
@@ -124,11 +130,13 @@ async def test_okta_callback_provisions_new_user(client, session_factory):
     claims = _make_claims(nonce=nonce)
 
     with (
-        patch("security_scanner.tokens.okta._exchange_code", new=AsyncMock(return_value="fake.id.token")),
+        patch(
+            "security_scanner.tokens.okta._exchange_code",
+            new=AsyncMock(return_value="fake.id.token"),
+        ),
         patch("security_scanner.tokens.okta._validate_id_token", return_value=claims),
     ):
-        r = client.get("/portal/oauth/callback",
-                       params={"code": "auth-code", "state": state})
+        r = client.get("/portal/oauth/callback", params={"code": "auth-code", "state": state})
 
     assert r.status_code == 302
     assert r.headers["location"] == "/portal/"
@@ -144,6 +152,7 @@ async def test_okta_callback_provisions_new_user(client, session_factory):
 
 async def test_okta_callback_protected_admin_provisioned_as_admin(client, session_factory):
     from security_scanner.tokens.okta import _pack_state
+
     state = "state-admin"
     nonce = "nonce-admin"
     cookie = _pack_state(state, nonce)
@@ -151,11 +160,13 @@ async def test_okta_callback_protected_admin_provisioned_as_admin(client, sessio
     claims = _make_claims(email="admin@phrase.com", sub="admin-sub-999", nonce=nonce)
 
     with (
-        patch("security_scanner.tokens.okta._exchange_code", new=AsyncMock(return_value="fake.id.token")),
+        patch(
+            "security_scanner.tokens.okta._exchange_code",
+            new=AsyncMock(return_value="fake.id.token"),
+        ),
         patch("security_scanner.tokens.okta._validate_id_token", return_value=claims),
     ):
-        r = client.get("/portal/oauth/callback",
-                       params={"code": "auth-code", "state": state})
+        r = client.get("/portal/oauth/callback", params={"code": "auth-code", "state": state})
 
     assert r.status_code == 302
     async with session_factory() as sess:
@@ -170,14 +181,16 @@ async def test_okta_callback_updates_existing_okta_user(client, session_factory)
 
     # Pre-create an existing Okta user
     async with session_factory() as sess:
-        sess.add(User(
-            email="user@phrase.com",
-            okta_user_id="okta-sub-123",
-            auth_provider="okta",
-            role=UserRole.user,
-            is_active=True,
-            created_at=datetime.now(UTC),
-        ))
+        sess.add(
+            User(
+                email="user@phrase.com",
+                okta_user_id="okta-sub-123",
+                auth_provider="okta",
+                role=UserRole.user,
+                is_active=True,
+                created_at=datetime.now(UTC),
+            )
+        )
         await sess.commit()
 
     state = "state-update"
@@ -186,11 +199,13 @@ async def test_okta_callback_updates_existing_okta_user(client, session_factory)
     claims = _make_claims(nonce=nonce)
 
     with (
-        patch("security_scanner.tokens.okta._exchange_code", new=AsyncMock(return_value="fake.id.token")),
+        patch(
+            "security_scanner.tokens.okta._exchange_code",
+            new=AsyncMock(return_value="fake.id.token"),
+        ),
         patch("security_scanner.tokens.okta._validate_id_token", return_value=claims),
     ):
-        r = client.get("/portal/oauth/callback",
-                       params={"code": "auth-code", "state": state})
+        r = client.get("/portal/oauth/callback", params={"code": "auth-code", "state": state})
 
     assert r.status_code == 302
     # Only one user row — not duplicated
@@ -201,17 +216,20 @@ async def test_okta_callback_updates_existing_okta_user(client, session_factory)
 
 def test_okta_callback_rejects_wrong_domain(client, session_factory):
     from security_scanner.tokens.okta import _pack_state
+
     state = "state-bad"
     nonce = "nonce-bad"
     client.cookies.set("okta_oauth_state", _pack_state(state, nonce))
     claims = _make_claims(email="hacker@evil.com", nonce=nonce)
 
     with (
-        patch("security_scanner.tokens.okta._exchange_code", new=AsyncMock(return_value="fake.id.token")),
+        patch(
+            "security_scanner.tokens.okta._exchange_code",
+            new=AsyncMock(return_value="fake.id.token"),
+        ),
         patch("security_scanner.tokens.okta._validate_id_token", return_value=claims),
     ):
-        r = client.get("/portal/oauth/callback",
-                       params={"code": "auth-code", "state": state})
+        r = client.get("/portal/oauth/callback", params={"code": "auth-code", "state": state})
 
     assert r.status_code == 403
 
@@ -223,13 +241,15 @@ async def test_okta_callback_rejects_local_account_conflict(client, session_fact
 
     # Pre-create a LOCAL user with the same email
     async with session_factory() as sess:
-        sess.add(User(
-            email="user@phrase.com",
-            auth_provider="local",
-            role=UserRole.user,
-            is_active=True,
-            created_at=datetime.now(UTC),
-        ))
+        sess.add(
+            User(
+                email="user@phrase.com",
+                auth_provider="local",
+                role=UserRole.user,
+                is_active=True,
+                created_at=datetime.now(UTC),
+            )
+        )
         await sess.commit()
 
     state = "state-conflict"
@@ -238,10 +258,12 @@ async def test_okta_callback_rejects_local_account_conflict(client, session_fact
     claims = _make_claims(nonce=nonce)
 
     with (
-        patch("security_scanner.tokens.okta._exchange_code", new=AsyncMock(return_value="fake.id.token")),
+        patch(
+            "security_scanner.tokens.okta._exchange_code",
+            new=AsyncMock(return_value="fake.id.token"),
+        ),
         patch("security_scanner.tokens.okta._validate_id_token", return_value=claims),
     ):
-        r = client.get("/portal/oauth/callback",
-                       params={"code": "auth-code", "state": state})
+        r = client.get("/portal/oauth/callback", params={"code": "auth-code", "state": state})
 
     assert r.status_code == 409

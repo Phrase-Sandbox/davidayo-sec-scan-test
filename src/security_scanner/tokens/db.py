@@ -40,7 +40,7 @@ def _build_engine() -> AsyncEngine:
     # we ship psycopg3 (psycopg[binary]). Normalise to postgresql+psycopg:// so
     # the async engine uses the psycopg3 async driver.
     if url.startswith("postgresql://"):
-        url = "postgresql+psycopg://" + url[len("postgresql://"):]
+        url = "postgresql+psycopg://" + url[len("postgresql://") :]
     # echo=False — we do not want SQL in stdout (would leak token hashes in
     # query bind params during audit DEBUG sessions). pool_pre_ping handles
     # idle-connection recycling so a Postgres restart doesn't strand the app.

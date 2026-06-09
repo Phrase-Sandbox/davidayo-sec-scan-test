@@ -72,6 +72,7 @@ def test_parse_output_missing_optional_fields() -> None:
 async def test_scan_skips_if_binary_missing(monkeypatch) -> None:
     """scan() returns [] when semgrep binary is not on PATH."""
     import shutil as _shutil
+
     monkeypatch.setattr(_shutil, "which", lambda _: None)
     from security_scanner.shared.scanners.adapters.semgrep import scan
     from security_scanner.shared.scanners.workdir import ScannerWorkspace
@@ -85,6 +86,7 @@ async def test_scan_skips_if_binary_missing(monkeypatch) -> None:
 async def test_scan_empty_rules_returns_empty(monkeypatch) -> None:
     """scan(rules=set()) skips subprocess and returns [] immediately."""
     import shutil as _shutil
+
     monkeypatch.setattr(_shutil, "which", lambda _: "/usr/bin/semgrep")
     from security_scanner.shared.scanners.adapters.semgrep import scan
     from security_scanner.shared.scanners.workdir import ScannerWorkspace
@@ -98,6 +100,7 @@ async def test_scan_empty_rules_returns_empty(monkeypatch) -> None:
 async def test_scan_none_rules_identical_to_default(monkeypatch) -> None:
     """scan(rules=None) and scan() must use the same config-selection path."""
     import shutil as _shutil
+
     monkeypatch.setattr(_shutil, "which", lambda _: None)
     from security_scanner.shared.scanners.adapters.semgrep import scan
     from security_scanner.shared.scanners.workdir import ScannerWorkspace

@@ -134,9 +134,7 @@ async def run_scanner(
             except ProcessLookupError:
                 pass
             await proc.wait()
-            raise ScannerTimeout(
-                f"Scanner command timed out after {timeout}s: {cmd[0]!r}"
-            ) from exc
+            raise ScannerTimeout(f"Scanner command timed out after {timeout}s: {cmd[0]!r}") from exc
 
     if len(stdout_bytes) >= max_output_bytes:
         log.warning(

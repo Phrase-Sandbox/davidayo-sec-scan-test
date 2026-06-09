@@ -8,6 +8,7 @@ covering A01–A08:2021 and two SECRET-001 entries.
 DO NOT USE IN PRODUCTION.  This file exists solely to ensure the scanner
 reliably finds >= 9 issues on a known payload.
 """
+
 import hashlib
 import os
 import pickle
@@ -29,17 +30,13 @@ STRIPE_SECRET_KEY = "sk_live_abc123XYZ789defGHI012"  # noqa: S105
 # ── Finding #3 ────────────────────────────────────────────────────────────────
 # A03:2021 — SQL injection via f-string interpolation
 def get_user(conn, user_id: str):
-    return conn.execute(
-        f"SELECT * FROM users WHERE id = {user_id}"
-    ).fetchone()
+    return conn.execute(f"SELECT * FROM users WHERE id = {user_id}").fetchone()
 
 
 # ── Finding #4 ────────────────────────────────────────────────────────────────
 # A03:2021 — SQL injection via % string formatting
 def search_products(conn, keyword: str):
-    return conn.execute(
-        "SELECT * FROM products WHERE name LIKE '%%%s%%'" % keyword
-    ).fetchall()
+    return conn.execute("SELECT * FROM products WHERE name LIKE '%%%s%%'" % keyword).fetchall()
 
 
 # ── Finding #5 ────────────────────────────────────────────────────────────────

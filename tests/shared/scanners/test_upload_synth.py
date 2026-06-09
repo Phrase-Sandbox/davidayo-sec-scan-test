@@ -82,6 +82,7 @@ def _make_handler(filepath: str, line: int = 7, framework: str = "flask") -> Upl
 # Tests: _count_weak_signals
 # ---------------------------------------------------------------------------
 
+
 class TestCountWeakSignals:
     def test_weak_handler_has_two_or_more_signals(self):
         handler = _make_handler("app.py", line=7)
@@ -113,6 +114,7 @@ class TestCountWeakSignals:
 # ---------------------------------------------------------------------------
 # Tests: _synthesise_candidates
 # ---------------------------------------------------------------------------
+
 
 class TestSynthesiseCandidates:
     def test_generates_candidate_for_weak_handler(self):

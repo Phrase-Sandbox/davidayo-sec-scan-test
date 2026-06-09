@@ -52,9 +52,7 @@ TEST_FILE_SUFFIXES: tuple[str, ...] = (
     ".spec.ts",
 )
 
-DEPENDENCY_PATH_MARKERS: frozenset[str] = frozenset(
-    {"/node_modules/", "/vendor/", "/third_party/"}
-)
+DEPENDENCY_PATH_MARKERS: frozenset[str] = frozenset({"/node_modules/", "/vendor/", "/third_party/"})
 
 LOCKFILE_NAMES: frozenset[str] = frozenset(
     {"package-lock.json", "yarn.lock", "poetry.lock", "Pipfile.lock"}

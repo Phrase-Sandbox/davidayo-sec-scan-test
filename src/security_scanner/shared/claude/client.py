@@ -120,9 +120,7 @@ class _CircuitBreaker:
         elapsed = self._clock() - (self._opened_at or 0.0)
         if elapsed < CB_RECOVERY_TIMEOUT_SECONDS:
             remaining = CB_RECOVERY_TIMEOUT_SECONDS - elapsed
-            raise ClaudeCircuitOpenError(
-                f"Claude circuit breaker open; retry in {remaining:.0f}s"
-            )
+            raise ClaudeCircuitOpenError(f"Claude circuit breaker open; retry in {remaining:.0f}s")
         self._state = self.STATE_HALF_OPEN
         self._consecutive_successes_half_open = 0
 
@@ -288,9 +286,7 @@ class ClaudeClient:
         )
 
         tasks = [
-            asyncio.create_task(
-                self._analyse_with_halving_retry(chunk, extra_instruction)
-            )
+            asyncio.create_task(self._analyse_with_halving_retry(chunk, extra_instruction))
             for chunk in chunks
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -397,11 +393,13 @@ class ClaudeClient:
                 response = self._client.messages.create(
                     model=self._model,
                     max_tokens=self._max_tokens,
-                    system=[{
-                        "type": "text",
-                        "text": system_prompt,
-                        "cache_control": {"type": "ephemeral"},
-                    }],
+                    system=[
+                        {
+                            "type": "text",
+                            "text": system_prompt,
+                            "cache_control": {"type": "ephemeral"},
+                        }
+                    ],
                     messages=[{"role": "user", "content": user_message}],
                 )
             except anthropic.APITimeoutError as exc:
@@ -423,9 +421,7 @@ class ClaudeClient:
             except anthropic.APIStatusError as exc:
                 status = exc.status_code
                 if 500 <= status < 600:
-                    log.warning(
-                        "claude server error", model=self._model, status_code=status
-                    )
+                    log.warning("claude server error", model=self._model, status_code=status)
                     self._sleep(BACKOFF_SECONDS[attempt])
                     last_error_summary = f"server error {status}"
                     continue

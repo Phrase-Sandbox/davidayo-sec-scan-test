@@ -11,8 +11,7 @@ from security_scanner.shared.models.enums import GateDecision, Severity
 from security_scanner.shared.models.scan_result import ScanResult
 
 _SCAN_FAILED_MESSAGE = (
-    "Security scan unavailable. Deployment allowed to proceed — "
-    "scan manually before release."
+    "Security scan unavailable. Deployment allowed to proceed — scan manually before release."
 )
 
 
@@ -44,10 +43,7 @@ def _blocked(result: ScanResult) -> str:
 
 def _pass(result: ScanResult) -> str:
     medium_low = _count(result, Severity.Medium) + _count(result, Severity.Low)
-    return (
-        f"Security scan passed. {medium_low} Medium/Low findings noted — "
-        "see report for details."
-    )
+    return f"Security scan passed. {medium_low} Medium/Low findings noted — see report for details."
 
 
 def _advisory(result: ScanResult) -> str:

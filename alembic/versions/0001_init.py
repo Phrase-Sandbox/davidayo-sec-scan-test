@@ -90,15 +90,9 @@ def downgrade() -> None:
     op.drop_index("ix_audit_events_at", table_name="audit_events")
     op.drop_table("audit_events")
 
-    op.drop_index(
-        "ix_local_scan_tokens_one_active_per_user", table_name="local_scan_tokens"
-    )
-    op.drop_index(
-        "ix_local_scan_tokens_user_email", table_name="local_scan_tokens"
-    )
-    op.drop_index(
-        "ix_local_scan_tokens_token_id", table_name="local_scan_tokens"
-    )
+    op.drop_index("ix_local_scan_tokens_one_active_per_user", table_name="local_scan_tokens")
+    op.drop_index("ix_local_scan_tokens_user_email", table_name="local_scan_tokens")
+    op.drop_index("ix_local_scan_tokens_token_id", table_name="local_scan_tokens")
     op.drop_table("local_scan_tokens")
 
     sa.Enum(name="audit_event_type").drop(op.get_bind(), checkfirst=False)

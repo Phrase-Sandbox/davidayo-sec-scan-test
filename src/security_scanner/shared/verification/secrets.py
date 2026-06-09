@@ -383,9 +383,7 @@ def _verify_batch(
     if not sendable_blocks:
         return list(findings_subset)
 
-    user_message = _build_batched_user_message(
-        sendable_blocks, total=len(sendable_blocks)
-    )
+    user_message = _build_batched_user_message(sendable_blocks, total=len(sendable_blocks))
 
     try:
         response = claude_client.ask(_VERIFY_SYSTEM_PROMPT, user_message)
@@ -484,9 +482,7 @@ def _apply_verdict(
     return finding.model_copy(update=updates)
 
 
-def _parse_batched_verdicts(
-    response: str, *, batch_size: int
-) -> dict[int, tuple[str, str]]:
+def _parse_batched_verdicts(response: str, *, batch_size: int) -> dict[int, tuple[str, str]]:
     """Map slot-index (0-based) → (verdict, reasoning).
 
     Indices follow the LLM's ``#N`` 1-based numbering. If the LLM omits
@@ -584,5 +580,3 @@ def _context_snippet(content: str, line: int, end_line: int) -> tuple[str, int]:
     if len(snippet) > _MAX_SNIPPET_CHARS:
         snippet = snippet[:_MAX_SNIPPET_CHARS]
     return snippet, start + 1
-
-

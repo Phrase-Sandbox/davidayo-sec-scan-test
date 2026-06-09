@@ -75,12 +75,14 @@ def _safe_next(url: str) -> str:
     abuse via the ``next`` login parameter.  Falls back to the portal home.
     """
     from urllib.parse import urlparse  # noqa: PLC0415
+
     if not url:
         return "/portal/"
     parsed = urlparse(url)
     if parsed.scheme or parsed.netloc or url.startswith("//"):
         return "/portal/"
     return url
+
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
@@ -232,15 +234,17 @@ async def portal_login_submit(
         row = await sess.get(User, email)
         if row is None:
             initial_role = UserRole.admin if email in protected else UserRole.user
-            sess.add(User(
-                email=email,
-                auth_provider="local",
-                role=initial_role,
-                is_active=True,
-                created_at=now,
-                last_login_at=now,
-                display_name=display_name,
-            ))
+            sess.add(
+                User(
+                    email=email,
+                    auth_provider="local",
+                    role=initial_role,
+                    is_active=True,
+                    created_at=now,
+                    last_login_at=now,
+                    display_name=display_name,
+                )
+            )
         else:
             if not row.is_active:
                 return _render_error("Account is deactivated.", status.HTTP_403_FORBIDDEN)
@@ -373,9 +377,7 @@ async def portal_index(request: Request, user: _UserDep) -> HTMLResponse:
         if db_user is not None and db_user.role == UserRole.admin:
             return RedirectResponse(url="/admin/tokens", status_code=302)
         # No DB row yet (first visit before token issue) → show portal.
-        active = await token_registry.get_active_for_user(
-            session, user_email=user.email
-        )
+        active = await token_registry.get_active_for_user(session, user_email=user.email)
 
     return templates.TemplateResponse(
         request,
@@ -389,9 +391,7 @@ async def portal_index(request: Request, user: _UserDep) -> HTMLResponse:
 
 
 @router.post("/tokens", response_class=HTMLResponse)
-async def portal_issue_or_rotate(
-    request: Request, user: _UserDep
-) -> HTMLResponse:
+async def portal_issue_or_rotate(request: Request, user: _UserDep) -> HTMLResponse:
     """Issue a first token, or rotate the existing one.
 
     On rotation, the same 12-hex ``token_id`` prefix is preserved so audit
@@ -403,9 +403,7 @@ async def portal_issue_or_rotate(
         # and scan_records. Called here so the row is always present before
         # any FK-constrained child insert in this session or later ones.
         await token_registry.upsert_user(session, email=user.email)
-        issued = await token_registry.issue_or_rotate_for_user(
-            session, user_email=user.email
-        )
+        issued = await token_registry.issue_or_rotate_for_user(session, user_email=user.email)
         await session.commit()
 
     log.info(
@@ -511,9 +509,7 @@ async def cli_login_complete(
 
     factory = get_session_factory()
     async with factory() as session:
-        issued = await token_registry.issue_or_rotate_for_user(
-            session, user_email=user.email
-        )
+        issued = await token_registry.issue_or_rotate_for_user(session, user_email=user.email)
         await session.commit()
 
     log.info(
@@ -526,10 +522,7 @@ async def cli_login_complete(
 
     # 127.0.0.1 over ``localhost`` — avoids any chance of an IPv6 resolution
     # mismatch with the CLI listener which binds the IPv4 loopback.
-    redirect = (
-        f"http://127.0.0.1:{callback_port}/"
-        f"?token={issued.full_token}"
-    )
+    redirect = f"http://127.0.0.1:{callback_port}/?token={issued.full_token}"
     return RedirectResponse(
         url=redirect,
         status_code=status.HTTP_303_SEE_OTHER,
@@ -558,6 +551,7 @@ async def portal_settings_get(request: Request, user: _UserDep) -> HTMLResponse:
     current_provider: str = "anthropic"
     if settings_row is not None:
         from security_scanner.tokens.crypto import decrypt, mask_for_display  # noqa: PLC0415
+
         try:
             plaintext = decrypt(settings_row.encrypted_api_key)
             masked_key = mask_for_display(plaintext)
@@ -646,9 +640,11 @@ async def portal_settings_post(
         provider_enum = LLMProvider.anthropic if provider == "anthropic" else LLMProvider.google
 
         from datetime import UTC, datetime  # noqa: PLC0415
+
         now = datetime.now(UTC)
         if row is None:
             from security_scanner.tokens.models import UserLLMSettings as _ULS  # noqa: PLC0415
+
             row = _ULS(
                 user_email=user.email,
                 provider=provider_enum,
@@ -736,6 +732,7 @@ async def portal_scan_detail(
 ) -> HTMLResponse:
     """Render the saved HTML report for a single scan."""
     import uuid  # noqa: PLC0415
+
     try:
         scan_uuid = uuid.UUID(scan_id)
     except ValueError as exc:
@@ -746,6 +743,7 @@ async def portal_scan_detail(
     factory = get_session_factory()
     async with factory() as session:
         from security_scanner.tokens.models import ScanUsage  # noqa: PLC0415
+
         stmt = select(ScanRecord).where(
             ScanRecord.scan_id == scan_uuid,
             ScanRecord.user_email == user.email,
@@ -790,11 +788,11 @@ async def portal_scan_detail(
 # Published list prices (USD) per 1M tokens — best-effort, for estimation only.
 # Real cost = provider invoice; these numbers help users spot surprises.
 _PRICE_PER_MTok: dict[tuple[str, str], tuple[float, float]] = {
-    ("anthropic", "claude-sonnet-4-6"):  (3.00, 15.00),
-    ("anthropic", "claude-opus-4-7"):    (15.00, 75.00),
+    ("anthropic", "claude-sonnet-4-6"): (3.00, 15.00),
+    ("anthropic", "claude-opus-4-7"): (15.00, 75.00),
     ("anthropic", "claude-haiku-4-5-20251001"): (0.80, 4.00),
-    ("google",    "gemini-2.5-flash"):   (0.075, 0.30),
-    ("google",    "gemini-2.5-pro"):     (1.25, 10.00),
+    ("google", "gemini-2.5-flash"): (0.075, 0.30),
+    ("google", "gemini-2.5-pro"): (1.25, 10.00),
 }
 
 
@@ -805,10 +803,7 @@ def _est_cost_usd(row: LLMUsageMonthly) -> float:
     if prices is None:
         return 0.0
     in_price, out_price = prices
-    return (
-        row.input_tokens / 1_000_000 * in_price
-        + row.output_tokens / 1_000_000 * out_price
-    )
+    return row.input_tokens / 1_000_000 * in_price + row.output_tokens / 1_000_000 * out_price
 
 
 @router.get("/usage", response_class=HTMLResponse)
@@ -834,10 +829,7 @@ async def portal_usage(request: Request, user: _UserDep) -> HTMLResponse:
         )
         rows = (await session.execute(stmt)).scalars().all()
 
-    usage_with_cost = [
-        {"row": r, "est_cost": _est_cost_usd(r)}
-        for r in rows
-    ]
+    usage_with_cost = [{"row": r, "est_cost": _est_cost_usd(r)} for r in rows]
 
     return templates.TemplateResponse(
         request,
@@ -849,5 +841,3 @@ async def portal_usage(request: Request, user: _UserDep) -> HTMLResponse:
             "usage": usage_with_cost,
         },
     )
-
-

@@ -51,9 +51,7 @@ def _env(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     monkeypatch.setenv("USE_TOKEN_REGISTRY", "true")
     # DATABASE_URL is unused — get_session_factory is patched below.
-    monkeypatch.setenv(
-        "DATABASE_URL", "postgresql+psycopg://unused:unused@unused:5432/unused"
-    )
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://unused:unused@unused:5432/unused")
     monkeypatch.setenv("ADMIN_LOCAL_BYPASS", "true")
     monkeypatch.setenv("GITHUB_APP_ID", "1")
     monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", "-----BEGIN PRIVATE KEY-----")
@@ -74,9 +72,7 @@ async def session_factory(monkeypatch):
 
     # Patch the module-level accessor used by verify_local_scan_token and
     # _record_scan_ok_audit so both routes share THIS factory.
-    monkeypatch.setattr(
-        "security_scanner.agent.local_scan.get_session_factory", lambda: factory
-    )
+    monkeypatch.setattr("security_scanner.agent.local_scan.get_session_factory", lambda: factory)
     try:
         yield factory
     finally:
@@ -157,9 +153,7 @@ def _post(client, token):
 
 async def _seed_token(factory, *, user_email: str) -> str:
     async with factory() as session:
-        issued = await token_registry.issue_or_rotate_for_user(
-            session, user_email=user_email
-        )
+        issued = await token_registry.issue_or_rotate_for_user(session, user_email=user_email)
         await session.commit()
         return issued.full_token
 
@@ -218,9 +212,7 @@ async def test_registry_ok_returns_200_and_audits_scan_ok(
         rows = (
             (
                 await session.execute(
-                    select(AuditEvent).where(
-                        AuditEvent.event_type == AuditEventType.scan_ok
-                    )
+                    select(AuditEvent).where(AuditEvent.event_type == AuditEventType.scan_ok)
                 )
             )
             .scalars()
@@ -235,27 +227,21 @@ async def test_registry_ok_returns_200_and_audits_scan_ok(
 
     # And last_used_at was bumped on the token row.
     async with session_factory() as session:
-        token_row = (
-            await session.execute(select(LocalScanToken))
-        ).scalar_one()
+        token_row = (await session.execute(select(LocalScanToken))).scalar_one()
     assert token_row.last_used_at is not None
 
 
 # --- Failure paths -----------------------------------------------------------
 
 
-async def test_unknown_token_401_and_audits_scan_unauthorized(
-    session_factory, client
-):
+async def test_unknown_token_401_and_audits_scan_unauthorized(session_factory, client):
     # No token seeded.
     fake = "phs_local_tok-deadbeefcafe_" + "A" * 43
     r = _post(client, fake)
     assert r.status_code == 401
 
     async with session_factory() as session:
-        rows = (
-            (await session.execute(select(AuditEvent))).scalars().all()
-        )
+        rows = (await session.execute(select(AuditEvent))).scalars().all()
     assert len(rows) == 1
     assert rows[0].event_type == AuditEventType.scan_unauthorized
     assert rows[0].event_metadata["outcome"] == "unknown_token"
@@ -278,8 +264,9 @@ async def test_revoked_token_401_with_revoked_outcome(session_factory, client):
         rows = (
             (
                 await session.execute(
-                    select(AuditEvent)
-                    .where(AuditEvent.event_type == AuditEventType.scan_unauthorized)
+                    select(AuditEvent).where(
+                        AuditEvent.event_type == AuditEventType.scan_unauthorized
+                    )
                 )
             )
             .scalars()
@@ -308,8 +295,9 @@ async def test_bad_signature_401(session_factory, client):
         rows = (
             (
                 await session.execute(
-                    select(AuditEvent)
-                    .where(AuditEvent.event_type == AuditEventType.scan_unauthorized)
+                    select(AuditEvent).where(
+                        AuditEvent.event_type == AuditEventType.scan_unauthorized
+                    )
                 )
             )
             .scalars()

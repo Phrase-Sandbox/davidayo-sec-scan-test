@@ -13,10 +13,17 @@ MAX_CALLERS = 20
 CONTEXT_LINES = 5
 
 # Test path fragments to skip.
-_TEST_PATH_FRAGMENTS = frozenset({
-    "/test/", "/tests/", "__tests__", ".test.", ".spec.",
-    "\\test\\", "\\tests\\",
-})
+_TEST_PATH_FRAGMENTS = frozenset(
+    {
+        "/test/",
+        "/tests/",
+        "__tests__",
+        ".test.",
+        ".spec.",
+        "\\test\\",
+        "\\tests\\",
+    }
+)
 
 
 def _is_test_file(path: str) -> bool:
@@ -30,7 +37,7 @@ def _is_test_file(path: str) -> bool:
 
 class _CallerMatch(NamedTuple):
     file: str
-    line: int   # 1-based
+    line: int  # 1-based
     function_name: str
     snippet: str
 
@@ -75,9 +82,7 @@ def find_callers(
     # Build a pattern that matches the function being called (not defined).
     # We want  foo(  or  foo (  but NOT  def foo(  or  class foo(
     # Use a simple word-boundary match + post-filter for def/class declarations.
-    call_re = re.compile(
-        r"""\b""" + re.escape(function_name) + r"""\s*\("""
-    )
+    call_re = re.compile(r"""\b""" + re.escape(function_name) + r"""\s*\(""")
     # Detect definition lines to exclude.
     def_re = re.compile(
         r"""^\s*(?:async\s+)?(?:def|class)\s+""" + re.escape(function_name) + r"""\s*[\(:]"""
@@ -99,12 +104,14 @@ def find_callers(
                 hi = min(len(lines), i + CONTEXT_LINES - 2)
                 snippet = "\n".join(lines[lo:hi])
                 enc = _enclosing_function(lines, i)
-                results.append(_CallerMatch(
-                    file=filepath,
-                    line=i + 1,
-                    function_name=enc,
-                    snippet=snippet,
-                ))
+                results.append(
+                    _CallerMatch(
+                        file=filepath,
+                        line=i + 1,
+                        function_name=enc,
+                        snippet=snippet,
+                    )
+                )
                 if len(results) >= max_callers:
                     break
     return results

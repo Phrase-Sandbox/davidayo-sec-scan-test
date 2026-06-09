@@ -13,6 +13,7 @@ Role assignment logic tested:
 Idempotency:
 - Second request for the same user does NOT create a duplicate row.
 """
+
 from __future__ import annotations
 
 import base64
@@ -89,6 +90,7 @@ def _userinfo_header(email: str, name: str = "Test User", groups: list[str] | No
 # Role assignment on first login
 # ---------------------------------------------------------------------------
 
+
 async def test_jit_provisions_new_user_as_user_role(client, session_factory):
     """Unknown email via X-Userinfo → created in DB with role=user."""
     r = client.get("/portal/", headers=_userinfo_header("newuser@example.com"))
@@ -159,6 +161,7 @@ async def test_jit_regular_user_with_unrelated_group(client, session_factory):
 # Idempotency
 # ---------------------------------------------------------------------------
 
+
 async def test_jit_provision_is_idempotent(client, session_factory):
     """Second request for the same email does NOT create a duplicate row."""
     headers = _userinfo_header("idempotent@example.com")
@@ -173,11 +176,10 @@ async def test_jit_provision_is_idempotent(client, session_factory):
 
     # Exactly one DB row
     from sqlalchemy import func, select
+
     async with session_factory() as sess:
         count = (
-            await sess.execute(
-                select(func.count()).where(User.email == "idempotent@example.com")
-            )
+            await sess.execute(select(func.count()).where(User.email == "idempotent@example.com"))
         ).scalar_one()
 
     assert count == 1, "Idempotent: second visit must NOT create a duplicate row"
@@ -187,17 +189,20 @@ async def test_jit_provision_is_idempotent(client, session_factory):
 # Pre-existing user is not overwritten
 # ---------------------------------------------------------------------------
 
+
 async def test_existing_user_not_reprovisioned(client, session_factory):
     """If user already has a DB row, JIT provisioning is skipped entirely."""
     # Pre-seed user as admin (already in DB)
     async with session_factory() as sess:
-        sess.add(User(
-            email="existing@example.com",
-            auth_provider="local",
-            role=UserRole.admin,
-            is_active=True,
-            created_at=datetime.now(UTC),
-        ))
+        sess.add(
+            User(
+                email="existing@example.com",
+                auth_provider="local",
+                role=UserRole.admin,
+                is_active=True,
+                created_at=datetime.now(UTC),
+            )
+        )
         await sess.commit()
 
     # Login via X-Userinfo (which would provision as role=user, no groups)
@@ -208,5 +213,7 @@ async def test_existing_user_not_reprovisioned(client, session_factory):
     async with session_factory() as sess:
         u = await sess.get(User, "existing@example.com")
 
-    assert u.role == UserRole.admin, "Existing admin role must not be overwritten by JIT provisioning"
+    assert u.role == UserRole.admin, (
+        "Existing admin role must not be overwritten by JIT provisioning"
+    )
     assert u.auth_provider == "local", "Existing auth_provider must not be overwritten"

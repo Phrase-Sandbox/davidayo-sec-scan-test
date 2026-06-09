@@ -555,7 +555,5 @@ def test_no_webhook_returns_false(monkeypatch):
 
     monkeypatch.delenv("SLACK_WEBHOOK_URL", raising=False)
 
-    result = _run(
-        _post_to_slack("test", kind="test", http_client=None, webhook_url=None)
-    )
+    result = _run(_post_to_slack("test", kind="test", http_client=None, webhook_url=None))
     assert result is False

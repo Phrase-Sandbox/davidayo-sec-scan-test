@@ -134,8 +134,7 @@ class Settings(BaseSettings):
     OKTA_REDIRECT_URI: str = Field(
         default="",
         description=(
-            "Absolute callback URL, e.g. "
-            "https://scanner.phrase.com/portal/oauth/callback"
+            "Absolute callback URL, e.g. https://scanner.phrase.com/portal/oauth/callback"
         ),
     )
     OKTA_SCOPES: str = Field(
@@ -211,8 +210,4 @@ def get_settings() -> Settings:
 
 def okta_is_configured(settings) -> bool:
     """Return True only when all three required Okta env vars are set."""
-    return bool(
-        settings.OKTA_DOMAIN
-        and settings.OKTA_CLIENT_ID
-        and settings.OKTA_CLIENT_SECRET
-    )
+    return bool(settings.OKTA_DOMAIN and settings.OKTA_CLIENT_ID and settings.OKTA_CLIENT_SECRET)

@@ -106,11 +106,12 @@ def _finding_dict(
         "description": description or f"Vulnerability detected in {affected_file}.",
         "suggested_fix": (
             "Use a parameterised query:\n"
-            "```python\ncursor.execute(\"SELECT ... WHERE name = ?\", (username,))\n```"
+            '```python\ncursor.execute("SELECT ... WHERE name = ?", (username,))\n```'
         ),
         "owasp_reference": "https://owasp.org/Top10/A03_2021-Injection/",
         "patch_file_path": "patches/x.patch",
-        "exploit_scenario": exploit_scenario or (
+        "exploit_scenario": exploit_scenario
+        or (
             f"Attacker submits username=admin' OR '1'='1 as a payload to "
             f"{affected_file}, bypassing the WHERE clause and returning all rows."
         ),
@@ -149,13 +150,12 @@ def _make_anthropic_sdk_mock(
     the BR-009 verification ask() — they're differentiated by the system
     prompt. Returns the right body shape for each.
     """
+
     def respond(**kwargs):
         system_raw = kwargs.get("system", "")
         # Handle both bare string and list[dict] (Phase 4 cache_control form).
         if isinstance(system_raw, list):
-            system_prompt = " ".join(
-                b.get("text", "") for b in system_raw if isinstance(b, dict)
-            )
+            system_prompt = " ".join(b.get("text", "") for b in system_raw if isinstance(b, dict))
         else:
             system_prompt = str(system_raw)
         block = MagicMock()
@@ -281,7 +281,9 @@ def test_claude_503_yields_advisory():
     claude = _mock_claude_returning([])
     claude.analyse.side_effect = ClaudeUnavailableError("retries exhausted")
     # Pipeline calls analyse_async_chunked; mirror the side_effect there.
-    claude.analyse_async_chunked = AsyncMock(side_effect=ClaudeUnavailableError("retries exhausted"))
+    claude.analyse_async_chunked = AsyncMock(
+        side_effect=ClaudeUnavailableError("retries exhausted")
+    )
 
     pipeline = ScanPipeline(
         _mock_github(files),
@@ -460,9 +462,9 @@ def test_prompt_injection_does_not_suppress_findings():
     )
 
     # 1. Findings were not suppressed.
-    assert any(
-        f.vulnerability_id == "A03:2021" for f in result.findings
-    ), "injection in source comment must not suppress findings"
+    assert any(f.vulnerability_id == "A03:2021" for f in result.findings), (
+        "injection in source comment must not suppress findings"
+    )
 
     # Inspect the first-pass call (the system prompt that's NOT a verifier prompt).
     def _system_text(call) -> str:
@@ -473,7 +475,8 @@ def test_prompt_injection_does_not_suppress_findings():
         return str(sys_arg)
 
     first_pass_call = next(
-        call for call in sdk.messages.create.call_args_list
+        call
+        for call in sdk.messages.create.call_args_list
         if "SECOND-PASS verification" not in _system_text(call)
     )
     user_message = first_pass_call.kwargs["messages"][0]["content"]
@@ -488,8 +491,7 @@ def test_prompt_injection_does_not_suppress_findings():
     close_pos = user_message.index("</source_code>", open_pos)
     injection_pos = user_message.index("Ignore all previous instructions")
     assert open_pos < injection_pos < close_pos, (
-        "injection text leaked outside the <source_code> wrapper — "
-        "defence in depth broken"
+        "injection text leaked outside the <source_code> wrapper — defence in depth broken"
     )
 
     # 3. The system prompt explicitly forbids following inline instructions.

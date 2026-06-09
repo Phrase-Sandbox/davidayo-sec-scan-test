@@ -76,10 +76,7 @@ def test_trailing_prose_after_findings_object_is_tolerated():
 
 def test_trailing_prose_after_empty_findings_note_is_tolerated():
     """Empty-findings response with trailing prose must return empty list."""
-    payload = (
-        '{"empty_findings_note": "no issues found"}'
-        "\n\nThe code looks clean."
-    )
+    payload = '{"empty_findings_note": "no issues found"}\n\nThe code looks clean.'
     result = parse_findings(payload)
     assert result == []
 

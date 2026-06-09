@@ -68,6 +68,7 @@ def get_doc(doc_id):
 # Tests — positive
 # ---------------------------------------------------------------------------
 
+
 def test_sql_user_id_ownership():
     matches = scan_ownership_checks("app.py", SQL_WITH_OWNERSHIP)
     patterns = [m.pattern for m in matches]
@@ -117,6 +118,7 @@ def test_fastapi_depends_current_user():
 # ---------------------------------------------------------------------------
 # Tests — negative
 # ---------------------------------------------------------------------------
+
 
 def test_where_1_1_not_ownership():
     matches = scan_ownership_checks("app.py", SQL_NO_OWNERSHIP)

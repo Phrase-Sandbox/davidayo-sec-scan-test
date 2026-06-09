@@ -326,9 +326,7 @@ def build_user_message(files: dict[str, str]) -> str:
     for filename, content in files.items():
         safe_content = _defang_source_code_tags(content)
         safe_filename = _escape_attr(filename)
-        blocks.append(
-            f'<source_code filename="{safe_filename}">\n{safe_content}\n</source_code>'
-        )
+        blocks.append(f'<source_code filename="{safe_filename}">\n{safe_content}\n</source_code>')
     return "\n\n".join(blocks)
 
 
@@ -341,8 +339,5 @@ def _defang_source_code_tags(content: str) -> str:
 
 def _escape_attr(value: str) -> str:
     return (
-        value.replace("&", "&amp;")
-        .replace('"', "&quot;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
+        value.replace("&", "&amp;").replace('"', "&quot;").replace("<", "&lt;").replace(">", "&gt;")
     )

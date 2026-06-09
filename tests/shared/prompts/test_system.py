@@ -48,8 +48,7 @@ def test_system_prompt_requires_structured_json_output():
 def test_system_prompt_requires_exploit_scenario_with_keywords():
     prompt = build_system_prompt().lower()
     assert "exploit_scenario" in prompt
-    for keyword in ("payload", "request", "query", "parameter",
-                    "injection", "bypass", "forge"):
+    for keyword in ("payload", "request", "query", "parameter", "injection", "bypass", "forge"):
         assert keyword in prompt, f"missing attacker-action keyword: {keyword!r}"
 
 
@@ -96,10 +95,12 @@ def test_build_user_message_wraps_content_in_source_code_tags():
 
 
 def test_build_user_message_handles_multiple_files():
-    msg = build_user_message({
-        "a.py": "x = 1",
-        "b.ts": "export const y = 2;",
-    })
+    msg = build_user_message(
+        {
+            "a.py": "x = 1",
+            "b.ts": "export const y = 2;",
+        }
+    )
     assert '<source_code filename="a.py">' in msg
     assert '<source_code filename="b.ts">' in msg
     # Two distinct blocks, each terminated.

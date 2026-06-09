@@ -34,6 +34,7 @@ def _mock_client_medium_real() -> MagicMock:
 # Tests
 # ---------------------------------------------------------------------------
 
+
 def test_is_high_risk_path_auth():
     assert is_high_risk_path("auth/login.py")
     assert is_high_risk_path("src/auth/token.py")
@@ -65,7 +66,9 @@ def test_high_risk_path_medium_becomes_verified():
     client = _mock_client_medium_real()
 
     results = _verify_batch(
-        [candidate], files, client,
+        [candidate],
+        files,
+        client,
         keep_confidences=frozenset({"high"}),
         advisory_confidences=frozenset({"medium"}),
     )
@@ -81,7 +84,9 @@ def test_normal_path_medium_becomes_advisory_real():
     client = _mock_client_medium_real()
 
     results = _verify_batch(
-        [candidate], files, client,
+        [candidate],
+        files,
+        client,
         keep_confidences=frozenset({"high"}),
         advisory_confidences=frozenset({"medium"}),
     )

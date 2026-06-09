@@ -96,9 +96,7 @@ def _check_db_ssl_safety(settings) -> None:
             "directive (sslmode=require not found). Token hashes and encrypted "
             "keys may transit the network unencrypted. "
             "Add ?sslmode=require to DATABASE_URL to silence this warning.",
-            database_url_host=(
-                url.split("@")[-1].split("/")[0] if "@" in url else "(unparseable)"
-            ),
+            database_url_host=(url.split("@")[-1].split("/")[0] if "@" in url else "(unparseable)"),
         )
 
 
@@ -137,6 +135,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     try:
         from security_scanner.tokens.crypto import validate_startup_key  # noqa: PLC0415
+
         validate_startup_key(settings)
     except Exception as exc:  # noqa: BLE001 — exit on any crypto setup error
         log.error("startup failed: SCANNER_ENCRYPTION_KEY invalid", error=type(exc).__name__)
@@ -206,9 +205,7 @@ class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-XSS-Protection", "0")
-        response.headers.setdefault(
-            "Referrer-Policy", "strict-origin-when-cross-origin"
-        )
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         if request.url.scheme == "https":
             response.headers.setdefault(
                 "Strict-Transport-Security",
@@ -286,4 +283,5 @@ app.include_router(admin_router)
 # production deploys.
 if _local_test_mode_enabled():
     from security_scanner.agent.test_endpoint import router as test_router  # noqa: PLC0415
+
     app.include_router(test_router)

@@ -213,6 +213,7 @@ def test_gin_routes():
 # Dispatcher
 # ---------------------------------------------------------------------------
 
+
 def test_dispatch_py_uses_flask():
     matches = extract_routes("app.py", FLASK_CONTENT)
     assert any(m.path == "/users" for m in matches)

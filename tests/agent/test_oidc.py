@@ -150,7 +150,9 @@ def test_expired_token_rejected():
 
 def test_workflow_ref_not_in_allowlist_rejected():
     priv, pub = _make_keypair()
-    token = _mint(priv, job_workflow_ref="OtherOrg/some-other-repo/.github/workflows/x.yml@refs/heads/main")
+    token = _mint(
+        priv, job_workflow_ref="OtherOrg/some-other-repo/.github/workflows/x.yml@refs/heads/main"
+    )
     with pytest.raises(OidcVerificationError, match="not in allowlist"):
         verify_github_oidc(
             token,
@@ -222,8 +224,12 @@ def test_jwks_cache_serves_repeat_calls_without_refetch():
 
     cache = _JwksCache(fetcher=fetcher)
     token = _mint(priv)
-    verify_github_oidc(token, audience=AUDIENCE, allowed_workflow_refs=[WORKFLOW_PREFIX], cache=cache)
-    verify_github_oidc(token, audience=AUDIENCE, allowed_workflow_refs=[WORKFLOW_PREFIX], cache=cache)
+    verify_github_oidc(
+        token, audience=AUDIENCE, allowed_workflow_refs=[WORKFLOW_PREFIX], cache=cache
+    )
+    verify_github_oidc(
+        token, audience=AUDIENCE, allowed_workflow_refs=[WORKFLOW_PREFIX], cache=cache
+    )
     assert calls["n"] == 1
 
 
@@ -240,13 +246,17 @@ def test_jwks_cache_falls_back_to_last_known_when_refetch_fails(monkeypatch):
     cache = _JwksCache(fetcher=fetcher)
     token = _mint(priv)
     # Prime cache.
-    verify_github_oidc(token, audience=AUDIENCE, allowed_workflow_refs=[WORKFLOW_PREFIX], cache=cache)
+    verify_github_oidc(
+        token, audience=AUDIENCE, allowed_workflow_refs=[WORKFLOW_PREFIX], cache=cache
+    )
 
     # Force cache expiry; the next call should still succeed using stale keys.
     import security_scanner.agent.oidc as oidc_mod
 
     monkeypatch.setattr(oidc_mod, "_JWKS_TTL_SECONDS", -1)
-    verify_github_oidc(token, audience=AUDIENCE, allowed_workflow_refs=[WORKFLOW_PREFIX], cache=cache)
+    verify_github_oidc(
+        token, audience=AUDIENCE, allowed_workflow_refs=[WORKFLOW_PREFIX], cache=cache
+    )
     assert call_n["i"] == 2  # refetch was attempted; we tolerated its failure
 
 
@@ -258,7 +268,9 @@ def test_jwks_cache_raises_on_first_fetch_failure():
     priv, _ = _make_keypair()
     token = _mint(priv)
     with pytest.raises(OidcVerificationError, match="unable to fetch JWKS"):
-        verify_github_oidc(token, audience=AUDIENCE, allowed_workflow_refs=[WORKFLOW_PREFIX], cache=cache)
+        verify_github_oidc(
+            token, audience=AUDIENCE, allowed_workflow_refs=[WORKFLOW_PREFIX], cache=cache
+        )
 
 
 # ---------- looks_like_jwt heuristic ---------------------------------------
@@ -285,7 +297,9 @@ def test_empty_allowlist_skips_workflow_ref_check():
     NEVER use this — it's only for ops emergencies where you need to disable
     the allowlist temporarily."""
     priv, pub = _make_keypair()
-    token = _mint(priv, job_workflow_ref="Anyone/anything/.github/workflows/foo.yml@refs/heads/main")
+    token = _mint(
+        priv, job_workflow_ref="Anyone/anything/.github/workflows/foo.yml@refs/heads/main"
+    )
     identity = verify_github_oidc(
         token,
         audience=AUDIENCE,

@@ -65,10 +65,10 @@ _CONFIG_MAP: dict[str, Path] = {
 # multi-language coverage. Requires internet access inside the container.
 _USE_REGISTRY = os.environ.get("SEMGREP_USE_REGISTRY", "false").lower() in ("1", "true", "yes")
 _REGISTRY_PACKS: list[str] = [
-    "p/owasp-top-ten",   # 500+ rules, all languages — maintained by Semgrep
-    "p/default",          # curated high-confidence rules per language
-    "p/python",           # broad Python security — async, aiohttp, general patterns
-    "p/sql-injection",    # SQL injection across Python/JS/Java patterns
+    "p/owasp-top-ten",  # 500+ rules, all languages — maintained by Semgrep
+    "p/default",  # curated high-confidence rules per language
+    "p/python",  # broad Python security — async, aiohttp, general patterns
+    "p/sql-injection",  # SQL injection across Python/JS/Java patterns
 ]
 
 TOOL = "semgrep"
@@ -169,16 +169,18 @@ def _parse_output(stdout: bytes) -> list[ScannerCandidate]:
             severity = result.get("extra", {}).get("severity", "WARNING").lower()
 
             vuln_class = normalize(TOOL, raw_rule_id)
-            candidates.append(ScannerCandidate(
-                tool=TOOL,
-                vuln_class=vuln_class,
-                file=path,
-                line_start=line_start,
-                line_end=line_end,
-                message=message,
-                raw_rule_id=raw_rule_id,
-                severity_hint=_map_severity(severity),
-            ))
+            candidates.append(
+                ScannerCandidate(
+                    tool=TOOL,
+                    vuln_class=vuln_class,
+                    file=path,
+                    line_start=line_start,
+                    line_end=line_end,
+                    message=message,
+                    raw_rule_id=raw_rule_id,
+                    severity_hint=_map_severity(severity),
+                )
+            )
         except Exception as exc:  # noqa: BLE001
             log.debug("semgrep adapter: skipping malformed result", error=str(exc))
             continue

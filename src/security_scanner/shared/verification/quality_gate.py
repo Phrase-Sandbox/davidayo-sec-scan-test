@@ -21,11 +21,23 @@ log = get_logger(__name__)
 _BATCH_SIZE = 5
 
 # Classes for which a code-block fix is expected and worth regenerating.
-_FIXABLE_IN_CODE_CLASSES: frozenset[str] = frozenset({
-    "sqli", "xss", "command_injection", "ssrf", "path_traversal",
-    "code_injection", "deserialization", "unsafe_yaml", "xxe",
-    "ldap_injection", "nosqli", "open_redirect", "csrf",
-})
+_FIXABLE_IN_CODE_CLASSES: frozenset[str] = frozenset(
+    {
+        "sqli",
+        "xss",
+        "command_injection",
+        "ssrf",
+        "path_traversal",
+        "code_injection",
+        "deserialization",
+        "unsafe_yaml",
+        "xxe",
+        "ldap_injection",
+        "nosqli",
+        "open_redirect",
+        "csrf",
+    }
+)
 
 _IMPROVED_FIX_RE = re.compile(
     r"^\s*IMPROVED_FIX\s*#?\s*(\d+)\s*:\s*(.+?)(?=\s*IMPROVED_FIX\s*#|\s*IMPROVED_SCENARIO\s*#|\Z)",
@@ -62,10 +74,7 @@ def _needs_strengthening(finding: VulnerabilityFinding) -> bool:
         return False
     # Only strengthen known fixable-in-code classes (infer from vuln_id or description).
     # We check if any fixable keyword appears in the finding's context.
-    context = (
-        (finding.description or "") + " " +
-        (finding.suggested_fix or "")
-    ).lower()
+    context = ((finding.description or "") + " " + (finding.suggested_fix or "")).lower()
     return any(cls in context for cls in _FIXABLE_IN_CODE_CLASSES)
 
 
@@ -103,9 +112,7 @@ def _build_user_message(batch: list[VulnerabilityFinding], files: dict[str, str]
     return "\n\n".join(parts)
 
 
-def _parse_response(
-    response: str, batch_size: int
-) -> dict[int, tuple[str, str]]:
+def _parse_response(response: str, batch_size: int) -> dict[int, tuple[str, str]]:
     """Return ``{0-based-index: (improved_fix, improved_scenario)}``."""
     fixes: dict[int, str] = {}
     for m in _IMPROVED_FIX_RE.finditer(response):

@@ -88,6 +88,7 @@ def test_parse_output_low_confidence_non_injection_not_skipped() -> None:
 def test_parse_output_malformed_json() -> None:
     """Malformed JSON produces no candidates."""
     from security_scanner.shared.scanners.adapters.bandit import _parse_output
+
     candidates = _parse_output(b"{broken", workspace_root="/tmp")
     assert candidates == []
 
@@ -96,6 +97,7 @@ def test_parse_output_malformed_json() -> None:
 async def test_scan_skips_if_binary_missing(monkeypatch) -> None:
     """scan() returns [] when bandit binary is not on PATH."""
     import shutil as _shutil
+
     monkeypatch.setattr(_shutil, "which", lambda _: None)
     from security_scanner.shared.scanners.adapters.bandit import scan
     from security_scanner.shared.scanners.workdir import ScannerWorkspace

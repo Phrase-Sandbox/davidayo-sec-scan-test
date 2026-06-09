@@ -70,9 +70,8 @@ _LINES_RE = re.compile(r"(\d+)(?:\s*[-–]\s*(\d+))?")
 # Phrase logo PNG, base64-embedded so the report stays a single
 # self-contained HTML file (no external image refs).
 _LOGO_PATH = Path(__file__).parent / "assets" / "phrase-logo.png"
-_LOGO_DATA_URI = (
-    "data:image/png;base64,"
-    + base64.b64encode(_LOGO_PATH.read_bytes()).decode("ascii")
+_LOGO_DATA_URI = "data:image/png;base64," + base64.b64encode(_LOGO_PATH.read_bytes()).decode(
+    "ascii"
 )
 
 _BRAND_HEADER = (
@@ -529,15 +528,8 @@ def _metadata_section(result: ScanResult) -> str:
         ("Scan target", _code(result.scan_target.value)),
         ("Triggered by", escape(result.triggered_by)),
     ]
-    items = "\n".join(
-        f"<dt>{escape(label)}</dt><dd>{value}</dd>" for label, value in rows
-    )
-    return (
-        '<section class="metadata">\n'
-        "<h2>Scan metadata</h2>\n"
-        f"<dl>\n{items}\n</dl>\n"
-        "</section>"
-    )
+    items = "\n".join(f"<dt>{escape(label)}</dt><dd>{value}</dd>" for label, value in rows)
+    return f'<section class="metadata">\n<h2>Scan metadata</h2>\n<dl>\n{items}\n</dl>\n</section>'
 
 
 def _gather_warnings(result: ScanResult) -> list[str]:
@@ -550,8 +542,7 @@ def _gather_warnings(result: ScanResult) -> list[str]:
             else "<em>(none listed)</em>"
         )
         warnings.append(
-            "<strong>⚠️ PARTIAL SCAN</strong> — the following files were not "
-            f"analysed: {files_html}"
+            f"<strong>⚠️ PARTIAL SCAN</strong> — the following files were not analysed: {files_html}"
         )
 
     conflicting = [
@@ -581,9 +572,7 @@ def _gather_warnings(result: ScanResult) -> list[str]:
         )
 
     auto_triaged = [
-        f
-        for f in result.findings
-        if f.verification_status == VerificationStatus.advisory_real
+        f for f in result.findings if f.verification_status == VerificationStatus.advisory_real
     ]
     if auto_triaged:
         warnings.append(
@@ -618,9 +607,7 @@ def _gate_decision_section(decision: GateDecision) -> str:
 
 
 def _findings_table(findings: list[VulnerabilityFinding]) -> str:
-    rows = "\n".join(
-        _findings_table_row(f, idx) for idx, f in enumerate(findings, start=1)
-    )
+    rows = "\n".join(_findings_table_row(f, idx) for idx, f in enumerate(findings, start=1))
     return (
         "<section>\n"
         f"<h2>Findings ({len(findings)})</h2>\n"
@@ -668,20 +655,41 @@ def _detailed_findings(
     parts: list[str] = ["<section>\n<h2>Finding details</h2>"]
 
     if urgent:
-        parts.append(_render_bucket(
-            "Urgent", "urgent", "fix before you launch",
-            urgent, indices, files, group=False,
-        ))
+        parts.append(
+            _render_bucket(
+                "Urgent",
+                "urgent",
+                "fix before you launch",
+                urgent,
+                indices,
+                files,
+                group=False,
+            )
+        )
     if cleanup:
-        parts.append(_render_bucket(
-            "Cleanup", "cleanup", "fix soon",
-            cleanup, indices, files, group=True,
-        ))
+        parts.append(
+            _render_bucket(
+                "Cleanup",
+                "cleanup",
+                "fix soon",
+                cleanup,
+                indices,
+                files,
+                group=True,
+            )
+        )
     if advisory:
-        parts.append(_render_bucket(
-            "Advisory", "advisory", "review when convenient",
-            advisory, indices, files, group=True,
-        ))
+        parts.append(
+            _render_bucket(
+                "Advisory",
+                "advisory",
+                "review when convenient",
+                advisory,
+                indices,
+                files,
+                group=True,
+            )
+        )
 
     parts.append("</section>")
     return "\n".join(parts)
@@ -718,9 +726,7 @@ def _render_bucket(
     )
 
     if not group:
-        cards = "\n".join(
-            _finding_card(f, indices[id(f)], files) for f in bucket
-        )
+        cards = "\n".join(_finding_card(f, indices[id(f)], files) for f in bucket)
         return f"{header}\n{cards}"
 
     # Group consecutive findings sharing (vulnerability_id, severity). Use
@@ -801,8 +807,7 @@ def _upload_context_panel(context_summary: str) -> str:
         ("Processing", processing),
     ]
     cells = " | ".join(
-        f"<strong>{escape(label)}:</strong> {escape(value)}"
-        for label, value in rows
+        f"<strong>{escape(label)}:</strong> {escape(value)}" for label, value in rows
     )
     return (
         '<details class="code-toggle">'
@@ -878,8 +883,10 @@ def _group_card(
         '<span class="fix-badge">fix all at once</span>',
         "</summary>",
         (
-            '<div class="group-intro"><strong>All ' + str(len(items))
-            + " are one problem:</strong> " + escape(head.description)
+            '<div class="group-intro"><strong>All '
+            + str(len(items))
+            + " are one problem:</strong> "
+            + escape(head.description)
             + " You can fix them all at once with the prompt below, then check "
             "each row for the exact files.</div>"
         ),
@@ -888,7 +895,7 @@ def _group_card(
             header=f"Fix all {len(items)} at once",
         ),
         "<h4>Affected locations</h4>",
-        "<ol class=\"location-list\">",
+        '<ol class="location-list">',
     ]
     for f in items:
         idx = indices[id(f)]
@@ -899,9 +906,7 @@ def _group_card(
         )
         snippet = _code_snippet_block(files, f.affected_file, f.affected_lines)
         parts.append(
-            f'<li id="finding-{idx}">{loc}'
-            + (f"\n{snippet}" if snippet else "")
-            + "</li>"
+            f'<li id="finding-{idx}">{loc}' + (f"\n{snippet}" if snippet else "") + "</li>"
         )
     parts.append("</ol>")
     parts.append(_card_meta_row(head))
@@ -911,9 +916,7 @@ def _group_card(
 
 def _card_meta_row(f: VulnerabilityFinding) -> str:
     footnote = _OWASP_2021_TO_2025.get(f.vulnerability_id, "")
-    footnote_html = (
-        f' <em>— {escape(footnote)}</em>' if footnote else ""
-    )
+    footnote_html = f" <em>— {escape(footnote)}</em>" if footnote else ""
     # "Detected by" row: show when sources are present (even single-voter).
     detected_by_html = ""
     if f.consensus_score >= 1 and f.sources:
@@ -937,16 +940,11 @@ def _card_meta_row(f: VulnerabilityFinding) -> str:
 
 
 def _synthesize_ai_prompt(f: VulnerabilityFinding) -> str:
-    where = f.affected_file + (
-        f" around line {f.affected_lines}" if f.affected_lines else ""
-    )
+    where = f.affected_file + (f" around line {f.affected_lines}" if f.affected_lines else "")
     desc = (f.description or "").rstrip(". ").strip() or "security issue"
     fix = (f.suggested_fix or "").rstrip(". ").strip()
     tail = f" {fix}." if fix else ""
-    return (
-        f"There is a {desc} in {where}.{tail} "
-        "Then show me the change."
-    )
+    return f"There is a {desc} in {where}.{tail} Then show me the change."
 
 
 def _synthesize_group_prompt(group: list[VulnerabilityFinding]) -> str:
@@ -954,9 +952,7 @@ def _synthesize_group_prompt(group: list[VulnerabilityFinding]) -> str:
     desc = (head.description or "").rstrip(". ").strip() or "security issue"
     items: list[str] = []
     for i, f in enumerate(group, start=1):
-        loc = f.affected_file + (
-            f" line {f.affected_lines}" if f.affected_lines else ""
-        )
+        loc = f.affected_file + (f" line {f.affected_lines}" if f.affected_lines else "")
         fix = (f.suggested_fix or "").rstrip(". ").strip() or "apply the standard remediation"
         items.append(f"({i}) {loc} — {fix}")
     body = "; ".join(items)
@@ -1050,9 +1046,7 @@ def _format_snippet_lines(snippet: str, start_line: int) -> str:
     out: list[str] = []
     for offset, raw in enumerate(snippet.splitlines(), start=0):
         ln = start_line + offset
-        out.append(
-            f'<span class="ln">{ln}</span>{escape(raw)}'
-        )
+        out.append(f'<span class="ln">{ln}</span>{escape(raw)}')
     return "\n".join(out)
 
 

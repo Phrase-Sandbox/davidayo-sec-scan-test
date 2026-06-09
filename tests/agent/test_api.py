@@ -130,9 +130,7 @@ def test_invalid_token_returns_401_with_techops_message(app):
 
     response = client.post("/agent/scan", json=_valid_body(), headers=_auth_header("wrong"))
     assert response.status_code == 401
-    assert response.json()["detail"] == (
-        "Security scan authentication failed. Contact TechOps."
-    )
+    assert response.json()["detail"] == ("Security scan authentication failed. Contact TechOps.")
 
 
 def test_missing_authorization_header_returns_401(app):

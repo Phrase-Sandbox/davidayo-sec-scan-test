@@ -44,23 +44,21 @@ async def session_factory(monkeypatch):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     factory = async_sessionmaker(bind=engine, expire_on_commit=False)
-    monkeypatch.setattr(
-        "security_scanner.tokens.admin_panel.get_session_factory", lambda: factory
-    )
+    monkeypatch.setattr("security_scanner.tokens.admin_panel.get_session_factory", lambda: factory)
     # require_admin (in auth.py) now checks DB role — patch its factory too so
     # tests don't try to connect to the fake DATABASE_URL.
-    monkeypatch.setattr(
-        "security_scanner.tokens.auth.get_session_factory", lambda: factory
-    )
+    monkeypatch.setattr("security_scanner.tokens.auth.get_session_factory", lambda: factory)
     # Seed the default admin user used by _admin_headers() so require_admin
     # finds role=admin in the DB (Okta groups are no longer used for auth).
     async with factory() as session:
-        session.add(User(
-            email="admin@phrase.com",
-            role=UserRole.admin,
-            is_active=True,
-            created_at=datetime.now(UTC),
-        ))
+        session.add(
+            User(
+                email="admin@phrase.com",
+                role=UserRole.admin,
+                is_active=True,
+                created_at=datetime.now(UTC),
+            )
+        )
         await session.commit()
     try:
         yield factory
@@ -112,12 +110,8 @@ def test_admin_tokens_200_for_admin(client, session_factory):
 
 async def test_admin_tokens_lists_issued_tokens(client, session_factory):
     async with session_factory() as session:
-        await token_registry.issue_or_rotate_for_user(
-            session, user_email="alice@phrase.com"
-        )
-        await token_registry.issue_or_rotate_for_user(
-            session, user_email="bob@phrase.com"
-        )
+        await token_registry.issue_or_rotate_for_user(session, user_email="alice@phrase.com")
+        await token_registry.issue_or_rotate_for_user(session, user_email="bob@phrase.com")
         await session.commit()
 
     r = client.get("/admin/tokens", headers=_admin_headers())
@@ -148,9 +142,7 @@ async def test_admin_revoke_marks_token_revoked(client, session_factory):
         )
         await session.commit()
 
-    r = client.post(
-        f"/admin/tokens/{issued.token_id}/revoke", headers=_admin_headers()
-    )
+    r = client.post(f"/admin/tokens/{issued.token_id}/revoke", headers=_admin_headers())
     assert r.status_code == 200
     assert "revoked" in r.text.lower()
 
@@ -180,9 +172,7 @@ def test_admin_revoke_rejects_malformed_token_id(client, session_factory):
 
 def test_admin_force_rotate_route_does_not_exist(client, session_factory):
     """The /admin/tokens/{id}/force-rotate endpoint must be gone (405/404)."""
-    r = client.post(
-        "/admin/tokens/tok-deadbeef0000/force-rotate", headers=_admin_headers()
-    )
+    r = client.post("/admin/tokens/tok-deadbeef0000/force-rotate", headers=_admin_headers())
     # FastAPI returns 405 for unknown methods on known paths, 404 for fully unknown paths.
     assert r.status_code in (404, 405)
 
@@ -197,12 +187,15 @@ async def test_demote_protected_admin_returns_400(client, session_factory):
         from datetime import UTC, datetime
 
         from security_scanner.tokens.models import User, UserRole
-        session.add(User(
-            email="david.shoyemi@phrase.com",
-            role=UserRole.admin,
-            is_active=True,
-            created_at=datetime.now(UTC),
-        ))
+
+        session.add(
+            User(
+                email="david.shoyemi@phrase.com",
+                role=UserRole.admin,
+                is_active=True,
+                created_at=datetime.now(UTC),
+            )
+        )
         await session.commit()
 
     r = client.post(
@@ -219,12 +212,15 @@ async def test_deactivate_protected_admin_returns_400(client, session_factory):
         from datetime import UTC, datetime
 
         from security_scanner.tokens.models import User, UserRole
-        session.add(User(
-            email="david.shoyemi@phrase.com",
-            role=UserRole.admin,
-            is_active=True,
-            created_at=datetime.now(UTC),
-        ))
+
+        session.add(
+            User(
+                email="david.shoyemi@phrase.com",
+                role=UserRole.admin,
+                is_active=True,
+                created_at=datetime.now(UTC),
+            )
+        )
         await session.commit()
 
     r = client.post(
@@ -241,12 +237,15 @@ async def test_revoke_tokens_for_protected_admin_returns_400(client, session_fac
         from datetime import UTC, datetime
 
         from security_scanner.tokens.models import User, UserRole
-        session.add(User(
-            email="david.shoyemi@phrase.com",
-            role=UserRole.admin,
-            is_active=True,
-            created_at=datetime.now(UTC),
-        ))
+
+        session.add(
+            User(
+                email="david.shoyemi@phrase.com",
+                role=UserRole.admin,
+                is_active=True,
+                created_at=datetime.now(UTC),
+            )
+        )
         await session.commit()
 
     r = client.post(
@@ -277,9 +276,7 @@ async def test_admin_audit_filter_by_event_type(client, session_factory):
         await token_registry.issue_or_rotate_for_user(session, user_email="alice@phrase.com")
         await session.commit()
 
-    r = client.get(
-        "/admin/audit?event_type=token_rotated", headers=_admin_headers()
-    )
+    r = client.get("/admin/audit?event_type=token_rotated", headers=_admin_headers())
     assert r.status_code == 200
     assert "token_rotated" in r.text
 
@@ -305,7 +302,7 @@ def _fake_encrypt(plaintext: str, *, settings=None) -> bytes:
 def _fake_decrypt(ciphertext: bytes, *, settings=None) -> str:
     prefix = b"ENC:"
     if ciphertext.startswith(prefix):
-        return ciphertext[len(prefix):].decode("utf-8")
+        return ciphertext[len(prefix) :].decode("utf-8")
     return ciphertext.decode("utf-8", errors="replace")
 
 
@@ -346,9 +343,7 @@ async def test_org_settings_post_encrypts_slack_webhook(client, session_factory,
     # DB row has encrypted bytes
     async with session_factory() as session:
         row = (
-            await session.execute(
-                select(_OrgSettings).order_by(_OrgSettings.id.desc()).limit(1)
-            )
+            await session.execute(select(_OrgSettings).order_by(_OrgSettings.id.desc()).limit(1))
         ).scalar_one()
     assert row.encrypted_slack_webhook is not None
     # Fake encrypt stores plaintext with prefix — round-trip recovers original
@@ -389,9 +384,7 @@ async def test_org_settings_post_preserves_webhook_when_blank(client, session_fa
     # Latest DB row should still have the original webhook
     async with session_factory() as session:
         row = (
-            await session.execute(
-                select(_OrgSettings).order_by(_OrgSettings.id.desc()).limit(1)
-            )
+            await session.execute(select(_OrgSettings).order_by(_OrgSettings.id.desc()).limit(1))
         ).scalar_one()
     assert row.encrypted_slack_webhook is not None
     assert _fake_decrypt(row.encrypted_slack_webhook) == (
@@ -399,7 +392,9 @@ async def test_org_settings_post_preserves_webhook_when_blank(client, session_fa
     )
 
 
-async def test_org_settings_post_shows_slack_test_button_after_save(client, session_factory, _crypto):  # noqa: E501
+async def test_org_settings_post_shows_slack_test_button_after_save(
+    client, session_factory, _crypto
+):  # noqa: E501
     """Once a webhook is saved the test-slack button appears in the response."""
     r = client.post(
         "/admin/org-settings",
@@ -413,7 +408,9 @@ async def test_org_settings_post_shows_slack_test_button_after_save(client, sess
     assert "Send test message" in r.text
 
 
-async def test_org_settings_test_slack_no_webhook_returns_error(client, session_factory, _crypto, monkeypatch):  # noqa: E501
+async def test_org_settings_test_slack_no_webhook_returns_error(
+    client, session_factory, _crypto, monkeypatch
+):  # noqa: E501
     """Test-slack with no webhook in DB and no env var renders an error flash."""
     monkeypatch.delenv("SLACK_WEBHOOK_URL", raising=False)
 
@@ -431,7 +428,9 @@ async def test_org_settings_test_slack_no_webhook_returns_error(client, session_
     assert called == []  # _post_to_slack was never invoked
 
 
-async def test_org_settings_test_slack_success_with_db_webhook(client, session_factory, _crypto, monkeypatch):  # noqa: E501
+async def test_org_settings_test_slack_success_with_db_webhook(
+    client, session_factory, _crypto, monkeypatch
+):  # noqa: E501
     """Test-slack uses the DB-stored webhook and renders a success flash."""
     # Save a webhook first
     client.post(
@@ -540,15 +539,17 @@ async def test_admin_advanced_settings_post_inserts_row(client, session_factory)
     assert "saved" in r.text.lower()
 
     async with session_factory() as session:
-        row = (await session.execute(
-            select(ScannerSettings).order_by(ScannerSettings.id.desc()).limit(1)
-        )).scalar_one_or_none()
+        row = (
+            await session.execute(
+                select(ScannerSettings).order_by(ScannerSettings.id.desc()).limit(1)
+            )
+        ).scalar_one_or_none()
 
     assert row is not None
     assert row.keep_confidences == "high,medium"
     assert row.enable_semgrep is True
     assert row.enable_bandit is True
-    assert row.enable_gosec is False   # not submitted → unchecked → False
+    assert row.enable_gosec is False  # not submitted → unchecked → False
     assert row.vuln_verifier_parallelism == 2
     assert "auth/" in row.high_risk_paths
     assert row.updated_by_email == "admin@phrase.com"

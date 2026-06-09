@@ -57,8 +57,8 @@ class AuditEventType(enum.StrEnum):
     org_config_changed = "org_config_changed"
     ci_token_rotated = "ci_token_rotated"  # noqa: S105
     slack_webhook_configured = "slack_webhook_configured"  # noqa: S105
-    user_promoted = "user_promoted"    # role user → admin (app-managed)
-    user_demoted = "user_demoted"      # role admin → user (app-managed)
+    user_promoted = "user_promoted"  # role user → admin (app-managed)
+    user_demoted = "user_demoted"  # role admin → user (app-managed)
     user_password_force_reset = "user_password_force_reset"  # noqa: S105
     user_password_changed = "user_password_changed"  # noqa: S105
     user_okta_login = "user_okta_login"
@@ -100,26 +100,18 @@ class LocalScanToken(Base):
         Enum(IssuedVia, name="issued_via"), nullable=False
     )
     issued_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
-    revoked_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
-    last_used_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # 30-day TTL: set on issue/rotate; NULL = legacy unlimited token.
-    expires_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class AuditEvent(Base):
     __tablename__ = "audit_events"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(), primary_key=True, default=uuid.uuid4)
-    at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, index=True
-    )
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     event_type: Mapped[AuditEventType] = mapped_column(
         Enum(AuditEventType, name="audit_event_type"), nullable=False, index=True
     )
@@ -148,9 +140,7 @@ class User(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    last_login_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     okta_groups: Mapped[list | None] = mapped_column(_JsonType, nullable=True)
 
     # Stable Okta user ID (sub claim). Unique — allows lookup across email changes.
@@ -159,9 +149,7 @@ class User(Base):
         String(255), nullable=True, unique=True, index=True
     )
     # "okta" or "local". Determines which credential is verified on login.
-    auth_provider: Mapped[str] = mapped_column(
-        String(16), nullable=False, server_default="local"
-    )
+    auth_provider: Mapped[str] = mapped_column(String(16), nullable=False, server_default="local")
     # Bcrypt hash for local users. NULL = no individual password set yet;
     # login falls back to LOCAL_PORTAL_PASSWORD env var.
     password_hash: Mapped[bytes | None] = mapped_column(LargeBinary(), nullable=True)
@@ -199,9 +187,7 @@ class UserLLMSettings(Base):
     model: Mapped[str | None] = mapped_column(String(128), nullable=True)
     encrypted_api_key: Mapped[bytes] = mapped_column(LargeBinary(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    last_used_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class OrgSettings(Base):
@@ -215,12 +201,8 @@ class OrgSettings(Base):
     __tablename__ = "org_settings"
 
     id: Mapped[int] = mapped_column(Integer(), primary_key=True, autoincrement=True)
-    encrypted_anthropic_key: Mapped[bytes | None] = mapped_column(
-        LargeBinary(), nullable=True
-    )
-    encrypted_google_key: Mapped[bytes | None] = mapped_column(
-        LargeBinary(), nullable=True
-    )
+    encrypted_anthropic_key: Mapped[bytes | None] = mapped_column(LargeBinary(), nullable=True)
+    encrypted_google_key: Mapped[bytes | None] = mapped_column(LargeBinary(), nullable=True)
     default_provider: Mapped[LLMProvider] = mapped_column(
         Enum(LLMProvider, name="llm_provider"),
         nullable=False,
@@ -232,9 +214,7 @@ class OrgSettings(Base):
     google_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
     # Fernet-encrypted Slack webhook URL (migration 0004).  NULL = not configured;
     # the scanner falls back to the SLACK_WEBHOOK_URL environment variable.
-    encrypted_slack_webhook: Mapped[bytes | None] = mapped_column(
-        LargeBinary(), nullable=True
-    )
+    encrypted_slack_webhook: Mapped[bytes | None] = mapped_column(LargeBinary(), nullable=True)
     # Bypass Slack notification mode (migration 0005).
     # "dev_only" (default) — notify only when a dev repo triggers bypass.
     # "all"      — notify on every bypass (pre-0005 hard-coded behaviour).
@@ -320,9 +300,7 @@ class CiScanRecord(Base):
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, index=True
     )
-    finished_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     scan_target: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[ScanStatus] = mapped_column(
         Enum(ScanStatus, name="scan_status"), nullable=False, default=ScanStatus.ok
@@ -351,9 +329,7 @@ class ScanRecord(Base):
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, index=True
     )
-    finished_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     repo_url: Mapped[str] = mapped_column(String(2048), nullable=False)
     scan_target: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[ScanStatus] = mapped_column(
@@ -390,9 +366,7 @@ class ScanUsage(Base):
     cache_creation_input_tokens: Mapped[int] = mapped_column(
         BigInteger(), nullable=False, default=0
     )
-    cache_read_input_tokens: Mapped[int] = mapped_column(
-        BigInteger(), nullable=False, default=0
-    )
+    cache_read_input_tokens: Mapped[int] = mapped_column(BigInteger(), nullable=False, default=0)
     # Comma-separated provider response IDs (e.g. "msg_01ABC,msg_01DEF").
     response_ids: Mapped[str | None] = mapped_column(Text(), nullable=True)
 
@@ -416,9 +390,7 @@ class LLMUsageMonthly(Base):
     cache_creation_input_tokens: Mapped[int] = mapped_column(
         BigInteger(), nullable=False, default=0
     )
-    cache_read_input_tokens: Mapped[int] = mapped_column(
-        BigInteger(), nullable=False, default=0
-    )
+    cache_read_input_tokens: Mapped[int] = mapped_column(BigInteger(), nullable=False, default=0)
     scan_count: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
     last_updated: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -437,7 +409,5 @@ class CIToken(Base):
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_by_email: Mapped[str] = mapped_column(String(320), nullable=False)
-    revoked_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_by_email: Mapped[str | None] = mapped_column(String(320), nullable=True)

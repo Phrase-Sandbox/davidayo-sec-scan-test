@@ -87,6 +87,7 @@ def _env(monkeypatch):
 def _mock_user_settings(provider: str = "anthropic"):
     """A minimal UserLLMSettings mock — model field is NULL (admin-controlled)."""
     from security_scanner.tokens.models import LLMProvider
+
     row = MagicMock()
     row.provider = LLMProvider.anthropic if provider == "anthropic" else LLMProvider.google
     row.model = None  # not set — admin controls this
@@ -186,6 +187,7 @@ class TestCLIScanUsesAdminModel:
             ScanType,
         )
         from security_scanner.shared.models.scan_result import ScanResult
+
         return ScanResult(
             scan_id=uuid4(),
             repo_url="https://github.com/local/workspace",

@@ -26,9 +26,7 @@ def upgrade() -> None:
     op.add_column("users", sa.Column("password_hash", sa.LargeBinary(), nullable=True))
     op.add_column(
         "users",
-        sa.Column(
-            "must_change_password", sa.Boolean(), nullable=False, server_default="false"
-        ),
+        sa.Column("must_change_password", sa.Boolean(), nullable=False, server_default="false"),
     )
     op.add_column(
         "users",
@@ -45,9 +43,7 @@ def upgrade() -> None:
         "user_okta_login",
         "user_local_login",
     ):
-        op.execute(
-            f"ALTER TYPE audit_event_type ADD VALUE IF NOT EXISTS '{val}'"
-        )
+        op.execute(f"ALTER TYPE audit_event_type ADD VALUE IF NOT EXISTS '{val}'")
 
 
 def downgrade() -> None:

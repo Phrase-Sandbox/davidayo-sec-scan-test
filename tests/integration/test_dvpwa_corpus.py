@@ -67,6 +67,7 @@ async def test_bandit_finds_weak_crypto_in_dvpwa() -> None:
 async def test_run_layer1_returns_list_with_no_binaries(monkeypatch) -> None:
     """run_layer1 returns an empty list gracefully when no scanner binaries exist."""
     import shutil as _shutil
+
     monkeypatch.setattr(_shutil, "which", lambda _: None)
 
     from security_scanner.shared.scanners import run_layer1

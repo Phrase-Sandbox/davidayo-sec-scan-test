@@ -68,6 +68,7 @@ def test_case_insensitive_tool() -> None:
 # V3: unsafe_file_upload taxonomy additions
 # ---------------------------------------------------------------------------
 
+
 def test_semgrep_upload_attacker_filename_maps_to_unsafe_file_upload() -> None:
     assert normalize("semgrep", "upload-attacker-filename") == "unsafe_file_upload"
 
@@ -129,6 +130,7 @@ def test_semgrep_sqli_format_method_maps_to_sqli() -> None:
 # V4: taxonomy precision — redos, runtime_panic, auth_bypass for localStorage
 # ---------------------------------------------------------------------------
 
+
 def test_semgrep_localstorage_sensitive_maps_to_auth_bypass() -> None:
     assert normalize("semgrep", "js-localstorage-sensitive") == "auth_bypass"
 
@@ -155,6 +157,7 @@ def test_gosec_g602_maps_to_runtime_panic() -> None:
 #     security_misconfiguration, vulnerable_components,
 #     logging_monitoring_failure, memory_safety
 # ---------------------------------------------------------------------------
+
 
 def test_bandit_b404_maps_to_subprocess_usage() -> None:
     assert normalize("bandit", "B404") == "subprocess_usage"
@@ -209,6 +212,7 @@ def test_eslint_detect_object_injection_maps_to_auth_bypass() -> None:
 #     ldap_injection, nosqli
 # ---------------------------------------------------------------------------
 
+
 def test_bandit_b104_maps_to_insecure_network_config() -> None:
     assert normalize("bandit", "B104") == "insecure_network_config"
 
@@ -244,6 +248,7 @@ def test_semgrep_js_mongoose_nosql_injection_maps_to_nosqli() -> None:
 # ---------------------------------------------------------------------------
 # V7: go.yaml rule mappings
 # ---------------------------------------------------------------------------
+
 
 def test_semgrep_go_sqli_sprintf_maps_to_sqli() -> None:
     assert normalize("semgrep", "go-sqli-sprintf") == "sqli"

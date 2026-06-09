@@ -48,6 +48,7 @@ def _read_fixture() -> dict[str, str]:
 # Layer-1 (Bandit) — deterministic, no LLM
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 @_REQUIRES_BANDIT
 async def test_bandit_minimum_findings() -> None:
@@ -84,6 +85,7 @@ async def test_bandit_minimum_findings() -> None:
 # ---------------------------------------------------------------------------
 # Layer-1 (Semgrep) — deterministic, no LLM
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 @_REQUIRES_SEMGREP
@@ -123,6 +125,7 @@ async def test_semgrep_minimum_findings() -> None:
 # Combined Layer-1 (Bandit + Semgrep merged) — primary quality gate
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 @pytest.mark.skipif(
     shutil.which("bandit") is None and shutil.which("semgrep") is None,
@@ -158,6 +161,7 @@ async def test_combined_layer1_minimum_findings() -> None:
 # Pipeline integration test — mocked LLM returning all 9 mandatory findings
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_pipeline_minimum_findings_with_mock_llm() -> None:
     """Full pipeline with a mocked LLM client must return >= 9 findings.
@@ -185,111 +189,138 @@ async def test_pipeline_minimum_findings_with_mock_llm() -> None:
     llm_findings: list[dict] = [
         {
             "vulnerability_id": "A03:2021",
-            "severity": "High", "confidence": "High",
+            "severity": "High",
+            "confidence": "High",
             "cvss_band": "7.0-8.9",
-            "affected_file": "vuln_comprehensive.py", "affected_lines": "31-34",
+            "affected_file": "vuln_comprehensive.py",
+            "affected_lines": "31-34",
             "description": "SQL injection via f-string interpolation.",
             "suggested_fix": "Use parameterised queries.",
             "owasp_reference": "https://owasp.org/Top10/A03_2021-Injection/",
             "patch_file_path": "",
             "exploit_scenario": "Attacker sends a crafted query parameter to vuln_comprehensive.py causing SQL injection via f-string interpolation.",
-            "verification_status": "unverified", "sources": ["claude"],
+            "verification_status": "unverified",
+            "sources": ["claude"],
         },
         {
             "vulnerability_id": "A03:2021",
-            "severity": "High", "confidence": "High",
+            "severity": "High",
+            "confidence": "High",
             "cvss_band": "7.0-8.9",
-            "affected_file": "vuln_comprehensive.py", "affected_lines": "39-42",
+            "affected_file": "vuln_comprehensive.py",
+            "affected_lines": "39-42",
             "description": "SQL injection via % string format.",
             "suggested_fix": "Use parameterised queries.",
             "owasp_reference": "https://owasp.org/Top10/A03_2021-Injection/",
             "patch_file_path": "",
             "exploit_scenario": "Attacker crafts a malicious query parameter passed to vuln_comprehensive.py to perform SQL injection via % formatting.",
-            "verification_status": "unverified", "sources": ["claude"],
+            "verification_status": "unverified",
+            "sources": ["claude"],
         },
         {
             "vulnerability_id": "A03:2021",
-            "severity": "Critical", "confidence": "High",
+            "severity": "Critical",
+            "confidence": "High",
             "cvss_band": "9.0-10.0",
-            "affected_file": "vuln_comprehensive.py", "affected_lines": "46-47",
+            "affected_file": "vuln_comprehensive.py",
+            "affected_lines": "46-47",
             "description": "Command injection via os.system.",
             "suggested_fix": "Use subprocess with list args and shell=False.",
             "owasp_reference": "https://owasp.org/Top10/A03_2021-Injection/",
             "patch_file_path": "",
             "exploit_scenario": "Attacker passes a shell injection payload via the host parameter in vuln_comprehensive.py to execute arbitrary OS commands.",
-            "verification_status": "unverified", "sources": ["claude"],
+            "verification_status": "unverified",
+            "sources": ["claude"],
         },
         {
             "vulnerability_id": "A03:2021",
-            "severity": "Critical", "confidence": "High",
+            "severity": "Critical",
+            "confidence": "High",
             "cvss_band": "9.0-10.0",
-            "affected_file": "vuln_comprehensive.py", "affected_lines": "52-55",
+            "affected_file": "vuln_comprehensive.py",
+            "affected_lines": "52-55",
             "description": "Command injection via subprocess shell=True.",
             "suggested_fix": "Use shell=False with list argument.",
             "owasp_reference": "https://owasp.org/Top10/A03_2021-Injection/",
             "patch_file_path": "",
             "exploit_scenario": "Attacker injects OS commands via report_name parameter in vuln_comprehensive.py by passing a semicolon payload with shell=True.",
-            "verification_status": "unverified", "sources": ["claude"],
+            "verification_status": "unverified",
+            "sources": ["claude"],
         },
         {
             "vulnerability_id": "A02:2021",
-            "severity": "High", "confidence": "High",
+            "severity": "High",
+            "confidence": "High",
             "cvss_band": "7.0-8.9",
-            "affected_file": "vuln_comprehensive.py", "affected_lines": "61-62",
+            "affected_file": "vuln_comprehensive.py",
+            "affected_lines": "61-62",
             "description": "Weak hash function: MD5 used for passwords.",
             "suggested_fix": "Use bcrypt or argon2.",
             "owasp_reference": "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/",
             "patch_file_path": "",
             "exploit_scenario": "Attacker obtains the MD5 hash from vuln_comprehensive.py and performs an offline dictionary or rainbow-table attack to recover the original password.",
-            "verification_status": "unverified", "sources": ["claude"],
+            "verification_status": "unverified",
+            "sources": ["claude"],
         },
         {
             "vulnerability_id": "A02:2021",
-            "severity": "High", "confidence": "High",
+            "severity": "High",
+            "confidence": "High",
             "cvss_band": "7.0-8.9",
-            "affected_file": "vuln_comprehensive.py", "affected_lines": "67-68",
+            "affected_file": "vuln_comprehensive.py",
+            "affected_lines": "67-68",
             "description": "Insecure PRNG used for session token.",
             "suggested_fix": "Use secrets.token_hex().",
             "owasp_reference": "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/",
             "patch_file_path": "",
             "exploit_scenario": "Attacker exploits the predictable token generated by random.randint in vuln_comprehensive.py to forge a valid session and bypass authentication.",
-            "verification_status": "unverified", "sources": ["claude"],
+            "verification_status": "unverified",
+            "sources": ["claude"],
         },
         {
             "vulnerability_id": "A08:2021",
-            "severity": "Critical", "confidence": "High",
+            "severity": "Critical",
+            "confidence": "High",
             "cvss_band": "9.0-10.0",
-            "affected_file": "vuln_comprehensive.py", "affected_lines": "73-74",
+            "affected_file": "vuln_comprehensive.py",
+            "affected_lines": "73-74",
             "description": "Insecure deserialization via pickle.loads.",
             "suggested_fix": "Use JSON or a safe format.",
             "owasp_reference": "https://owasp.org/Top10/A08_2021-Software_and_Data_Integrity_Failures/",
             "patch_file_path": "",
             "exploit_scenario": "Attacker sends a crafted pickle payload to vuln_comprehensive.py which pickle.loads deserializes, triggering arbitrary code execution.",
-            "verification_status": "unverified", "sources": ["claude"],
+            "verification_status": "unverified",
+            "sources": ["claude"],
         },
         {
             "vulnerability_id": "A05:2021",
-            "severity": "High", "confidence": "High",
+            "severity": "High",
+            "confidence": "High",
             "cvss_band": "7.0-8.9",
-            "affected_file": "vuln_comprehensive.py", "affected_lines": "79-80",
+            "affected_file": "vuln_comprehensive.py",
+            "affected_lines": "79-80",
             "description": "XXE vulnerability via xml.etree.ElementTree.",
             "suggested_fix": "Use defusedxml.ElementTree.",
             "owasp_reference": "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/",
             "patch_file_path": "",
             "exploit_scenario": "Attacker provides a malicious XML payload to vuln_comprehensive.py that triggers XXE and allows reading internal server files via entity injection.",
-            "verification_status": "unverified", "sources": ["claude"],
+            "verification_status": "unverified",
+            "sources": ["claude"],
         },
         {
             "vulnerability_id": "A08:2021",
-            "severity": "Critical", "confidence": "High",
+            "severity": "Critical",
+            "confidence": "High",
             "cvss_band": "9.0-10.0",
-            "affected_file": "vuln_comprehensive.py", "affected_lines": "85-87",
+            "affected_file": "vuln_comprehensive.py",
+            "affected_lines": "85-87",
             "description": "Unsafe yaml.load — allows arbitrary object instantiation.",
             "suggested_fix": "Use yaml.safe_load().",
             "owasp_reference": "https://owasp.org/Top10/A08_2021-Software_and_Data_Integrity_Failures/",
             "patch_file_path": "",
             "exploit_scenario": "Attacker sends a crafted YAML payload to vuln_comprehensive.py that yaml.load deserializes into an arbitrary Python object, enabling remote code execution.",
-            "verification_status": "unverified", "sources": ["claude"],
+            "verification_status": "unverified",
+            "sources": ["claude"],
         },
     ]
 
@@ -303,7 +334,7 @@ async def test_pipeline_minimum_findings_with_mock_llm() -> None:
     claude_mock.analyse_async_chunked = AsyncMock(return_value=(llm_findings, []))
     # Verifier: always "real, high confidence" for every candidate
     verifier_response = "\n".join(
-        f"VERDICT #{i+1}: real\nCONFIDENCE #{i+1}: high\nREASON #{i+1}: Confirmed.\n"
+        f"VERDICT #{i + 1}: real\nCONFIDENCE #{i + 1}: high\nREASON #{i + 1}: Confirmed.\n"
         for i in range(len(llm_findings) + 5)  # extra headroom for scanner merge
     )
     claude_mock.ask = MagicMock(return_value=verifier_response)

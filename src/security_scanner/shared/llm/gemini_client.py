@@ -100,9 +100,7 @@ class GeminiClient:
 
     async def analyse_async(self, files: dict[str, str]) -> list[dict]:
         """Native async analysis — uses ``google-genai`` async surface."""
-        text = await self._complete_async(
-            build_system_prompt(), build_user_message(files)
-        )
+        text = await self._complete_async(build_system_prompt(), build_user_message(files))
         return parse_findings(text, error_cls=ClaudeResponseError)
 
     async def ask_async(self, system: str, user: str) -> str:
@@ -153,10 +151,7 @@ class GeminiClient:
             chunk_size=effective_chunk_size,
         )
 
-        tasks = [
-            asyncio.create_task(self._analyse_with_halving_retry(chunk))
-            for chunk in chunks
-        ]
+        tasks = [asyncio.create_task(self._analyse_with_halving_retry(chunk)) for chunk in chunks]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         raw_findings: list[dict] = []
@@ -191,9 +186,7 @@ class GeminiClient:
         )
         return raw_findings, partial_files
 
-    async def _analyse_with_halving_retry(
-        self, chunk: dict[str, str]
-    ) -> list[dict]:
+    async def _analyse_with_halving_retry(self, chunk: dict[str, str]) -> list[dict]:
         """Run ``analyse_async`` on ``chunk``; on parse error, halve and retry once.
 
         Truncated-output JSON failures are size-driven (model hit the
@@ -306,17 +299,13 @@ class GeminiClient:
                     raise ClaudeTimeoutError(
                         f"Gemini request exceeded {self._timeout}s timeout"
                     ) from exc
-                log.warning(
-                    "gemini call failed", model=self._model, attempt=attempt
-                )
+                log.warning("gemini call failed", model=self._model, attempt=attempt)
                 if attempt + 1 < MAX_ATTEMPTS:
                     time.sleep(BACKOFF_SECONDS)
                 continue
             self._record_usage(resp)
             return getattr(resp, "text", "") or ""
-        raise ClaudeUnavailableError(
-            f"Gemini unavailable after {MAX_ATTEMPTS} attempts: {last!r}"
-        )
+        raise ClaudeUnavailableError(f"Gemini unavailable after {MAX_ATTEMPTS} attempts: {last!r}")
 
     async def _complete_async(self, system_prompt: str, user_message: str) -> str:
         """Native async completion using ``google-genai``'s ``aio`` surface."""
@@ -349,17 +338,13 @@ class GeminiClient:
                     raise ClaudeTimeoutError(
                         f"Gemini request exceeded {self._timeout}s timeout"
                     ) from exc
-                log.warning(
-                    "gemini async call failed", model=self._model, attempt=attempt
-                )
+                log.warning("gemini async call failed", model=self._model, attempt=attempt)
                 if attempt + 1 < MAX_ATTEMPTS:
                     await asyncio.sleep(BACKOFF_SECONDS)
                 continue
             self._record_usage(resp)
             return getattr(resp, "text", "") or ""
-        raise ClaudeUnavailableError(
-            f"Gemini unavailable after {MAX_ATTEMPTS} attempts: {last!r}"
-        )
+        raise ClaudeUnavailableError(f"Gemini unavailable after {MAX_ATTEMPTS} attempts: {last!r}")
 
     def _record_usage(self, resp: Any) -> None:
         """Accumulate token usage from a Gemini response object."""

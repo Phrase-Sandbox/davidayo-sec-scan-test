@@ -89,9 +89,7 @@ class _CircuitBreaker:
         elapsed = self._clock() - (self._opened_at or 0.0)
         if elapsed < CB_RECOVERY_TIMEOUT_SECONDS:
             remaining = CB_RECOVERY_TIMEOUT_SECONDS - elapsed
-            raise GitHubCircuitOpenError(
-                f"GitHub circuit breaker open; retry in {remaining:.0f}s"
-            )
+            raise GitHubCircuitOpenError(f"GitHub circuit breaker open; retry in {remaining:.0f}s")
         self._state = self.STATE_HALF_OPEN
         self._consecutive_successes_half_open = 0
 
@@ -202,7 +200,11 @@ class GitHubClient:
                 files[filename] = patch
         log.info(
             "github diff complete",
-            owner=owner, repo=repo, base=base, head=head, file_count=len(files),
+            owner=owner,
+            repo=repo,
+            base=base,
+            head=head,
+            file_count=len(files),
         )
         return files
 
@@ -277,9 +279,7 @@ class GitHubClient:
             # 401 → one-shot refresh, then either succeed or fail-fast.
             if status == 401:
                 self._invalidate_installation_token(owner)
-                headers["Authorization"] = (
-                    f"Bearer {self._get_installation_token(owner)}"
-                )
+                headers["Authorization"] = f"Bearer {self._get_installation_token(owner)}"
                 response = self._http.request(method, url, headers=headers, **kwargs)
                 status = response.status_code
                 if status in (401, 403):
@@ -311,9 +311,7 @@ class GitHubClient:
             return response
 
         self._circuit_breaker.record_failure()
-        raise GitHubError(
-            f"GitHub request failed after {MAX_ATTEMPTS} attempts: {last_error}"
-        )
+        raise GitHubError(f"GitHub request failed after {MAX_ATTEMPTS} attempts: {last_error}")
 
     # --- Auth ---------------------------------------------------------------
 

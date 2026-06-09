@@ -175,6 +175,7 @@ _COMMONPATH_CHECK_RE = re.compile(
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def extract_upload_context(
     handler: UploadHandler,
     files: dict[str, str],
@@ -215,9 +216,7 @@ def _extract(handler: UploadHandler, files: dict[str, str]) -> UploadContext:
     # --- Auth/z signals -------------------------------------------------------
     authz_signals: list[str] = []
     for oc in scan_ownership_checks(handler.file, content):
-        authz_signals.append(
-            f"{oc.pattern} (current_user-derived: {oc.current_user_derived})"
-        )
+        authz_signals.append(f"{oc.pattern} (current_user-derived: {oc.current_user_derived})")
 
     # --- Filename handling ----------------------------------------------------
     filename_handling: list[str] = []

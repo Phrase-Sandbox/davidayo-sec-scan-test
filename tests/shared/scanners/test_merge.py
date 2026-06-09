@@ -83,11 +83,13 @@ def test_overlapping_findings_merge() -> None:
 
 def test_claude_fields_preserved_on_merge() -> None:
     """After merging, Claude's description/exploit/fix are preserved."""
-    llm = [_llm_finding(
-        description="Specific SQLi description",
-        exploit="Exploit via payload",
-        fix="Fix via parameterised",
-    )]
+    llm = [
+        _llm_finding(
+            description="Specific SQLi description",
+            exploit="Exploit via payload",
+            fix="Fix via parameterised",
+        )
+    ]
     agg = [_agg_candidate(ls=10, le=10)]
     result = merge_with_llm_findings(llm, agg)
     assert result[0].description == "Specific SQLi description"
@@ -120,11 +122,13 @@ def test_empty_inputs_returns_empty() -> None:
 
 def test_a03_xss_llm_finding_merges_with_xss_scanner_candidate() -> None:
     """LLM A03:2021 XSS finding merges with a scanner 'xss' candidate at the same lines."""
-    llm = [_llm_finding(
-        vuln_id="A03:2021",
-        lines="20",
-        description="Cross-Site Scripting via innerHTML assignment.",
-    )]
+    llm = [
+        _llm_finding(
+            vuln_id="A03:2021",
+            lines="20",
+            description="Cross-Site Scripting via innerHTML assignment.",
+        )
+    ]
     agg = [_agg_candidate(vuln_class="xss", ls=20, le=20)]
     result = merge_with_llm_findings(llm, agg)
     assert len(result) == 1
@@ -133,13 +137,17 @@ def test_a03_xss_llm_finding_merges_with_xss_scanner_candidate() -> None:
     assert result[0].consensus_score >= 2
 
 
-def test_a03_command_injection_llm_finding_merges_with_command_injection_scanner_candidate() -> None:
+def test_a03_command_injection_llm_finding_merges_with_command_injection_scanner_candidate() -> (
+    None
+):
     """LLM A03:2021 command-injection finding merges with a scanner 'command_injection' candidate."""
-    llm = [_llm_finding(
-        vuln_id="A03:2021",
-        lines="15",
-        description="Command injection via subprocess with shell=True.",
-    )]
+    llm = [
+        _llm_finding(
+            vuln_id="A03:2021",
+            lines="15",
+            description="Command injection via subprocess with shell=True.",
+        )
+    ]
     agg = [_agg_candidate(vuln_class="command_injection", ls=15, le=15)]
     result = merge_with_llm_findings(llm, agg)
     assert len(result) == 1
@@ -159,11 +167,13 @@ def test_a03_sqli_merge_still_works_after_multi_class_change() -> None:
 
 def test_a03_xss_llm_only_uses_description_inferred_class() -> None:
     """Claude-only A03:2021 XSS finding (no scanner match) gets vuln_class='xss'."""
-    llm = [_llm_finding(
-        vuln_id="A03:2021",
-        lines="30",
-        description="Cross-Site Scripting vulnerability via innerHTML.",
-    )]
+    llm = [
+        _llm_finding(
+            vuln_id="A03:2021",
+            lines="30",
+            description="Cross-Site Scripting vulnerability via innerHTML.",
+        )
+    ]
     result = merge_with_llm_findings(llm, [])
     assert len(result) == 1
     assert result[0].vuln_class == "xss"
@@ -172,11 +182,13 @@ def test_a03_xss_llm_only_uses_description_inferred_class() -> None:
 
 def test_a03_sqli_llm_only_still_defaults_to_sqli() -> None:
     """Claude-only A03:2021 SQLi finding (no scanner match) keeps vuln_class='sqli'."""
-    llm = [_llm_finding(
-        vuln_id="A03:2021",
-        lines="5",
-        description="SQL injection in login query.",
-    )]
+    llm = [
+        _llm_finding(
+            vuln_id="A03:2021",
+            lines="5",
+            description="SQL injection in login query.",
+        )
+    ]
     result = merge_with_llm_findings(llm, [])
     assert len(result) == 1
     assert result[0].vuln_class == "sqli"
@@ -184,11 +196,13 @@ def test_a03_sqli_llm_only_still_defaults_to_sqli() -> None:
 
 def test_a03_xss_and_sqli_scanner_candidates_do_not_cross_merge() -> None:
     """XSS LLM finding must not accidentally merge with a SQLi scanner candidate."""
-    llm = [_llm_finding(
-        vuln_id="A03:2021",
-        lines="10",
-        description="Cross-Site Scripting via innerHTML.",
-    )]
+    llm = [
+        _llm_finding(
+            vuln_id="A03:2021",
+            lines="10",
+            description="Cross-Site Scripting via innerHTML.",
+        )
+    ]
     # SQLi scanner finding at the same location — must NOT merge with the XSS LLM finding.
     sqli_cand = _agg_candidate(vuln_class="sqli", ls=10, le=10)
     xss_cand = _agg_candidate(vuln_class="xss", ls=10, le=10)
@@ -202,6 +216,7 @@ def test_a03_xss_and_sqli_scanner_candidates_do_not_cross_merge() -> None:
 # ---------------------------------------------------------------------------
 # V7: overlap tolerance — _OVERLAP_TOLERANCE = 5
 # ---------------------------------------------------------------------------
+
 
 def test_merge_tolerance_3_lines_apart_merges() -> None:
     """LLM at line 10, scanner at line 13 — within ±5 tolerance, should merge."""

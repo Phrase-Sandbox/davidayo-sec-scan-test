@@ -29,8 +29,7 @@ def upgrade() -> None:
     if bind.dialect.name == "postgresql":
         bind.execute(
             sa.text(
-                "ALTER TYPE audit_event_type "
-                "ADD VALUE IF NOT EXISTS 'slack_webhook_configured'"
+                "ALTER TYPE audit_event_type ADD VALUE IF NOT EXISTS 'slack_webhook_configured'"
             )
         )
 

@@ -110,6 +110,7 @@ def _resolve_slack_webhook(org_row: object | None) -> str | None:
         return None
     try:
         from security_scanner.tokens.crypto import decrypt  # noqa: PLC0415
+
         return decrypt(encrypted)
     except Exception:  # noqa: BLE001 — decryption error, fall back to env
         return None
@@ -150,11 +151,13 @@ _PipelineDep = Annotated[ScanPipeline, Depends(get_pipeline)]
 
 async def _persist_ci_scan(result: ScanResult, started_at: datetime) -> None:
     """Write a row to ci_scan_records + bump llm_usage_monthly after /agent/scan."""
+
     def _count(sev: Severity) -> int:
         return sum(1 for f in result.findings if f.severity == sev)
 
     # Resolve provider/model from the same org_settings row the pipeline used.
     from security_scanner.shared.llm.factory import _get_model_for_provider  # noqa: PLC0415
+
     org_row = await _load_active_org_settings()
     provider = org_row.default_provider.value if org_row is not None else "anthropic"
     model = _get_model_for_provider(org_row, provider) or ""
@@ -260,9 +263,7 @@ async def scan(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=str(exc),
             ) from exc
-        pipeline = ScanPipeline(
-            pipeline._github, llm_client, mode=pipeline._mode
-        )
+        pipeline = ScanPipeline(pipeline._github, llm_client, mode=pipeline._mode)
 
     started_at = datetime.now(UTC)
 
@@ -412,7 +413,6 @@ async def bypass(body: BypassRequest, _token: _TokenDep) -> ScanResult:
         webhook_url=_resolve_slack_webhook(org_row),
     )
     return bypassed
-
 
 
 def _scan_failed_result(body: ScanRequest, reason: str) -> ScanResult:

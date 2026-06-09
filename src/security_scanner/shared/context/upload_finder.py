@@ -57,7 +57,10 @@ _JS_UPLOAD_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\breq\.file\b", re.IGNORECASE), "express"),
     (re.compile(r"\breq\.files\b", re.IGNORECASE), "express"),
     (re.compile(r"\bnew\s+Busboy\b|\bbusboy\s*\(", re.IGNORECASE), "busboy"),
-    (re.compile(r"\bnew\s+(?:formidable\.)?(?:IncomingForm|Formidable)\s*\(", re.IGNORECASE), "formidable"),  # noqa: E501
+    (
+        re.compile(r"\bnew\s+(?:formidable\.)?(?:IncomingForm|Formidable)\s*\(", re.IGNORECASE),
+        "formidable",
+    ),  # noqa: E501
     (re.compile(r"\bformidable\.parse\b", re.IGNORECASE), "formidable"),
 ]
 
@@ -187,11 +190,13 @@ def _scan_file(
                     continue
                 seen.add(line_no)
                 func_name = _extract_function_name(lines, i, lang)
-                handlers.append(UploadHandler(
-                    file=filepath,
-                    line=line_no,
-                    function_name=func_name,
-                    framework=framework,
-                ))
+                handlers.append(
+                    UploadHandler(
+                        file=filepath,
+                        line=line_no,
+                        function_name=func_name,
+                        framework=framework,
+                    )
+                )
 
     return handlers

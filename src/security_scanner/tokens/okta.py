@@ -91,6 +91,7 @@ def _unpack_state(cookie: str) -> tuple[str, str]:
 # JWKS client — one instance per Okta domain, cached in-process
 # ---------------------------------------------------------------------------
 
+
 @lru_cache(maxsize=4)
 def _jwks_client(okta_domain: str) -> PyJWKClient:
     """Return a cached JWKS client for the given Okta domain.
@@ -104,6 +105,7 @@ def _jwks_client(okta_domain: str) -> PyJWKClient:
 # ---------------------------------------------------------------------------
 # JWT validation
 # ---------------------------------------------------------------------------
+
 
 def _validate_id_token(id_token: str, nonce: str, settings) -> dict:
     """Validate the Okta ID token and return the verified claims.
@@ -133,6 +135,7 @@ def _validate_id_token(id_token: str, nonce: str, settings) -> dict:
 # ---------------------------------------------------------------------------
 # Okta token exchange
 # ---------------------------------------------------------------------------
+
 
 async def _exchange_code(code: str, settings) -> str:
     """Exchange an authorization code for an ID token.
@@ -173,6 +176,7 @@ async def _exchange_code(code: str, settings) -> str:
 # ---------------------------------------------------------------------------
 # JIT user provisioning
 # ---------------------------------------------------------------------------
+
 
 async def _provision_okta_user(claims: dict, sess: AsyncSession, settings) -> User:
     """Lazily create or update a portal User from Okta JWT claims.
@@ -247,6 +251,7 @@ async def _provision_okta_user(claims: dict, sess: AsyncSession, settings) -> Us
 # Error response helper
 # ---------------------------------------------------------------------------
 
+
 def _okta_error(request: Request, message: str) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
@@ -259,6 +264,7 @@ def _okta_error(request: Request, message: str) -> HTMLResponse:
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+
 
 @router.get("/oauth/init", include_in_schema=False)
 async def okta_oauth_init(request: Request) -> RedirectResponse:
@@ -277,14 +283,16 @@ async def okta_oauth_init(request: Request) -> RedirectResponse:
     state = secrets.token_urlsafe(32)
     nonce = secrets.token_urlsafe(32)
 
-    params = urlencode({
-        "response_type": "code",
-        "client_id": settings.OKTA_CLIENT_ID,
-        "redirect_uri": settings.OKTA_REDIRECT_URI,
-        "scope": settings.OKTA_SCOPES,
-        "state": state,
-        "nonce": nonce,
-    })
+    params = urlencode(
+        {
+            "response_type": "code",
+            "client_id": settings.OKTA_CLIENT_ID,
+            "redirect_uri": settings.OKTA_REDIRECT_URI,
+            "scope": settings.OKTA_SCOPES,
+            "state": state,
+            "nonce": nonce,
+        }
+    )
     auth_url = f"https://{settings.OKTA_DOMAIN}/oauth2/default/v1/authorize?{params}"
 
     redirect = RedirectResponse(url=auth_url, status_code=status.HTTP_302_FOUND)

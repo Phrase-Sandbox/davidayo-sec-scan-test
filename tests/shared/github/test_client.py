@@ -87,10 +87,15 @@ def test_get_repo_files_single_file(rsa_private_key_pem):
         if request.url.path == "/repos/owner/repo/contents/":
             return httpx.Response(200, json=[{"type": "file", "path": "README.md"}])
         if request.url.path == "/repos/owner/repo/contents/README.md":
-            return httpx.Response(200, json={
-                "type": "file", "path": "README.md",
-                "encoding": "base64", "content": _b64(b"hello\n"),
-            })
+            return httpx.Response(
+                200,
+                json={
+                    "type": "file",
+                    "path": "README.md",
+                    "encoding": "base64",
+                    "content": _b64(b"hello\n"),
+                },
+            )
         return httpx.Response(404)
 
     client, _, _ = _build_client(rsa_private_key_pem, handler)
@@ -119,10 +124,15 @@ def test_get_repo_files_recurses_into_subdirectories(rsa_private_key_pem):
         if path in listings:
             return httpx.Response(200, json=listings[path])
         if path in blobs:
-            return httpx.Response(200, json={
-                "type": "file", "path": path.split("/contents/")[1],
-                "encoding": "base64", "content": _b64(blobs[path]),
-            })
+            return httpx.Response(
+                200,
+                json={
+                    "type": "file",
+                    "path": path.split("/contents/")[1],
+                    "encoding": "base64",
+                    "content": _b64(blobs[path]),
+                },
+            )
         return httpx.Response(404, json={"message": f"unhandled {path}"})
 
     client, sleeps, _ = _build_client(rsa_private_key_pem, handler)
@@ -137,10 +147,15 @@ def test_get_diff_files_returns_patches_only(rsa_private_key_pem):
         if (r := _auth_response(request)) is not None:
             return r
         if "/compare/" in request.url.path:
-            return httpx.Response(200, json={"files": [
-                {"filename": "src/app.py", "patch": "@@ -1 +1 @@\n-old\n+new"},
-                {"filename": "image.png", "patch": None},  # binary — no patch
-            ]})
+            return httpx.Response(
+                200,
+                json={
+                    "files": [
+                        {"filename": "src/app.py", "patch": "@@ -1 +1 @@\n-old\n+new"},
+                        {"filename": "image.png", "patch": None},  # binary — no patch
+                    ]
+                },
+            )
         return httpx.Response(404)
 
     client, _, _ = _build_client(rsa_private_key_pem, handler)
@@ -171,7 +186,7 @@ def test_401_triggers_one_shot_token_refresh(rsa_private_key_pem):
     client, _, _ = _build_client(rsa_private_key_pem, handler)
     assert client.get_repo_files("owner", "repo") == {}
     assert counts["token_mint"] == 2  # initial + refresh
-    assert counts["contents"] == 2     # original 401 + retry with fresh token
+    assert counts["contents"] == 2  # original 401 + retry with fresh token
 
 
 def test_repeated_401_after_refresh_raises_auth_error(rsa_private_key_pem):

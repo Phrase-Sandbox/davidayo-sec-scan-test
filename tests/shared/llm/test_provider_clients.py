@@ -73,9 +73,7 @@ def test_gemini_timeout_is_mapped():
 
 
 def test_gemini_unavailable_after_retries(monkeypatch):
-    monkeypatch.setattr(
-        "security_scanner.shared.llm.gemini_client.time.sleep", lambda *_: None
-    )
+    monkeypatch.setattr("security_scanner.shared.llm.gemini_client.time.sleep", lambda *_: None)
     sdk = MagicMock()
     sdk.models.generate_content.side_effect = RuntimeError("boom")
     sdk.caches.create.side_effect = RuntimeError("cache unavailable")

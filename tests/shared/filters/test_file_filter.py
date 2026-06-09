@@ -98,9 +98,16 @@ class TestExcludeAssetFiles:
     @pytest.mark.parametrize(
         "filename",
         [
-            "logo.png", "photo.jpg", "image.jpeg", "anim.gif",
-            "icon.svg", "favicon.ico",
-            "font.woff", "font.woff2", "font.ttf", "font.eot",
+            "logo.png",
+            "photo.jpg",
+            "image.jpeg",
+            "anim.gif",
+            "icon.svg",
+            "favicon.ico",
+            "font.woff",
+            "font.woff2",
+            "font.ttf",
+            "font.eot",
             "spec.pdf",
         ],
     )
@@ -118,8 +125,8 @@ class TestExcludeGeneratedFiles:
     @pytest.mark.parametrize(
         "filename",
         [
-            "service.pb.go",         # protoc -> Go
-            "model_pb2.py",          # protoc -> Python
+            "service.pb.go",  # protoc -> Go
+            "model_pb2.py",  # protoc -> Python
             "schema.generated.ts",
             "types.generated.d.ts",
         ],
@@ -192,10 +199,28 @@ class TestIncludeSourceFiles:
     @pytest.mark.parametrize(
         "filename",
         [
-            "x.py", "x.js", "x.ts", "x.tsx", "x.jsx",
-            "x.go", "x.rb", "x.java", "x.cs", "x.php", "x.rs", "x.swift", "x.kt",
-            "x.yml", "x.yaml", "x.toml", "x.xml", "x.tf", "x.hcl",
-            "x.sh", "x.bash", "x.zsh",
+            "x.py",
+            "x.js",
+            "x.ts",
+            "x.tsx",
+            "x.jsx",
+            "x.go",
+            "x.rb",
+            "x.java",
+            "x.cs",
+            "x.php",
+            "x.rs",
+            "x.swift",
+            "x.kt",
+            "x.yml",
+            "x.yaml",
+            "x.toml",
+            "x.xml",
+            "x.tf",
+            "x.hcl",
+            "x.sh",
+            "x.bash",
+            "x.zsh",
         ],
     )
     def test_every_listed_source_extension_is_kept(self, filename):

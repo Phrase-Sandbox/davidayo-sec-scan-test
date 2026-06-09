@@ -10,8 +10,10 @@ app = Flask(__name__)
 app.secret_key = "test-secret"
 
 # Fake database.
-USERS = {1: {"id": 1, "name": "alice", "role": "user"},
-         2: {"id": 2, "name": "bob", "role": "admin"}}
+USERS = {
+    1: {"id": 1, "name": "alice", "role": "user"},
+    2: {"id": 2, "name": "bob", "role": "admin"},
+}
 DOCUMENTS = {
     1: {"id": 1, "owner_id": 1, "title": "Alice doc", "content": "Secret!"},
     2: {"id": 2, "owner_id": 2, "title": "Bob doc", "content": "Also secret."},

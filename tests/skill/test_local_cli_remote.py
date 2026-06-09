@@ -12,9 +12,7 @@ from security_scanner.skill import local_cli
 
 def test_save_and_load_config_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setattr(local_cli, "_CONFIG_DIR", tmp_path / ".phrase-sec-scan")
-    monkeypatch.setattr(
-        local_cli, "_CONFIG_FILE", tmp_path / ".phrase-sec-scan" / "config.yaml"
-    )
+    monkeypatch.setattr(local_cli, "_CONFIG_FILE", tmp_path / ".phrase-sec-scan" / "config.yaml")
     local_cli._save_config({"scanner_url": "https://scanner.test", "token": "phs_local_x"})
     cfg = local_cli._load_config()
     assert cfg["scanner_url"] == "https://scanner.test"
@@ -172,6 +170,7 @@ def test_remote_scan_401_says_run_login(tmp_path, monkeypatch, capsys):
     def fake_urlopen(req, timeout=0, context=None):  # noqa: ARG001
         from io import BytesIO
         from urllib.error import HTTPError
+
         raise HTTPError(req.full_url, 401, "Unauthorized", {}, BytesIO(b"nope"))
 
     monkeypatch.setattr(local_cli.urllib.request, "urlopen", fake_urlopen)

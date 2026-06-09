@@ -23,7 +23,6 @@ log = get_logger(__name__)
 TOOL = "bandit"
 
 
-
 async def scan(workspace: ScannerWorkspace) -> list[ScannerCandidate]:
     """Run Bandit against the workspace and return normalised candidates."""
     if shutil.which("bandit") is None:
@@ -37,7 +36,8 @@ async def scan(workspace: ScannerWorkspace) -> list[ScannerCandidate]:
 
     cmd = [
         "bandit",
-        "-f", "json",
+        "-f",
+        "json",
         "-r",
         str(workspace.root),
         "--quiet",
@@ -73,7 +73,7 @@ def _parse_output(stdout: bytes, *, workspace_root: str) -> list[ScannerCandidat
             filename = issue.get("filename", "")
             # Make path relative to workspace root.
             if filename.startswith(workspace_root):
-                filename = filename[len(workspace_root):].lstrip("/\\")
+                filename = filename[len(workspace_root) :].lstrip("/\\")
 
             line_start = int(issue.get("line_number", 1))
             line_end = int(issue.get("line_range", [line_start])[-1])
@@ -81,16 +81,18 @@ def _parse_output(stdout: bytes, *, workspace_root: str) -> list[ScannerCandidat
             severity = issue.get("issue_severity", "MEDIUM").lower()
 
             vuln_class = normalize(TOOL, raw_rule_id)
-            candidates.append(ScannerCandidate(
-                tool=TOOL,
-                vuln_class=vuln_class,
-                file=filename,
-                line_start=line_start,
-                line_end=line_end,
-                message=message,
-                raw_rule_id=raw_rule_id,
-                severity_hint=severity,
-            ))
+            candidates.append(
+                ScannerCandidate(
+                    tool=TOOL,
+                    vuln_class=vuln_class,
+                    file=filename,
+                    line_start=line_start,
+                    line_end=line_end,
+                    message=message,
+                    raw_rule_id=raw_rule_id,
+                    severity_hint=severity,
+                )
+            )
         except Exception as exc:  # noqa: BLE001
             log.debug("bandit adapter: skipping malformed issue", error=str(exc))
             continue

@@ -90,7 +90,9 @@ def test_high_confidence_high_severity_blocks():
 def test_verified_critical_blocks():
     """BR-009: a Critical that the second pass concurred on does block."""
     finding = _finding(
-        Severity.Critical, Confidence.High, VerificationStatus.verified,
+        Severity.Critical,
+        Confidence.High,
+        VerificationStatus.verified,
     )
     result = _result(findings=[finding])
     assert make_gate_decision(result).gate_decision == GateDecision.blocked
@@ -126,7 +128,9 @@ def test_br001a_critical_with_low_confidence_is_advisory():
 
 def test_br009_critical_with_conflicting_verification_is_advisory():
     finding = _finding(
-        Severity.Critical, Confidence.High, VerificationStatus.conflicting,
+        Severity.Critical,
+        Confidence.High,
+        VerificationStatus.conflicting,
     )
     out = make_gate_decision(_result(findings=[finding]))
     assert out.gate_decision == GateDecision.advisory

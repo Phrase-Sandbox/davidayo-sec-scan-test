@@ -64,9 +64,7 @@ def upgrade() -> None:
 
     # ----- user_llm_settings: make model nullable --------------------------
     if bind.dialect.name == "postgresql":
-        bind.execute(
-            sa.text("ALTER TABLE user_llm_settings ALTER COLUMN model DROP NOT NULL")
-        )
+        bind.execute(sa.text("ALTER TABLE user_llm_settings ALTER COLUMN model DROP NOT NULL"))
     else:
         # SQLite doesn't support ALTER COLUMN; recreate the table.
         # In practice tests use SQLite; production uses Postgres.
@@ -81,13 +79,9 @@ def downgrade() -> None:
     if bind.dialect.name == "postgresql":
         # Backfill NULLs with a placeholder before restoring NOT NULL.
         bind.execute(
-            sa.text(
-                "UPDATE user_llm_settings SET model = '(restored)' WHERE model IS NULL"
-            )
+            sa.text("UPDATE user_llm_settings SET model = '(restored)' WHERE model IS NULL")
         )
-        bind.execute(
-            sa.text("ALTER TABLE user_llm_settings ALTER COLUMN model SET NOT NULL")
-        )
+        bind.execute(sa.text("ALTER TABLE user_llm_settings ALTER COLUMN model SET NOT NULL"))
     else:
         with op.batch_alter_table("user_llm_settings") as batch_op:
             batch_op.alter_column("model", existing_type=sa.String(128), nullable=False)

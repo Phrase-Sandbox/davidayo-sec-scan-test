@@ -38,6 +38,7 @@ def test_authz_rubric_contains_treat_missing_phrase():
 # System prompt inclusion / exclusion by vuln_class.
 # ---------------------------------------------------------------------------
 
+
 def test_auth_bypass_class_includes_rubric():
     prompt = build_vuln_verifier_system_prompt(vuln_class="auth_bypass")
     assert _PHRASE_1 in prompt

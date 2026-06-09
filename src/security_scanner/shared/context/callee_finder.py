@@ -57,9 +57,27 @@ def find_callees(snippet: str) -> list[_CalleeMatch]:
         name = m.group(1)
         # Skip Python keywords and very short names.
         if name not in {
-            "if", "for", "while", "def", "class", "return", "import",
-            "from", "with", "not", "and", "or", "in", "is", "str", "int",
-            "len", "print", "True", "False", "None",
+            "if",
+            "for",
+            "while",
+            "def",
+            "class",
+            "return",
+            "import",
+            "from",
+            "with",
+            "not",
+            "and",
+            "or",
+            "in",
+            "is",
+            "str",
+            "int",
+            "len",
+            "print",
+            "True",
+            "False",
+            "None",
         }:
             seen.setdefault(name, "other")
 

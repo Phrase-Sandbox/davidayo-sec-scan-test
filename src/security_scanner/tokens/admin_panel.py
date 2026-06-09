@@ -60,6 +60,7 @@ async def admin_root() -> RedirectResponse:
     """Redirect bare /admin and /admin/ to the token registry."""
     return RedirectResponse(url="/admin/tokens", status_code=302)
 
+
 # Admin-managed model options surfaced in the /admin/org-settings dropdowns.
 # First entry per provider is the recommended default.
 KNOWN_MODELS: dict[str, list[str]] = {
@@ -178,11 +179,7 @@ async def admin_revoke(
         token_id=token_id,
         revoked=ok,
     )
-    flash = (
-        f"Token {token_id} revoked."
-        if ok
-        else f"No active token found for {token_id}."
-    )
+    flash = f"Token {token_id} revoked." if ok else f"No active token found for {token_id}."
     return templates.TemplateResponse(
         request,
         "admin_tokens.html",
@@ -291,9 +288,7 @@ async def admin_org_settings_get(request: Request, admin: _AdminDep) -> HTMLResp
                 masked_google = "…(decryption error)"
         if org_row.encrypted_slack_webhook:
             try:
-                masked_slack = mask_for_display(
-                    decrypt(org_row.encrypted_slack_webhook), keep=8
-                )
+                masked_slack = mask_for_display(decrypt(org_row.encrypted_slack_webhook), keep=8)
             except Exception:  # noqa: BLE001
                 masked_slack = "…(decryption error)"
         current_provider = org_row.default_provider.value
@@ -756,9 +751,7 @@ async def admin_promote_user(
         stmt = select(User).where(User.email == email)
         user_row = (await session.execute(stmt)).scalar_one_or_none()
         if user_row is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="User not found."
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
         user_row.role = UserRole.admin
         await token_audit.record(
             session,
@@ -796,9 +789,7 @@ async def admin_demote_user(
         stmt = select(User).where(User.email == email)
         user_row = (await session.execute(stmt)).scalar_one_or_none()
         if user_row is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="User not found."
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
         user_row.role = UserRole.user
         await token_audit.record(
             session,
@@ -962,10 +953,7 @@ async def admin_ci_token_get(request: Request, admin: _AdminDep) -> HTMLResponse
     factory = get_session_factory()
     async with factory() as session:
         stmt = (
-            select(CIToken)
-            .where(CIToken.revoked_at.is_(None))
-            .order_by(desc(CIToken.id))
-            .limit(1)
+            select(CIToken).where(CIToken.revoked_at.is_(None)).order_by(desc(CIToken.id)).limit(1)
         )
         active = (await session.execute(stmt)).scalar_one_or_none()
 
@@ -999,10 +987,7 @@ async def admin_ci_token_rotate(request: Request, admin: _AdminDep) -> HTMLRespo
     factory = get_session_factory()
     async with factory() as session:
         stmt = (
-            select(CIToken)
-            .where(CIToken.revoked_at.is_(None))
-            .order_by(desc(CIToken.id))
-            .limit(1)
+            select(CIToken).where(CIToken.revoked_at.is_(None)).order_by(desc(CIToken.id)).limit(1)
         )
         current = (await session.execute(stmt)).scalar_one_or_none()
         if current is not None:

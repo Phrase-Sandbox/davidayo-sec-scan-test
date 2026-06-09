@@ -25,9 +25,7 @@ from security_scanner.tokens.models import (
 
 
 def test_parse_token_accepts_well_formed() -> None:
-    parsed = registry.parse_token(
-        "phs_local_tok-0123456789ab_" + "A" * 43
-    )
+    parsed = registry.parse_token("phs_local_tok-0123456789ab_" + "A" * 43)
     assert parsed == ("tok-0123456789ab", "A" * 43)
 
 
@@ -41,9 +39,7 @@ def test_parse_token_rejects_garbage() -> None:
 
 
 async def test_first_issue_creates_token(session: AsyncSession) -> None:
-    issued = await registry.issue_or_rotate_for_user(
-        session, user_email="alice@phrase.com"
-    )
+    issued = await registry.issue_or_rotate_for_user(session, user_email="alice@phrase.com")
     await session.commit()
 
     assert issued.was_rotation is False
@@ -67,14 +63,10 @@ async def test_first_issue_creates_token(session: AsyncSession) -> None:
 async def test_rotation_preserves_token_id_and_revokes_old(
     session: AsyncSession,
 ) -> None:
-    first = await registry.issue_or_rotate_for_user(
-        session, user_email="bob@phrase.com"
-    )
+    first = await registry.issue_or_rotate_for_user(session, user_email="bob@phrase.com")
     await session.commit()
 
-    second = await registry.issue_or_rotate_for_user(
-        session, user_email="bob@phrase.com"
-    )
+    second = await registry.issue_or_rotate_for_user(session, user_email="bob@phrase.com")
     await session.commit()
 
     # Same stable identifier, different secret.
@@ -100,9 +92,7 @@ async def test_rotation_preserves_token_id_and_revokes_old(
 async def test_verify_ok_returns_user_email_and_updates_last_used(
     session: AsyncSession,
 ) -> None:
-    issued = await registry.issue_or_rotate_for_user(
-        session, user_email="carol@phrase.com"
-    )
+    issued = await registry.issue_or_rotate_for_user(session, user_email="carol@phrase.com")
     await session.commit()
 
     result = await registry.verify(session, issued.full_token)
@@ -124,23 +114,17 @@ async def test_verify_bad_format_short_circuits(session: AsyncSession) -> None:
 
 
 async def test_verify_unknown_token(session: AsyncSession) -> None:
-    result = await registry.verify(
-        session, "phs_local_tok-deadbeefcafe_" + "A" * 43
-    )
+    result = await registry.verify(session, "phs_local_tok-deadbeefcafe_" + "A" * 43)
     assert result.outcome == "unknown_token"
     assert result.token_id == "tok-deadbeefcafe"
     assert result.user_email is None
 
 
 async def test_verify_revoked_returns_revoked_outcome(session: AsyncSession) -> None:
-    issued = await registry.issue_or_rotate_for_user(
-        session, user_email="dan@phrase.com"
-    )
+    issued = await registry.issue_or_rotate_for_user(session, user_email="dan@phrase.com")
     await session.commit()
 
-    await registry.revoke_active_for_user(
-        session, user_email="dan@phrase.com", actor="self"
-    )
+    await registry.revoke_active_for_user(session, user_email="dan@phrase.com", actor="self")
     await session.commit()
 
     result = await registry.verify(session, issued.full_token)
@@ -150,9 +134,7 @@ async def test_verify_revoked_returns_revoked_outcome(session: AsyncSession) -> 
 
 
 async def test_verify_bad_signature(session: AsyncSession) -> None:
-    issued = await registry.issue_or_rotate_for_user(
-        session, user_email="eve@phrase.com"
-    )
+    issued = await registry.issue_or_rotate_for_user(session, user_email="eve@phrase.com")
     await session.commit()
 
     # Same token_id prefix, wrong suffix.
@@ -178,9 +160,7 @@ async def test_revoke_active_for_user_returns_false_when_none(
 async def test_admin_force_rotate_issues_new_with_same_token_id(
     session: AsyncSession,
 ) -> None:
-    original = await registry.issue_or_rotate_for_user(
-        session, user_email="frank@phrase.com"
-    )
+    original = await registry.issue_or_rotate_for_user(session, user_email="frank@phrase.com")
     await session.commit()
 
     rotated = await registry.force_rotate_by_token_id(
@@ -195,11 +175,7 @@ async def test_admin_force_rotate_issues_new_with_same_token_id(
     assert rotated.full_token != original.full_token
 
     # Audit log has BOTH a token_rotated and an admin_force_rotate event.
-    events = (
-        (await session.execute(select(AuditEvent).order_by(AuditEvent.at)))
-        .scalars()
-        .all()
-    )
+    events = (await session.execute(select(AuditEvent).order_by(AuditEvent.at))).scalars().all()
     types = [e.event_type for e in events]
     assert AuditEventType.token_rotated in types
     assert AuditEventType.admin_force_rotate in types
@@ -228,9 +204,7 @@ async def test_admin_force_rotate_rejects_malformed_token_id(
 
 
 async def test_admin_revoke_by_token_id(session: AsyncSession) -> None:
-    issued = await registry.issue_or_rotate_for_user(
-        session, user_email="grace@phrase.com"
-    )
+    issued = await registry.issue_or_rotate_for_user(session, user_email="grace@phrase.com")
     await session.commit()
 
     revoked = await registry.revoke_by_token_id(
@@ -250,9 +224,7 @@ async def test_list_all_active_only_filter(session: AsyncSession) -> None:
     await registry.issue_or_rotate_for_user(session, user_email="hank@phrase.com")
     await registry.issue_or_rotate_for_user(session, user_email="ivy@phrase.com")
     await session.commit()
-    await registry.revoke_active_for_user(
-        session, user_email="hank@phrase.com", actor="self"
-    )
+    await registry.revoke_active_for_user(session, user_email="hank@phrase.com", actor="self")
     await session.commit()
 
     all_rows = await registry.list_all(session)

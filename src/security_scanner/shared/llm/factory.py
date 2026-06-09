@@ -51,6 +51,7 @@ _DATA_GOVERNANCE_WARNING = (
 
 def _make_claude(api_key: str, model: str | None) -> LLMClient:
     from security_scanner.shared.claude.client import ClaudeClient
+
     if model:
         return ClaudeClient(api_key=api_key, model=model)
     return ClaudeClient(api_key=api_key)
@@ -64,6 +65,7 @@ def _make_gemini(api_key: str, model: str | None) -> LLMClient:
     from security_scanner.shared.llm.gemini_client import (
         GeminiClient,
     )
+
     return GeminiClient(api_key=api_key, model=model or GEMINI_DEFAULT)
 
 
@@ -86,16 +88,14 @@ def build_user_llm_client(
     p = provider.strip().lower()
     if not api_key:
         raise LLMConfigError(
-            f"Empty API key for provider={p!r}. "
-            "Visit /portal/settings to update your key."
+            f"Empty API key for provider={p!r}. Visit /portal/settings to update your key."
         )
     if p in ("anthropic", "claude"):
         return _make_claude(api_key, model)
     if p in ("google", "gemini"):
         return _make_gemini(api_key, model)
     raise LLMConfigError(
-        f"Unknown provider={p!r} stored in user settings. "
-        "Expected: anthropic | google."
+        f"Unknown provider={p!r} stored in user settings. Expected: anthropic | google."
     )
 
 
@@ -170,8 +170,7 @@ def build_org_llm_client_from_settings(
         return _make_gemini(key, model)
 
     raise LLMConfigError(
-        f"Unknown provider={provider!r} in org_settings. "
-        "Expected: anthropic | google."
+        f"Unknown provider={provider!r} in org_settings. Expected: anthropic | google."
     )
 
 

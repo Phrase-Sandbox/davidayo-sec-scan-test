@@ -60,8 +60,7 @@ def _high_finding_dict(*, file: str = "src/handlers/login.py") -> dict:
         "affected_lines": "42-55",
         "description": "SQL injection.",
         "suggested_fix": (
-            "Use a parameterised query:\n"
-            "```\nq = db.exec('SELECT ? FROM users', user_id)\n```"
+            "Use a parameterised query:\n```\nq = db.exec('SELECT ? FROM users', user_id)\n```"
         ),
         "owasp_reference": "https://owasp.org/Top10/A03_2021-Injection/",
         "patch_file_path": "patches/x.patch",
@@ -476,7 +475,8 @@ def test_findings_in_test_directories_are_post_filtered():
     test_path_finding = _high_finding_dict(file="src/handlers/login.py")
     test_path_finding["affected_file"] = "tests/test_login.py"
     test_path_finding["exploit_scenario"] = test_path_finding["exploit_scenario"].replace(
-        "src/handlers/login.py", "tests/test_login.py",
+        "src/handlers/login.py",
+        "tests/test_login.py",
     )
     real_finding = _high_finding_dict(file="src/handlers/login.py")
     real_finding["vulnerability_id"] = "A05:2021"
@@ -540,9 +540,7 @@ def test_filter_runs_before_llm_input_not_after():
     assert "static/vendor.min.js" in strip_calls[0], (
         "strip() must receive vendor.min.js so secrets inside it are detected"
     )
-    assert "src/handlers/login.py" in strip_calls[0], (
-        "strip() must receive login.py"
-    )
+    assert "src/handlers/login.py" in strip_calls[0], "strip() must receive login.py"
 
     # LLM must NOT have received the minified JS file.
     if claude.analyse_async_chunked.called:
@@ -616,11 +614,17 @@ def test_pipeline_uses_scanner_settings_from_db():
     run_layer1_calls: list[dict] = []
 
     async def capturing_run_layer1(f, scan_id, *, enabled_adapters=None, semgrep_rules=None):
-        run_layer1_calls.append({"enabled_adapters": enabled_adapters, "semgrep_rules": semgrep_rules})
+        run_layer1_calls.append(
+            {"enabled_adapters": enabled_adapters, "semgrep_rules": semgrep_rules}
+        )
         return []
 
-    with _patch("security_scanner.pipeline._load_active_scanner_settings", AsyncMock(return_value=sc)), \
-         _patch("security_scanner.pipeline.run_layer1", capturing_run_layer1):
+    with (
+        _patch(
+            "security_scanner.pipeline._load_active_scanner_settings", AsyncMock(return_value=sc)
+        ),
+        _patch("security_scanner.pipeline.run_layer1", capturing_run_layer1),
+    ):
         _run(
             ScanPipeline(github, claude, mode=ScanType.deployment_gate),
             repo_url=_REPO,

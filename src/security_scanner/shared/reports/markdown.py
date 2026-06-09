@@ -75,10 +75,7 @@ def _gather_warnings(result: ScanResult) -> list[str]:
             if result.unscanned_files
             else "_(none listed)_"
         )
-        warnings.append(
-            "⚠️ **PARTIAL SCAN** — the following files were not analysed: "
-            f"{files_text}"
-        )
+        warnings.append(f"⚠️ **PARTIAL SCAN** — the following files were not analysed: {files_text}")
 
     conflicting = [
         f
@@ -107,8 +104,7 @@ def _gather_warnings(result: ScanResult) -> list[str]:
         )
 
     auto_triaged = [
-        f for f in result.findings
-        if f.verification_status == VerificationStatus.advisory_real
+        f for f in result.findings if f.verification_status == VerificationStatus.advisory_real
     ]
     if auto_triaged:
         warnings.append(
@@ -119,8 +115,7 @@ def _gather_warnings(result: ScanResult) -> list[str]:
 
     if not result.findings:
         warnings.append(
-            "⚠️ **NO FINDINGS DETECTED** — developer acknowledgement "
-            "required before gate passes."
+            "⚠️ **NO FINDINGS DETECTED** — developer acknowledgement required before gate passes."
         )
 
     return warnings
@@ -191,10 +186,7 @@ def _detailed_findings(findings: list[VulnerabilityFinding]) -> str:
                 # Upload context panel — render as a compact list.
                 context_block = _upload_context_md_panel(f.context_summary)
             else:
-                context_block = (
-                    f"\n**Cross-file context**\n\n"
-                    f"```\n{f.context_summary}\n```\n"
-                )
+                context_block = f"\n**Cross-file context**\n\n```\n{f.context_summary}\n```\n"
         sections.append(
             f"### {f.vulnerability_id} — {f.severity.value} "
             f"(confidence: {f.confidence.value}, verification: "
@@ -258,10 +250,7 @@ def _upload_context_md_panel(context_summary: str) -> str:
     """
     m = _UPLOAD_FIELD_RE.search(context_summary)
     if not m:
-        return (
-            f"\n**Upload context**\n\n"
-            f"```\n{context_summary}\n```\n"
-        )
+        return f"\n**Upload context**\n\n```\n{context_summary}\n```\n"
     validation = m.group(1).strip()
     naming = m.group(2).strip()
     storage = m.group(3).strip()

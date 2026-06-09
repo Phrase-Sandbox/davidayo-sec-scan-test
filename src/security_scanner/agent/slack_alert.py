@@ -174,13 +174,10 @@ async def send_llm_unavailable_alert(
     accidental field-form key leakage at the structured-log layer.
     """
     is_quota = any(
-        kw in reason.lower()
-        for kw in ("quota", "resource_exhausted", "exceeded", "billing")
+        kw in reason.lower() for kw in ("quota", "resource_exhausted", "exceeded", "billing")
     )
     headline = (
-        "🚨 *Scanner LLM quota exhausted*"
-        if is_quota
-        else "🚨 *Scanner LLM upstream unavailable*"
+        "🚨 *Scanner LLM quota exhausted*" if is_quota else "🚨 *Scanner LLM upstream unavailable*"
     )
     text = (
         f"{headline}\n"

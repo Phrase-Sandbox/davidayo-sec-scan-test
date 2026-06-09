@@ -177,46 +177,49 @@ class ScanPipeline:
         # Per-scan tuning derived from DB settings (None = subsystem env defaults).
         if sc is not None:
             enabled_adapters: set[str] | None = {
-                name for name, flag in [
+                name
+                for name, flag in [
                     ("semgrep", sc.enable_semgrep),
                     ("bandit", sc.enable_bandit),
                     ("gosec", sc.enable_gosec),
                     ("eslint", sc.enable_eslint),
-                ] if flag
+                ]
+                if flag
             }
             semgrep_rules: set[str] | None = (
                 {
-                    name for name, flag in [
+                    name
+                    for name, flag in [
                         ("owasp", sc.semgrep_owasp),
                         ("audit", sc.semgrep_audit),
                         ("upload", sc.semgrep_upload),
-                    ] if flag
+                    ]
+                    if flag
                 }
-                if sc.enable_semgrep else None
+                if sc.enable_semgrep
+                else None
             )
-            _keep_conf = frozenset(
-                v.strip() for v in sc.keep_confidences.split(",") if v.strip()
-            )
+            _keep_conf = frozenset(v.strip() for v in sc.keep_confidences.split(",") if v.strip())
             _advisory_conf = frozenset(
                 v.strip() for v in sc.advisory_confidences.split(",") if v.strip()
             )
             _parallelism: int | None = sc.vuln_verifier_parallelism
-            _high_risk_paths: list[str] | None = (
-                [p.strip() for p in sc.high_risk_paths.splitlines() if p.strip()] or None
-            )
+            _high_risk_paths: list[str] | None = [
+                p.strip() for p in sc.high_risk_paths.splitlines() if p.strip()
+            ] or None
             _enable_consolidation_verifier: bool = sc.enable_consolidation_verifier
             _enable_partial_scan: bool = sc.enable_partial_scan
             _enable_zero_findings_retry: bool = sc.enable_zero_findings_retry
             _enable_quality_gate: bool = sc.enable_quality_gate
         else:
-            enabled_adapters = None      # all adapters (binary-available)
-            semgrep_rules = None         # all rule packs
-            _keep_conf = None            # module-level env default
-            _advisory_conf = None        # module-level env default
-            _parallelism = None          # module-level env default
-            _high_risk_paths = None      # YAML file default
+            enabled_adapters = None  # all adapters (binary-available)
+            semgrep_rules = None  # all rule packs
+            _keep_conf = None  # module-level env default
+            _advisory_conf = None  # module-level env default
+            _parallelism = None  # module-level env default
+            _high_risk_paths = None  # YAML file default
             _enable_consolidation_verifier = False
-            _enable_partial_scan = True   # default: partial scan preferred over 0 findings
+            _enable_partial_scan = True  # default: partial scan preferred over 0 findings
             _enable_zero_findings_retry = True  # default: retry on empty first pass
             _enable_quality_gate = False  # default: off (zero latency for existing deployments)
 
@@ -224,7 +227,10 @@ class ScanPipeline:
         parsed = _parse_repo_url(repo_url)
         if parsed is None:
             return _scan_failed(
-                repo_url, scan_target, self._mode, triggered_by,
+                repo_url,
+                scan_target,
+                self._mode,
+                triggered_by,
                 reason=f"Could not parse owner/repo from URL: {repo_url!r}",
             )
         owner, repo = parsed
@@ -232,7 +238,10 @@ class ScanPipeline:
         # Step 2: diff target needs base + head.
         if scan_target == ScanTarget.diff and not (base and head):
             return _scan_failed(
-                repo_url, scan_target, self._mode, triggered_by,
+                repo_url,
+                scan_target,
+                self._mode,
+                triggered_by,
                 reason="Diff scan requested but base/head not provided",
             )
 
@@ -255,14 +264,19 @@ class ScanPipeline:
             except GitHubError as exc:
                 log.warning("github fetch failed", reason=str(exc))
                 return _scan_failed(
-                    repo_url, scan_target, self._mode, triggered_by,
+                    repo_url,
+                    scan_target,
+                    self._mode,
+                    triggered_by,
                     reason=f"GitHub fetch failed: {exc}",
                 )
 
         # Steps 4–5: empty input handling (EC-007, BR-004 / EC-008).
         if not files:
             return _build_result(
-                repo_url=repo_url, scan_target=scan_target, scan_type=self._mode,
+                repo_url=repo_url,
+                scan_target=scan_target,
+                scan_type=self._mode,
                 triggered_by=triggered_by,
                 findings=[],
                 gate_decision=GateDecision.advisory,
@@ -278,8 +292,7 @@ class ScanPipeline:
         # verify_secret_findings does not block the event loop.
         original_files = files  # pre-redaction copy for secret verifier
         secret_findings = await asyncio.to_thread(
-            verify_secret_findings,
-            secret_findings, strip_result.hits, original_files, self._claude
+            verify_secret_findings, secret_findings, strip_result.hits, original_files, self._claude
         )
 
         # Step 7: filter AFTER strip so the LLM only receives source files
@@ -294,7 +307,9 @@ class ScanPipeline:
         # If filtering removed everything, treat as no scannable source.
         if not files:
             return _build_result(
-                repo_url=repo_url, scan_target=scan_target, scan_type=self._mode,
+                repo_url=repo_url,
+                scan_target=scan_target,
+                scan_type=self._mode,
                 triggered_by=triggered_by,
                 findings=secret_findings,
                 gate_decision=_decide_gate(secret_findings, partial=False, is_gate=is_gate),
@@ -326,7 +341,9 @@ class ScanPipeline:
                 # than 150k tokens), nothing can be scanned — return advisory.
                 if not files:
                     return _build_result(
-                        repo_url=repo_url, scan_target=scan_target, scan_type=self._mode,
+                        repo_url=repo_url,
+                        scan_target=scan_target,
+                        scan_type=self._mode,
                         triggered_by=triggered_by,
                         findings=secret_findings,
                         gate_decision=GateDecision.advisory,
@@ -342,7 +359,8 @@ class ScanPipeline:
             llm_task = asyncio.create_task(self._claude.analyse_async_chunked(files))
             scanner_task = asyncio.create_task(
                 run_layer1(
-                    scanner_files, scan_id,
+                    scanner_files,
+                    scan_id,
                     enabled_adapters=enabled_adapters,
                     semgrep_rules=semgrep_rules,
                 )
@@ -374,7 +392,9 @@ class ScanPipeline:
                 # totally unavailable" and route accordingly (BYO-key →
                 # surface as 502; default mode → keep advisory + Slack alert).
                 return _build_result(
-                    repo_url=repo_url, scan_target=scan_target, scan_type=self._mode,
+                    repo_url=repo_url,
+                    scan_target=scan_target,
+                    scan_type=self._mode,
                     triggered_by=triggered_by,
                     findings=secret_findings,
                     gate_decision=GateDecision.advisory,
@@ -389,7 +409,10 @@ class ScanPipeline:
                     reason=str(exc),
                 )
                 return _scan_failed(
-                    repo_url, scan_target, self._mode, triggered_by,
+                    repo_url,
+                    scan_target,
+                    self._mode,
+                    triggered_by,
                     reason=f"Claude response could not be parsed: {exc}",
                 )
         else:
@@ -419,7 +442,9 @@ class ScanPipeline:
                 # totally unavailable" and route accordingly (BYO-key →
                 # surface as 502; default mode → keep advisory + Slack alert).
                 return _build_result(
-                    repo_url=repo_url, scan_target=scan_target, scan_type=self._mode,
+                    repo_url=repo_url,
+                    scan_target=scan_target,
+                    scan_type=self._mode,
                     triggered_by=triggered_by,
                     findings=secret_findings,
                     gate_decision=GateDecision.advisory,
@@ -434,7 +459,10 @@ class ScanPipeline:
                     reason=str(exc),
                 )
                 return _scan_failed(
-                    repo_url, scan_target, self._mode, triggered_by,
+                    repo_url,
+                    scan_target,
+                    self._mode,
+                    triggered_by,
                     reason=f"Claude response could not be parsed: {exc}",
                 )
 
@@ -488,9 +516,7 @@ class ScanPipeline:
         # and needed on /scan/local so the upload-context panel renders in
         # local-mode reports.
         if candidates:
-            bundles = await asyncio.to_thread(
-                ContextPackager().attach, candidates, scanner_files
-            )
+            bundles = await asyncio.to_thread(ContextPackager().attach, candidates, scanner_files)
         else:
             bundles = {}
 
@@ -499,7 +525,10 @@ class ScanPipeline:
         # Use scanner_files so the verifier can read template content for any
         # scanner finding that lands in a .jinja2 / .html file.
         kept = await asyncio.to_thread(
-            verify_vuln_candidates, candidates, scanner_files, self._claude,
+            verify_vuln_candidates,
+            candidates,
+            scanner_files,
+            self._claude,
             bundles=bundles,
             keep_confidences=_keep_conf,
             advisory_confidences=_advisory_conf,
@@ -537,7 +566,9 @@ class ScanPipeline:
 
         # Step 16: patches.
         result = _build_result(
-            repo_url=repo_url, scan_target=scan_target, scan_type=self._mode,
+            repo_url=repo_url,
+            scan_target=scan_target,
+            scan_type=self._mode,
             triggered_by=triggered_by,
             findings=all_findings,
             gate_decision=gate_decision,
@@ -603,15 +634,9 @@ def _build_secret_findings(strip_result: SecretStripResult) -> list[Vulnerabilit
     """
     findings: list[VulnerabilityFinding] = []
     for hit in strip_result.hits:
-        affected_lines = (
-            str(hit.line)
-            if hit.line == hit.end_line
-            else f"{hit.line}-{hit.end_line}"
-        )
+        affected_lines = str(hit.line) if hit.line == hit.end_line else f"{hit.line}-{hit.end_line}"
         hint_clause = (
-            f" Line begins with: `{hit.hint}` (no secret value shown)."
-            if hit.hint
-            else ""
+            f" Line begins with: `{hit.hint}` (no secret value shown)." if hit.hint else ""
         )
         findings.append(
             VulnerabilityFinding(

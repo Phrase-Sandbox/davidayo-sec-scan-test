@@ -120,20 +120,22 @@ def _synthesise_candidates(
             continue
         weak = _count_weak_signals(handler, files)
         if weak >= 2:
-            synth.append(ScannerCandidate(
-                tool=_SYNTH_TOOL,
-                vuln_class="unsafe_file_upload",
-                file=handler.file,
-                line_start=handler.line,
-                line_end=handler.line,
-                message=(
-                    f"Synthetic upload candidate: upload handler at "
-                    f"{handler.file}:{handler.line} ({handler.framework}) "
-                    f"has {weak} weak security signal(s). No scanner rule fired."
-                ),
-                raw_rule_id="upload_synth",
-                severity_hint="medium",
-            ))
+            synth.append(
+                ScannerCandidate(
+                    tool=_SYNTH_TOOL,
+                    vuln_class="unsafe_file_upload",
+                    file=handler.file,
+                    line_start=handler.line,
+                    line_end=handler.line,
+                    message=(
+                        f"Synthetic upload candidate: upload handler at "
+                        f"{handler.file}:{handler.line} ({handler.framework}) "
+                        f"has {weak} weak security signal(s). No scanner rule fired."
+                    ),
+                    raw_rule_id="upload_synth",
+                    severity_hint="medium",
+                )
+            )
     return synth
 
 
@@ -231,8 +233,7 @@ async def run_layer1(
         if handlers:
             # Collect files where a scanner rule already fired for unsafe_file_upload.
             fired_upload_files: set[str] = {
-                c.file for c in all_candidates
-                if c.vuln_class == "unsafe_file_upload"
+                c.file for c in all_candidates if c.vuln_class == "unsafe_file_upload"
             }
             synth = _synthesise_candidates(handlers, files, fired_upload_files)
             if synth:

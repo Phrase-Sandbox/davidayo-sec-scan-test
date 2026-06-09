@@ -69,7 +69,7 @@ def _parse_output(stdout: bytes, *, workspace_root: str) -> list[ScannerCandidat
             raw_rule_id = issue.get("rule_id", "")
             filename = issue.get("file", "")
             if filename.startswith(workspace_root):
-                filename = filename[len(workspace_root):].lstrip("/\\")
+                filename = filename[len(workspace_root) :].lstrip("/\\")
 
             line_str = issue.get("line", "1")
             # gosec sometimes returns "42-45" for line ranges.
@@ -89,16 +89,18 @@ def _parse_output(stdout: bytes, *, workspace_root: str) -> list[ScannerCandidat
                 continue
 
             vuln_class = normalize(TOOL, raw_rule_id)
-            candidates.append(ScannerCandidate(
-                tool=TOOL,
-                vuln_class=vuln_class,
-                file=filename,
-                line_start=line_start,
-                line_end=line_end,
-                message=message,
-                raw_rule_id=raw_rule_id,
-                severity_hint=severity,
-            ))
+            candidates.append(
+                ScannerCandidate(
+                    tool=TOOL,
+                    vuln_class=vuln_class,
+                    file=filename,
+                    line_start=line_start,
+                    line_end=line_end,
+                    message=message,
+                    raw_rule_id=raw_rule_id,
+                    severity_hint=severity,
+                )
+            )
         except Exception as exc:  # noqa: BLE001
             log.debug("gosec adapter: skipping malformed issue", error=str(exc))
             continue

@@ -37,8 +37,7 @@ def _finding(
         owasp_reference="https://owasp.org/Top10/A03_2021-Injection/",
         patch_file_path="patches/x.patch",
         exploit_scenario=(
-            f"Attacker submits a crafted parameter to {affected_file} via the "
-            "login payload."
+            f"Attacker submits a crafted parameter to {affected_file} via the login payload."
         ),
         verification_status=VerificationStatus.unverified,
     )

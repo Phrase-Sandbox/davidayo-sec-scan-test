@@ -97,9 +97,9 @@ _REMEDIATION_TEMPLATES: dict[str, dict[str, str]] = {
             "# Before (vulnerable):\n"
             "cursor.execute(\"SELECT * FROM users WHERE id = '%s'\" % user_id)\n\n"
             "# After (safe):\n"
-            "cursor.execute(\"SELECT * FROM users WHERE id = %s\", (user_id,))\n"
+            'cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))\n'
             "```\n\n"
-            "For async drivers: `await cursor.execute(\"... WHERE id = %s\", (value,))`"
+            'For async drivers: `await cursor.execute("... WHERE id = %s", (value,))`'
         ),
         "exploit_scenario": (
             "An attacker supplies `' OR '1'='1` as the user-controlled parameter. "
@@ -132,9 +132,9 @@ _REMEDIATION_TEMPLATES: dict[str, dict[str, str]] = {
             "Never pass user input to a shell command. Use argument lists with `shell=False`:\n\n"
             "```python\n"
             "# Before (vulnerable):\n"
-            "subprocess.run(f\"convert {filename} output.png\", shell=True)\n\n"
+            'subprocess.run(f"convert {filename} output.png", shell=True)\n\n'
             "# After (safe):\n"
-            "subprocess.run([\"convert\", filename, \"output.png\"], shell=False)\n"
+            'subprocess.run(["convert", filename, "output.png"], shell=False)\n'
             "```\n\n"
             "Validate and allowlist input before use; never trust user-supplied filenames directly."
         ),
@@ -152,10 +152,10 @@ _REMEDIATION_TEMPLATES: dict[str, dict[str, str]] = {
             "response = requests.get(user_supplied_url)\n\n"
             "# After (safe):\n"
             "from urllib.parse import urlparse\n"
-            "ALLOWED_HOSTS = {\"api.example.com\", \"cdn.example.com\"}\n"
+            'ALLOWED_HOSTS = {"api.example.com", "cdn.example.com"}\n'
             "parsed = urlparse(user_supplied_url)\n"
             "if parsed.hostname not in ALLOWED_HOSTS:\n"
-            "    raise ValueError(\"URL not allowed\")\n"
+            '    raise ValueError("URL not allowed")\n'
             "response = requests.get(user_supplied_url)\n"
             "```\n\n"
             "Also block redirects (`allow_redirects=False`) and use a DNS allowlist."
@@ -178,7 +178,7 @@ _REMEDIATION_TEMPLATES: dict[str, dict[str, str]] = {
             "base = pathlib.Path(BASE_DIR).resolve()\n"
             "target = (base / user_filename).resolve()\n"
             "if not str(target).startswith(str(base)):\n"
-            "    raise PermissionError(\"Path outside allowed directory\")\n"
+            '    raise PermissionError("Path outside allowed directory")\n'
             "with open(target) as f: ...\n"
             "```"
         ),
@@ -476,6 +476,7 @@ def _is_high_risk_path(filepath: str) -> bool:
     """Delegate to the context packager's path check."""
     return is_high_risk_path(filepath)
 
+
 # ---------------------------------------------------------------------------
 # Response parsing.
 # ---------------------------------------------------------------------------
@@ -536,6 +537,7 @@ def _parse_verifier_response(
 # Batch builder.
 # ---------------------------------------------------------------------------
 
+
 def _chunk(items: list[int], size: int) -> Iterator[list[int]]:
     for i in range(0, len(items), size):
         yield items[i : i + size]
@@ -551,17 +553,19 @@ def _render_upload_context_section(bundle: ContextBundle) -> str:
         return ""
 
     # Check if any field has meaningful content — only render if non-trivial.
-    any_content = any([
-        uc.route_summary,
-        uc.middleware_summary,
-        uc.authz_signals,
-        uc.filename_handling and uc.filename_handling != ["unknown"],
-        uc.validation_signals and uc.validation_signals != ["none"],
-        uc.size_limit_signals and uc.size_limit_signals != ["none"],
-        uc.storage_signals and uc.storage_signals != ["unknown"],
-        uc.retrieval_signals and uc.retrieval_signals != ["none"],
-        uc.post_processing_signals and uc.post_processing_signals != ["none"],
-    ])
+    any_content = any(
+        [
+            uc.route_summary,
+            uc.middleware_summary,
+            uc.authz_signals,
+            uc.filename_handling and uc.filename_handling != ["unknown"],
+            uc.validation_signals and uc.validation_signals != ["none"],
+            uc.size_limit_signals and uc.size_limit_signals != ["none"],
+            uc.storage_signals and uc.storage_signals != ["unknown"],
+            uc.retrieval_signals and uc.retrieval_signals != ["none"],
+            uc.post_processing_signals and uc.post_processing_signals != ["none"],
+        ]
+    )
     if not any_content:
         return ""
 
@@ -609,10 +613,7 @@ def _render_bundle_sections(bundle: ContextBundle) -> str:
         parts.append(f"MIDDLEWARE: {chain}")
 
     if bundle.callers:
-        lines = [
-            f"  {c.file}:{c.line} — {c.function_name}"
-            for c in bundle.callers
-        ]
+        lines = [f"  {c.file}:{c.line} — {c.function_name}" for c in bundle.callers]
         parts.append("CALLERS:\n" + "\n".join(lines))
 
     if bundle.callees:
@@ -728,6 +729,7 @@ def _batch_vuln_class(batch_candidates: list[CandidateForVerification]) -> str |
 # Core verification.
 # ---------------------------------------------------------------------------
 
+
 def _verify_batch(
     batch_candidates: list[CandidateForVerification],
     files: dict[str, str],
@@ -751,7 +753,9 @@ def _verify_batch(
 
     blocks = [
         _build_candidate_block(
-            i + 1, c, files,
+            i + 1,
+            c,
+            files,
             bundle=(bundles or {}).get(id(c)),
         )
         for i, c in enumerate(batch_candidates)
@@ -771,8 +775,10 @@ def _verify_batch(
             error=type(exc).__name__,
         )
         # Fail-safe: keep all candidates unverified.
-        return [candidate_to_finding(c, verification_status=VerificationStatus.unverified)
-                for c in batch_candidates]
+        return [
+            candidate_to_finding(c, verification_status=VerificationStatus.unverified)
+            for c in batch_candidates
+        ]
 
     parsed = _parse_verifier_response(response or "", batch_size=len(batch_candidates))
     results: list[VulnerabilityFinding | None] = []

@@ -16,10 +16,10 @@ from typing import NamedTuple
 
 
 class _OwnershipMatch(NamedTuple):
-    line: int               # 1-based
-    pattern: str            # label of the matched pattern
-    identifier: str         # the ownership column / parameter name
-    current_user_derived: bool   # True = safe comparison
+    line: int  # 1-based
+    pattern: str  # label of the matched pattern
+    identifier: str  # the ownership column / parameter name
+    current_user_derived: bool  # True = safe comparison
 
 
 # --- Pattern registry ---------------------------------------------------
@@ -100,49 +100,59 @@ def scan_ownership_checks(filename: str, content: str) -> list[_OwnershipMatch]:
             identifier = m.group(1)
             rhs = m.group(2).strip()
             safe = _is_current_user_rhs(rhs) and not _is_attacker_rhs(rhs)
-            results.append(_OwnershipMatch(
-                line=line_no,
-                pattern=f"WHERE {identifier} =",
-                identifier=identifier,
-                current_user_derived=safe,
-            ))
+            results.append(
+                _OwnershipMatch(
+                    line=line_no,
+                    pattern=f"WHERE {identifier} =",
+                    identifier=identifier,
+                    current_user_derived=safe,
+                )
+            )
 
         # require_*
         for m in _REQUIRE_RE.finditer(line):
-            results.append(_OwnershipMatch(
-                line=line_no,
-                pattern=m.group(1),
-                identifier=m.group(1),
-                current_user_derived=True,  # decorator gates are safe by design
-            ))
+            results.append(
+                _OwnershipMatch(
+                    line=line_no,
+                    pattern=m.group(1),
+                    identifier=m.group(1),
+                    current_user_derived=True,  # decorator gates are safe by design
+                )
+            )
 
         # has_permission / can_*
         for m in _HAS_PERM_RE.finditer(line):
             # Determine if the check uses current_user
             safe = _is_current_user_rhs(line)
-            results.append(_OwnershipMatch(
-                line=line_no,
-                pattern=m.group(1),
-                identifier=m.group(1),
-                current_user_derived=safe,
-            ))
+            results.append(
+                _OwnershipMatch(
+                    line=line_no,
+                    pattern=m.group(1),
+                    identifier=m.group(1),
+                    current_user_derived=safe,
+                )
+            )
 
         # current_user.id comparison
         if _CURRENT_USER_CMP_RE.search(line):
-            results.append(_OwnershipMatch(
-                line=line_no,
-                pattern="current_user.id",
-                identifier="current_user.id",
-                current_user_derived=True,
-            ))
+            results.append(
+                _OwnershipMatch(
+                    line=line_no,
+                    pattern="current_user.id",
+                    identifier="current_user.id",
+                    current_user_derived=True,
+                )
+            )
 
         # FastAPI Depends(get_current_user)
         if _DEPENDS_CURRENT_USER_RE.search(line):
-            results.append(_OwnershipMatch(
-                line=line_no,
-                pattern="Depends(get_current_user)",
-                identifier="get_current_user",
-                current_user_derived=True,
-            ))
+            results.append(
+                _OwnershipMatch(
+                    line=line_no,
+                    pattern="Depends(get_current_user)",
+                    identifier="get_current_user",
+                    current_user_derived=True,
+                )
+            )
 
     return results

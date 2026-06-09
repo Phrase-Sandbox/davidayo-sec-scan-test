@@ -58,15 +58,9 @@ async def test_semgrep_success_increments_counter(tmp_path):
     # Stub out binary + config existence checks.
     with (
         patch("shutil.which", return_value="/usr/bin/semgrep"),
-        patch(
-            "security_scanner.shared.scanners.adapters.semgrep._OWASP_CONFIG"
-        ) as mock_owasp,
-        patch(
-            "security_scanner.shared.scanners.adapters.semgrep._AUDIT_CONFIG"
-        ) as mock_audit,
-        patch(
-            "security_scanner.shared.scanners.adapters.semgrep._UPLOAD_CONFIG"
-        ) as mock_upload,
+        patch("security_scanner.shared.scanners.adapters.semgrep._OWASP_CONFIG") as mock_owasp,
+        patch("security_scanner.shared.scanners.adapters.semgrep._AUDIT_CONFIG") as mock_audit,
+        patch("security_scanner.shared.scanners.adapters.semgrep._UPLOAD_CONFIG") as mock_upload,
         patch(
             "security_scanner.shared.scanners.adapters.semgrep.run_scanner",
             new=AsyncMock(return_value=(0, b'{"results": []}', b"")),
@@ -92,15 +86,9 @@ async def test_semgrep_timeout_increments_counter(tmp_path):
 
     with (
         patch("shutil.which", return_value="/usr/bin/semgrep"),
-        patch(
-            "security_scanner.shared.scanners.adapters.semgrep._OWASP_CONFIG"
-        ) as mock_owasp,
-        patch(
-            "security_scanner.shared.scanners.adapters.semgrep._AUDIT_CONFIG"
-        ) as mock_audit,
-        patch(
-            "security_scanner.shared.scanners.adapters.semgrep._UPLOAD_CONFIG"
-        ) as mock_upload,
+        patch("security_scanner.shared.scanners.adapters.semgrep._OWASP_CONFIG") as mock_owasp,
+        patch("security_scanner.shared.scanners.adapters.semgrep._AUDIT_CONFIG") as mock_audit,
+        patch("security_scanner.shared.scanners.adapters.semgrep._UPLOAD_CONFIG") as mock_upload,
         patch(
             "security_scanner.shared.scanners.adapters.semgrep.run_scanner",
             new=AsyncMock(side_effect=ScannerTimeout("too slow")),

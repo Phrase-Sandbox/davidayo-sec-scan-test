@@ -58,6 +58,7 @@ def app(mock_pipeline, factory_calls):
         def factory(mock_files: dict[str, str]):
             factory_calls.append(mock_files)
             return mock_pipeline
+
         return factory
 
     fastapi_app.dependency_overrides[get_test_pipeline_factory] = factory_provider
@@ -153,7 +154,9 @@ def test_test_scan_rejects_wrong_token(client, mock_pipeline):
 
 
 def test_mock_files_passed_directly_to_pipeline_factory(
-    client, mock_pipeline, factory_calls,
+    client,
+    mock_pipeline,
+    factory_calls,
 ):
     mock_pipeline.run.return_value = _result()
     body = _valid_body()
@@ -211,10 +214,13 @@ def test_test_scan_returns_scan_result_json_with_findings(client, mock_pipeline)
 
 def test_token_limit_error_returns_advisory_with_warning(client, mock_pipeline):
     mock_pipeline.run.side_effect = TokenLimitError(
-        estimated_tokens=200_000, threshold=150_000,
+        estimated_tokens=200_000,
+        threshold=150_000,
     )
     response = client.post(
-        "/agent/test-scan", json=_valid_body(), headers=_auth_header(),
+        "/agent/test-scan",
+        json=_valid_body(),
+        headers=_auth_header(),
     )
     assert response.status_code == 200
     body = response.json()
@@ -230,6 +236,7 @@ def test_test_endpoint_is_not_mounted_when_local_test_mode_is_false(monkeypatch)
     endpoint must NOT appear in the application's route table."""
     monkeypatch.delenv("LOCAL_TEST_MODE", raising=False)
     import security_scanner.main as main_mod  # noqa: PLC0415
+
     importlib.reload(main_mod)
     paths = {route.path for route in main_mod.app.router.routes}
     assert "/agent/test-scan" not in paths
@@ -239,6 +246,7 @@ def test_test_endpoint_is_not_mounted_when_local_test_mode_is_false(monkeypatch)
 def test_test_endpoint_is_mounted_when_local_test_mode_is_true(monkeypatch):
     monkeypatch.setenv("LOCAL_TEST_MODE", "true")
     import security_scanner.main as main_mod  # noqa: PLC0415
+
     importlib.reload(main_mod)
     paths = {route.path for route in main_mod.app.router.routes}
     assert "/agent/test-scan" in paths

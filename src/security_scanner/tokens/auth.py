@@ -56,13 +56,15 @@ def _get_fernet() -> Fernet:
 def sign_portal_session(email: str, name: str, auth_provider: str = "local") -> str:
     """Return a Fernet-encrypted, TTL-bearing session cookie value."""
     now = int(time.time())
-    payload = json.dumps({
-        "e": email,
-        "n": name,
-        "x": now + _SESSION_TTL,
-        "t": now,            # session_issued_at — used for reactivation reauth
-        "a": auth_provider,  # "okta" or "local"
-    }).encode()
+    payload = json.dumps(
+        {
+            "e": email,
+            "n": name,
+            "x": now + _SESSION_TTL,
+            "t": now,  # session_issued_at — used for reactivation reauth
+            "a": auth_provider,  # "okta" or "local"
+        }
+    ).encode()
     return _get_fernet().encrypt(payload).decode()
 
 
@@ -94,6 +96,7 @@ def verify_portal_session(token: str) -> PhraseUser | None:
         session_issued_at=data.get("t"),  # None for old cookies → reauth check skipped
     )
 
+
 log = get_logger(__name__)
 
 _LOCAL_BYPASS_EMAIL = "local-admin@phrase.dev"
@@ -107,7 +110,7 @@ class PhraseUser:
     email: str
     name: str
     groups: tuple[str, ...]
-    auth_provider: str = "unknown"          # "okta", "local", or "unknown"
+    auth_provider: str = "unknown"  # "okta", "local", or "unknown"
     session_issued_at: float | None = None  # unix timestamp when cookie was minted
 
 

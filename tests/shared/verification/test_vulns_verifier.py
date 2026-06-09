@@ -47,6 +47,7 @@ def test_prompt_specifies_output_schema() -> None:
 # Response parser tests.
 # ---------------------------------------------------------------------------
 
+
 def test_parser_basic_batch() -> None:
     """Parse a well-formed two-candidate response."""
     response = (
@@ -86,6 +87,7 @@ def test_parser_empty_response() -> None:
 # ---------------------------------------------------------------------------
 # Fail-safe test.
 # ---------------------------------------------------------------------------
+
 
 def _make_candidate(
     file: str = "app.py",
@@ -138,6 +140,7 @@ def test_failsafe_on_unexpected_exception() -> None:
 # Threshold tests.
 # ---------------------------------------------------------------------------
 
+
 def test_threshold_high_only_real_medium_becomes_advisory() -> None:
     """With KEEP_CONFIDENCES={high} and ADVISORY_CONFIDENCES={medium},
     a real/medium finding becomes advisory_real (non-blocking).
@@ -152,7 +155,9 @@ def test_threshold_high_only_real_medium_becomes_advisory() -> None:
 
     candidates = [_make_candidate()]
     result = verify_vuln_candidates(
-        candidates, {}, mock_client,
+        candidates,
+        {},
+        mock_client,
         keep_confidences=frozenset({"high"}),
         advisory_confidences=frozenset({"medium"}),
     )
@@ -196,6 +201,7 @@ def test_false_positive_always_dropped() -> None:
 # ContextBundle rendering tests (v2).
 # ---------------------------------------------------------------------------
 
+
 def test_bundle_routes_rendered_in_user_message() -> None:
     """When a bundle is provided, ROUTES section appears in the user message."""
     from security_scanner.shared.context.models import (
@@ -210,7 +216,9 @@ def test_bundle_routes_rendered_in_user_message() -> None:
         vuln_class="idor",
         snippet="",
         route_definitions=(
-            RouteInfo(file="app/views.py", line=10, method="GET", path="/docs/<id>", handler="get_doc"),
+            RouteInfo(
+                file="app/views.py", line=10, method="GET", path="/docs/<id>", handler="get_doc"
+            ),
         ),
         middleware_chain=(
             MiddlewareInfo(file="app/views.py", line=9, name="login_required", kind="decorator"),
@@ -220,7 +228,9 @@ def test_bundle_routes_rendered_in_user_message() -> None:
         ownership_checks=(),
     )
     candidate = _make_candidate(file="app/views.py", vuln_class="idor")
-    block = _build_candidate_block(1, candidate, {"app/views.py": "def get_doc(id): pass"}, bundle=bundle)
+    block = _build_candidate_block(
+        1, candidate, {"app/views.py": "def get_doc(id): pass"}, bundle=bundle
+    )
 
     assert "ROUTES:" in block
     assert "/docs/<id>" in block
@@ -244,7 +254,9 @@ def test_empty_bundle_sections_omitted() -> None:
         ownership_checks=(),
     )
     candidate = _make_candidate(file="app/views.py", vuln_class="idor")
-    block = _build_candidate_block(1, candidate, {"app/views.py": "def get_doc(id): pass"}, bundle=bundle)
+    block = _build_candidate_block(
+        1, candidate, {"app/views.py": "def get_doc(id): pass"}, bundle=bundle
+    )
 
     assert "ROUTES:" not in block
     assert "MIDDLEWARE:" not in block
@@ -264,8 +276,10 @@ def test_ownership_checks_rendered() -> None:
         snippet="",
         ownership_checks=(
             OwnershipCheckInfo(
-                file="app/views.py", line=15,
-                pattern="WHERE user_id =", identifier="user_id",
+                file="app/views.py",
+                line=15,
+                pattern="WHERE user_id =",
+                identifier="user_id",
                 current_user_derived=True,
             ),
         ),
@@ -325,10 +339,10 @@ def test_bundle_empty_snippet_falls_back_to_direct_extraction() -> None:
 
     # lo = max(0, 10-4) = 6 → lines[6] = "line_7"
     # hi = min(20, 10+4) = 14 → lines[6:14] ends at lines[13] = "line_14"
-    assert "line_10" in block    # target line present
-    assert "line_7" in block     # lo boundary (lines[6])
-    assert "line_14" in block    # hi boundary (lines[13])
-    assert "line_6" not in block   # outside window
+    assert "line_10" in block  # target line present
+    assert "line_7" in block  # lo boundary (lines[6])
+    assert "line_14" in block  # hi boundary (lines[13])
+    assert "line_6" not in block  # outside window
     assert "line_15" not in block  # outside window
 
 
@@ -338,7 +352,9 @@ def test_parallelism_param_is_respected() -> None:
     mock_client.ask.return_value = "VERDICT #1: real\nCONFIDENCE #1: high\nREASON #1: SQL inject.\n"
     candidate = _make_candidate(file="db.py")
     results = verify_vuln_candidates(
-        [candidate], {"db.py": "query = f'SELECT * FROM users WHERE id={user_id}'"}, mock_client,
+        [candidate],
+        {"db.py": "query = f'SELECT * FROM users WHERE id={user_id}'"},
+        mock_client,
         keep_confidences=frozenset({"high"}),
         parallelism=1,
     )
@@ -349,13 +365,17 @@ def test_high_risk_paths_override_promotes_medium_to_blocking() -> None:
     """A medium-confidence real finding in a path on the custom list is kept as blocking."""
     mock_client = MagicMock()
     # Return medium confidence for the candidate
-    mock_client.ask.return_value = "VERDICT #1: real\nCONFIDENCE #1: medium\nREASON #1: IDOR found.\n"
+    mock_client.ask.return_value = (
+        "VERDICT #1: real\nCONFIDENCE #1: medium\nREASON #1: IDOR found.\n"
+    )
 
     candidate = _make_candidate(file="auth/login.py")
     results = verify_vuln_candidates(
-        [candidate], {"auth/login.py": "def login(): pass"}, mock_client,
-        keep_confidences=frozenset({"high"}),    # medium is NOT in the base keep set
-        high_risk_paths=["auth/"],               # but auth/ is a high-risk path → medium promoted
+        [candidate],
+        {"auth/login.py": "def login(): pass"},
+        mock_client,
+        keep_confidences=frozenset({"high"}),  # medium is NOT in the base keep set
+        high_risk_paths=["auth/"],  # but auth/ is a high-risk path → medium promoted
     )
     assert len(results) == 1
     assert results[0].verification_status.value in ("verified",)
@@ -364,14 +384,18 @@ def test_high_risk_paths_override_promotes_medium_to_blocking() -> None:
 def test_high_risk_paths_empty_list_no_promotion() -> None:
     """An empty high_risk_paths list disables path-based promotion entirely."""
     mock_client = MagicMock()
-    mock_client.ask.return_value = "VERDICT #1: real\nCONFIDENCE #1: medium\nREASON #1: IDOR found.\n"
+    mock_client.ask.return_value = (
+        "VERDICT #1: real\nCONFIDENCE #1: medium\nREASON #1: IDOR found.\n"
+    )
 
     candidate = _make_candidate(file="auth/login.py")
     results = verify_vuln_candidates(
-        [candidate], {"auth/login.py": "def login(): pass"}, mock_client,
-        keep_confidences=frozenset({"high"}),   # medium NOT in keep set
+        [candidate],
+        {"auth/login.py": "def login(): pass"},
+        mock_client,
+        keep_confidences=frozenset({"high"}),  # medium NOT in keep set
         advisory_confidences=frozenset({"medium"}),
-        high_risk_paths=[],                     # empty = no high-risk paths at all
+        high_risk_paths=[],  # empty = no high-risk paths at all
     )
     # medium not in keep → should land in advisory lane, not blocking
     assert len(results) == 1
@@ -384,7 +408,9 @@ def test_high_risk_paths_none_falls_back_to_yaml_list() -> None:
     mock_client.ask.return_value = "VERDICT #1: real\nCONFIDENCE #1: high\nREASON #1: SQLi.\n"
     candidate = _make_candidate(file="some/file.py")
     results = verify_vuln_candidates(
-        [candidate], {"some/file.py": "x = 1"}, mock_client,
+        [candidate],
+        {"some/file.py": "x = 1"},
+        mock_client,
         keep_confidences=frozenset({"high"}),
         high_risk_paths=None,
     )
@@ -406,9 +432,7 @@ def test_candidate_source_code_tags_defanged(capsys) -> None:
     files = {"evil.py": evil_content}
     candidate = _make_candidate(file="evil.py")
 
-    verify_vuln_candidates(
-        [candidate], files, mock_client, keep_confidences=frozenset({"high"})
-    )
+    verify_vuln_candidates([candidate], files, mock_client, keep_confidences=frozenset({"high"}))
 
     assert len(captured_user_message) == 1
     user_msg = captured_user_message[0]

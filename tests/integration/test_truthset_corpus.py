@@ -49,17 +49,20 @@ _MINI_REPOS = [
 
 # Upload-class repos require a lower TP threshold (0.85) because patterns are
 # framework-specific and recall takes tuning.
-_UPLOAD_REPOS: frozenset[str] = frozenset({
-    "mini-python-upload",
-    "mini-js-upload",
-    "mini-go-upload",
-    "mini-archive-upload",
-})
+_UPLOAD_REPOS: frozenset[str] = frozenset(
+    {
+        "mini-python-upload",
+        "mini-js-upload",
+        "mini-go-upload",
+        "mini-archive-upload",
+    }
+)
 
 
 # ---------------------------------------------------------------------------
 # Truth.yaml loader
 # ---------------------------------------------------------------------------
+
 
 def _load_truth(truth_yaml: Path) -> list[dict[str, Any]]:
     with truth_yaml.open() as f:
@@ -70,6 +73,7 @@ def _load_truth(truth_yaml: Path) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 # File loader
 # ---------------------------------------------------------------------------
+
 
 def _load_files(repo_dir: Path) -> dict[str, str]:
     """Load all source files from repo_dir into a flat dict."""
@@ -87,6 +91,7 @@ def _load_files(repo_dir: Path) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 # Deterministic mock Claude client
 # ---------------------------------------------------------------------------
+
 
 def _build_mock_client(truth_entries: list[dict[str, Any]]) -> MagicMock:
     """Return a mock ClaudeClient that returns canned verdicts.
@@ -150,6 +155,7 @@ def _build_mock_client(truth_entries: list[dict[str, Any]]) -> MagicMock:
     def _ask(system: str, user: str) -> str:
         # Count candidates by scanning for CANDIDATE # headers.
         import re
+
         count = len(re.findall(r"^CANDIDATE #\d+", user, re.MULTILINE))
         count = max(count, 1)
         lines = []
@@ -166,6 +172,7 @@ def _build_mock_client(truth_entries: list[dict[str, Any]]) -> MagicMock:
 # ---------------------------------------------------------------------------
 # Core runner: run pipeline against files with mock client
 # ---------------------------------------------------------------------------
+
 
 def _run_pipeline_sync(
     files: dict[str, str],
@@ -204,6 +211,7 @@ def _run_pipeline_sync(
 # Matching logic — ±3 line tolerance
 # ---------------------------------------------------------------------------
 
+
 def _matches(finding: Any, entry: dict[str, Any], tolerance: int = 3) -> bool:
     """Return True if *finding* matches *entry* within *tolerance* lines.
 
@@ -223,7 +231,7 @@ def _matches(finding: Any, entry: dict[str, Any], tolerance: int = 3) -> bool:
     entry_class = entry["class"].lower()
 
     # Direct match via uppercased vuln_class stored in vulnerability_id.
-    id_matches = (finding_vuln_id == entry_class)
+    id_matches = finding_vuln_id == entry_class
 
     # Description field contains the vuln_class name (planted by _build_mock_client).
     desc_matches = entry_class in finding.description.lower()
@@ -234,6 +242,7 @@ def _matches(finding: Any, entry: dict[str, Any], tolerance: int = 3) -> bool:
     # Check line overlap within tolerance.
     if finding.affected_lines:
         import re
+
         m = re.match(r"(\d+)(?:-(\d+))?", finding.affected_lines)
         if m:
             f_start = int(m.group(1))
@@ -247,6 +256,7 @@ def _matches(finding: Any, entry: dict[str, Any], tolerance: int = 3) -> bool:
 # ---------------------------------------------------------------------------
 # Per-repo test runner
 # ---------------------------------------------------------------------------
+
 
 def _run_corpus_repo(
     repo_name: str,
@@ -275,14 +285,16 @@ def _run_corpus_repo(
         if matched:
             tp += 1
         else:
-            misses.append({
-                "repo": repo_name,
-                "id": entry["id"],
-                "class": entry["class"],
-                "file": entry["file"],
-                "line_start": entry["line_start"],
-                "line_end": entry["line_end"],
-            })
+            misses.append(
+                {
+                    "repo": repo_name,
+                    "id": entry["id"],
+                    "class": entry["class"],
+                    "file": entry["file"],
+                    "line_start": entry["line_start"],
+                    "line_end": entry["line_end"],
+                }
+            )
 
     return tp, len(mandatory), misses
 
@@ -290,6 +302,7 @@ def _run_corpus_repo(
 # ---------------------------------------------------------------------------
 # Test: per-repo
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("repo_name", _MINI_REPOS)
 def test_mini_repo_mandatory_vulns_found(repo_name: str) -> None:
@@ -323,8 +336,7 @@ def test_mini_repo_mandatory_vulns_found(repo_name: str) -> None:
         # Upload repos use a lower threshold (0.85) — patterns are framework-specific.
         threshold = 0.85 if repo_name in _UPLOAD_REPOS else 0.97
         assert tp_rate >= threshold, (
-            f"{repo_name}: TP rate {tp_rate:.2f} < {threshold}. "
-            f"Misses: {misses}"
+            f"{repo_name}: TP rate {tp_rate:.2f} < {threshold}. Misses: {misses}"
         )
 
 
@@ -357,14 +369,13 @@ def test_dvpwa_mandatory_vulns_found() -> None:
 
     if total > 0:
         tp_rate = tp / total
-        assert tp_rate >= 0.97, (
-            f"dvpwa: TP rate {tp_rate:.2f} < 0.97. Misses: {misses}"
-        )
+        assert tp_rate >= 0.97, f"dvpwa: TP rate {tp_rate:.2f} < 0.97. Misses: {misses}"
 
 
 # ---------------------------------------------------------------------------
 # Test: per-class TP ≥ 0.97 over merged corpus
 # ---------------------------------------------------------------------------
+
 
 def test_per_class_tp_over_merged_corpus() -> None:
     """Per-class TP must be ≥ 0.97 across all mini-repos merged."""
@@ -391,13 +402,15 @@ def test_per_class_tp_over_merged_corpus() -> None:
             if matched:
                 class_tp[entry["class"]] += 1
             else:
-                all_misses.append({
-                    "repo": repo_name,
-                    "id": entry["id"],
-                    "class": entry["class"],
-                    "file": entry["file"],
-                    "line_start": entry["line_start"],
-                })
+                all_misses.append(
+                    {
+                        "repo": repo_name,
+                        "id": entry["id"],
+                        "class": entry["class"],
+                        "file": entry["file"],
+                        "line_start": entry["line_start"],
+                    }
+                )
 
     # Save misses.
     _DATA_DIR.mkdir(exist_ok=True)
@@ -425,6 +438,5 @@ def test_per_class_tp_over_merged_corpus() -> None:
             )
 
     assert not failures, (
-        f"Per-class TP below threshold for: {failures}. "
-        "See tests/integration/data/misses.json"
+        f"Per-class TP below threshold for: {failures}. See tests/integration/data/misses.json"
     )

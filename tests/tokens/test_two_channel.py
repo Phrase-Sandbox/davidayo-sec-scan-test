@@ -35,6 +35,7 @@ from security_scanner.tokens.models import (
 # Fernet crypto
 # ---------------------------------------------------------------------------
 
+
 def _make_settings(key: str | None):
     """Return a minimal settings-like mock with SCANNER_ENCRYPTION_KEY set."""
     s = MagicMock()
@@ -108,16 +109,17 @@ def test_invalid_fernet_key_raises_on_encrypt():
 
 async def test_expired_token_returns_expired_outcome(session: AsyncSession):
     """A token whose expires_at is in the past → verify() → 'expired'."""
-    issued = await registry.issue_or_rotate_for_user(
-        session, user_email="expired@phrase.com"
-    )
+    issued = await registry.issue_or_rotate_for_user(session, user_email="expired@phrase.com")
     # Backdate the expires_at to 31 days ago.
     from sqlalchemy import select
 
     from security_scanner.tokens.models import LocalScanToken
-    row = (await session.execute(
-        select(LocalScanToken).where(LocalScanToken.token_id == issued.token_id)
-    )).scalar_one()
+
+    row = (
+        await session.execute(
+            select(LocalScanToken).where(LocalScanToken.token_id == issued.token_id)
+        )
+    ).scalar_one()
     row.expires_at = datetime.now(UTC) - timedelta(days=31)
     await session.flush()
 
@@ -128,9 +130,7 @@ async def test_expired_token_returns_expired_outcome(session: AsyncSession):
 
 async def test_non_expired_token_verifies_ok(session: AsyncSession):
     """A token with expires_at in the future verifies successfully."""
-    issued = await registry.issue_or_rotate_for_user(
-        session, user_email="fresh@phrase.com"
-    )
+    issued = await registry.issue_or_rotate_for_user(session, user_email="fresh@phrase.com")
     result = await registry.verify(session, issued.full_token)
     assert result.outcome == "ok"
 
@@ -144,15 +144,13 @@ async def test_deactivated_user_returns_deactivated_outcome(session: AsyncSessio
     """A valid token for a deactivated user → verify() → 'deactivated'."""
     # Upsert user, then issue token.
     await registry.upsert_user(session, email="gone@phrase.com")
-    issued = await registry.issue_or_rotate_for_user(
-        session, user_email="gone@phrase.com"
-    )
+    issued = await registry.issue_or_rotate_for_user(session, user_email="gone@phrase.com")
     await session.flush()
 
     # Deactivate the user.
-    user_row = (await session.execute(
-        select(User).where(User.email == "gone@phrase.com")
-    )).scalar_one()
+    user_row = (
+        await session.execute(select(User).where(User.email == "gone@phrase.com"))
+    ).scalar_one()
     user_row.is_active = False
     await session.flush()
 
@@ -164,13 +162,11 @@ async def test_deactivated_user_returns_deactivated_outcome(session: AsyncSessio
 async def test_reactivated_user_verifies_ok(session: AsyncSession):
     """A reactivated user's token verifies successfully."""
     await registry.upsert_user(session, email="back@phrase.com")
-    issued = await registry.issue_or_rotate_for_user(
-        session, user_email="back@phrase.com"
-    )
+    issued = await registry.issue_or_rotate_for_user(session, user_email="back@phrase.com")
     # Deactivate then reactivate.
-    user_row = (await session.execute(
-        select(User).where(User.email == "back@phrase.com")
-    )).scalar_one()
+    user_row = (
+        await session.execute(select(User).where(User.email == "back@phrase.com"))
+    ).scalar_one()
     user_row.is_active = False
     await session.flush()
     user_row.is_active = True
@@ -275,12 +271,12 @@ async def test_scan_record_and_usage_inserted(session: AsyncSession):
     session.add(usage)
     await session.flush()
 
-    fetched_rec = (await session.execute(
-        select(ScanRecord).where(ScanRecord.scan_id == scan_id)
-    )).scalar_one()
-    fetched_usage = (await session.execute(
-        select(ScanUsage).where(ScanUsage.scan_id == scan_id)
-    )).scalar_one()
+    fetched_rec = (
+        await session.execute(select(ScanRecord).where(ScanRecord.scan_id == scan_id))
+    ).scalar_one()
+    fetched_usage = (
+        await session.execute(select(ScanUsage).where(ScanUsage.scan_id == scan_id))
+    ).scalar_one()
 
     assert fetched_rec.findings_count == 3
     assert fetched_rec.critical == 1
@@ -307,11 +303,13 @@ async def test_llm_usage_monthly_upsert(session: AsyncSession):
     session.add(row)
     await session.flush()
 
-    fetched = (await session.execute(
-        select(LLMUsageMonthly)
-        .where(LLMUsageMonthly.user_email == "dev@phrase.com")
-        .where(LLMUsageMonthly.year_month == "2026-05")
-    )).scalar_one()
+    fetched = (
+        await session.execute(
+            select(LLMUsageMonthly)
+            .where(LLMUsageMonthly.user_email == "dev@phrase.com")
+            .where(LLMUsageMonthly.year_month == "2026-05")
+        )
+    ).scalar_one()
 
     assert fetched.input_tokens == 50_000
     assert fetched.scan_count == 3
@@ -360,16 +358,16 @@ async def test_ci_token_rotation_marks_old_revoked(session: AsyncSession):
     await session.flush()
 
     # Active token = MAX(id) WHERE revoked_at IS NULL
-    active = (await session.execute(
-        select(CIToken).where(CIToken.revoked_at.is_(None)).order_by(CIToken.id.desc()).limit(1)
-    )).scalar_one()
+    active = (
+        await session.execute(
+            select(CIToken).where(CIToken.revoked_at.is_(None)).order_by(CIToken.id.desc()).limit(1)
+        )
+    ).scalar_one()
     assert active.id > id1
     assert active.token_hash == h2
 
     # Old token should be revoked.
-    old = (await session.execute(
-        select(CIToken).where(CIToken.id == id1)
-    )).scalar_one()
+    old = (await session.execute(select(CIToken).where(CIToken.id == id1))).scalar_one()
     assert old.revoked_at is not None
 
 
@@ -380,9 +378,7 @@ async def test_ci_token_rotation_marks_old_revoked(session: AsyncSession):
 
 async def test_upsert_user_creates_then_updates(session: AsyncSession):
     """upsert_user creates on first call; updates last_login_at on subsequent calls."""
-    user = await registry.upsert_user(
-        session, email="new@phrase.com", is_admin=False
-    )
+    user = await registry.upsert_user(session, email="new@phrase.com", is_admin=False)
     assert user.email == "new@phrase.com"
     assert user.role == UserRole.user
     assert user.is_active is True
@@ -390,6 +386,7 @@ async def test_upsert_user_creates_then_updates(session: AsyncSession):
     # Second call should update last_login_at.
     first_login = user.last_login_at
     import asyncio
+
     await asyncio.sleep(0.01)
     user2 = await registry.upsert_user(session, email="new@phrase.com")
     assert user2.last_login_at >= first_login  # type: ignore[operator]

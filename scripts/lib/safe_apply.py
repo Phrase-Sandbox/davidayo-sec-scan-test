@@ -281,9 +281,7 @@ _DEFAULT_MAX_CHANGED = int(os.environ.get("FIX_MAX_CHANGED_LINES") or 20)
 # persistent security branch (D-14). Reports are numbered, never overwritten:
 # SECURITY-REVIEW.<n>.md + security-scan-report.<n>.json, n incrementing.
 _FINDINGS_DIR = "security_findings"
-_REVIEW_INDEX_RE = re.compile(
-    r"^(?:SECURITY-REVIEW|security-scan-report)\.(\d+)\.(?:md|json)$"
-)
+_REVIEW_INDEX_RE = re.compile(r"^(?:SECURITY-REVIEW|security-scan-report)\.(\d+)\.(?:md|json)$")
 
 
 def extract_code_block(text: str | None) -> str | None:
@@ -500,8 +498,7 @@ def classify_and_apply(
         n_changed = changed_line_count(rng[0], rng[1], code)
         if n_changed > max_changed:
             manual.append(
-                f"{loc} ({vid}) — fix too large "
-                f"({n_changed} lines > {max_changed}), manual review"
+                f"{loc} ({vid}) — fix too large ({n_changed} lines > {max_changed}), manual review"
             )
             continue
 
@@ -516,13 +513,13 @@ def classify_and_apply(
             lines = fh.read().splitlines(keepends=True)
         n = len(lines)
         ok = [(s, e, c, v, lo, rk) for (s, e, c, v, lo, rk) in lst if 1 <= s <= e <= n]
-        for (s, e, _c, v, lo, _rk) in lst:
+        for s, e, _c, v, lo, _rk in lst:
             if not (1 <= s <= e <= n):
                 manual.append(f"{lo} ({v}) — line range out of bounds")
         is_py = abspath.endswith(".py")
         changed = False
         # Bottom-to-top so earlier line numbers stay valid as we splice.
-        for (s, e, c, v, lo, rk) in sorted(ok, key=lambda t: t[0], reverse=True):
+        for s, e, c, v, lo, rk in sorted(ok, key=lambda t: t[0], reverse=True):
             old_seg = "".join(lines[s - 1 : e])
             note = rk
             # 5. Protected variable. Strict: hard-route. Human-review: keep
@@ -530,9 +527,7 @@ def classify_and_apply(
             pv = touches_protected_variable(old_seg, c)
             if pv:
                 if not propose_all:
-                    manual.append(
-                        f"{lo} ({v}) — touches protected variable {pv}, suggest only"
-                    )
+                    manual.append(f"{lo} ({v}) — touches protected variable {pv}, suggest only")
                     continue
                 note = "; ".join(x for x in (note, f"touches {pv}") if x)
             # 6. Regression blocker (introduced-only) — FLOOR, both postures.

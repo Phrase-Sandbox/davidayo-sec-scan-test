@@ -42,6 +42,7 @@ def handler(user_id):
 # Tests
 # ---------------------------------------------------------------------------
 
+
 def test_finds_db_callees():
     callees = find_callees(SNIPPET_WITH_DB)
     kinds = {c.kind for c in callees}

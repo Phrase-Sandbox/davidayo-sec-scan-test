@@ -122,9 +122,7 @@ async def verify(session: AsyncSession, provided: str) -> VerifyResult:
         # Either no such token_id, or the only matching row is revoked.
         # Disambiguate so the audit log distinguishes "never existed" from
         # "previously valid but revoked".
-        revoked_stmt = (
-            select(LocalScanToken).where(LocalScanToken.token_id == token_id).limit(1)
-        )
+        revoked_stmt = select(LocalScanToken).where(LocalScanToken.token_id == token_id).limit(1)
         revoked = (await session.execute(revoked_stmt)).scalar_one_or_none()
         if revoked is None:
             return VerifyResult(outcome="unknown_token", token_id=token_id)
@@ -373,9 +371,7 @@ async def revoke_by_token_id(
 # --- Read paths --------------------------------------------------------------
 
 
-async def get_active_for_user(
-    session: AsyncSession, *, user_email: str
-) -> LocalScanToken | None:
+async def get_active_for_user(session: AsyncSession, *, user_email: str) -> LocalScanToken | None:
     stmt = (
         select(LocalScanToken)
         .where(LocalScanToken.user_email == user_email)

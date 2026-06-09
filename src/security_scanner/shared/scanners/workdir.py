@@ -23,8 +23,8 @@ from security_scanner.shared.logging_util import get_logger
 
 log = get_logger(__name__)
 
-_PER_FILE_CAP = 2 * 1024 * 1024       # 2 MB
-_PER_SCAN_CAP = 200 * 1024 * 1024     # 200 MB
+_PER_FILE_CAP = 2 * 1024 * 1024  # 2 MB
+_PER_SCAN_CAP = 200 * 1024 * 1024  # 200 MB
 
 
 class WorkspaceError(ValueError):
@@ -47,9 +47,7 @@ class ScannerWorkspace:
         self._bytes_written = 0
 
     async def __aenter__(self) -> ScannerWorkspace:
-        self._root = Path(
-            tempfile.mkdtemp(prefix=f"sec-scan-{self._scan_id}-")
-        ).resolve()
+        self._root = Path(tempfile.mkdtemp(prefix=f"sec-scan-{self._scan_id}-")).resolve()
         self._bytes_written = 0
         log.debug("workspace created", root=str(self._root), scan_id=self._scan_id)
         return self

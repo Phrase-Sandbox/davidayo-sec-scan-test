@@ -17,6 +17,7 @@ from security_scanner.shared.verification.vulns import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _candidate(
     file: str = "app/views.py",
     vuln_class: str = "idor",
@@ -37,9 +38,7 @@ def _mock_client_response(verdict: str, confidence: str) -> MagicMock:
     """Return a mock ClaudeClient that always returns a single-verdict response."""
     client = MagicMock()
     client.ask.return_value = (
-        f"VERDICT #1: {verdict}\n"
-        f"CONFIDENCE #1: {confidence}\n"
-        f"REASON #1: Test reason.\n"
+        f"VERDICT #1: {verdict}\nCONFIDENCE #1: {confidence}\nREASON #1: Test reason.\n"
     )
     return client
 
@@ -48,6 +47,7 @@ def _mock_client_response(verdict: str, confidence: str) -> MagicMock:
 # Tests: advisory_real lane
 # ---------------------------------------------------------------------------
 
+
 def test_real_medium_becomes_advisory_real():
     """real+medium verdict → kept as advisory_real (non-blocking)."""
     candidates = [_candidate()]
@@ -55,7 +55,9 @@ def test_real_medium_becomes_advisory_real():
     client = _mock_client_response("real", "medium")
 
     results = _verify_batch(
-        candidates, files, client,
+        candidates,
+        files,
+        client,
         keep_confidences=frozenset({"high"}),
         advisory_confidences=frozenset({"medium"}),
     )
@@ -108,7 +110,9 @@ def test_real_high_becomes_verified():
     client = _mock_client_response("real", "high")
 
     results = _verify_batch(
-        candidates, files, client,
+        candidates,
+        files,
+        client,
         keep_confidences=frozenset({"high"}),
         advisory_confidences=frozenset({"medium"}),
     )
@@ -123,7 +127,9 @@ def test_false_positive_dropped():
     client = _mock_client_response("false_positive", "high")
 
     results = _verify_batch(
-        candidates, files, client,
+        candidates,
+        files,
+        client,
         keep_confidences=frozenset({"high"}),
         advisory_confidences=frozenset({"medium"}),
     )
@@ -137,7 +143,9 @@ def test_real_low_dropped_on_normal_path():
     client = _mock_client_response("real", "low")
 
     results = _verify_batch(
-        candidates, files, client,
+        candidates,
+        files,
+        client,
         keep_confidences=frozenset({"high"}),
         advisory_confidences=frozenset({"medium"}),
     )
@@ -155,7 +163,9 @@ def test_verify_vuln_candidates_returns_advisory_real():
     client = _mock_client_response("real", "medium")
 
     results = verify_vuln_candidates(
-        candidates, files, client,
+        candidates,
+        files,
+        client,
         keep_confidences=frozenset({"high"}),
         advisory_confidences=frozenset({"medium"}),
     )

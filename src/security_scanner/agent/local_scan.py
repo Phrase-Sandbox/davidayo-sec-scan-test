@@ -69,6 +69,7 @@ router = APIRouter(prefix="/scan", tags=["local-scan"])
 
 _REPO_URL_RE = re.compile(r"^https://github\.com/[^/\s]+/[^/\s]+?(\.git)?/?$")
 
+
 def _read_max_concurrent_scans(default: int = 4) -> int:
     """Per-process concurrent-scan cap, tunable via ``MAX_CONCURRENT_SCANS``.
 
@@ -145,12 +146,9 @@ def _detail_for_outcome(outcome: str) -> str:
         "revoked": "Token has been revoked. Issue a new one at /portal/.",
         "bad_signature": _REGISTRY_AUTH_FAILURE,
         "expired": (
-            "Your scanner token has expired (30-day TTL). "
-            "Visit /portal/ to re-issue a new one."
+            "Your scanner token has expired (30-day TTL). Visit /portal/ to re-issue a new one."
         ),
-        "deactivated": (
-            "Your account has been deactivated. Contact your administrator."
-        ),
+        "deactivated": ("Your account has been deactivated. Contact your administrator."),
     }.get(outcome, _REGISTRY_AUTH_FAILURE)
 
 
@@ -285,6 +283,7 @@ async def _load_user_llm_settings(user_email: str) -> UserLLMSettings:
         No settings row found — user must visit /portal/settings first.
     """
     from sqlalchemy import select  # local import — keeps module-level imports tight
+
     factory = get_session_factory()
     async with factory() as session:
         stmt = select(UserLLMSettings).where(UserLLMSettings.user_email == user_email)
@@ -323,7 +322,6 @@ async def _persist_scan_data(
         return
 
     from datetime import UTC, datetime  # noqa: PLC0415 — local to keep module clean
-
 
     factory = get_session_factory()
     now = datetime.now(UTC)
@@ -376,6 +374,7 @@ async def _persist_scan_data(
             # SQLAlchemy Core upsert for "ON CONFLICT DO UPDATE".
             # Falls back to a simple select+update+insert on SQLite (tests).
             from sqlalchemy import select as sa_select  # noqa: PLC0415
+
             stmt = sa_select(LLMUsageMonthly).where(
                 LLMUsageMonthly.user_email == user_email,
                 LLMUsageMonthly.year_month == year_month,
@@ -511,7 +510,7 @@ async def scan_local(
     # if the user has not yet visited /portal/settings.
     settings_row = await _load_user_llm_settings(caller.user_email)
     api_key = crypto.decrypt(settings_row.encrypted_api_key)
-    provider_name = settings_row.provider.value   # "anthropic" | "google"
+    provider_name = settings_row.provider.value  # "anthropic" | "google"
 
     # Model is admin-controlled: read from the active OrgSettings row so all
     # users (CLI + CI) get a consistent model regardless of their individual
@@ -566,8 +565,8 @@ async def scan_local(
             return LocalScanResponse(
                 markdown=f"# Security Scan Report\n\n> {oversize_msg}\n",
                 html=(
-                    "<!DOCTYPE html>\n<html lang=\"en\"><head>"
-                    "<meta charset=\"utf-8\"><title>Security Scan Report</title>"
+                    '<!DOCTYPE html>\n<html lang="en"><head>'
+                    '<meta charset="utf-8"><title>Security Scan Report</title>'
                     "</head><body><h1>Security Scan Report</h1>"
                     f"<p>{escape(oversize_msg)}</p></body></html>\n"
                 ),
@@ -596,9 +595,7 @@ async def scan_local(
 
         # BYO-key channel: ALWAYS loud-fail on LLM unavailability.
         # The user's personal key is exhausted or broken; they need to know.
-        llm_unavailable = any(
-            w.startswith("LLM upstream unavailable") for w in result.warnings
-        )
+        llm_unavailable = any(w.startswith("LLM upstream unavailable") for w in result.warnings)
         if llm_unavailable:
             reason = next(
                 (w for w in result.warnings if w.startswith("LLM upstream unavailable")),

@@ -15,7 +15,7 @@ from typing import NamedTuple
 
 
 class _Match(NamedTuple):
-    line: int       # 1-based
+    line: int  # 1-based
     method: str
     path: str
     handler: str
@@ -113,25 +113,37 @@ def extract_aiohttp_routes(filename: str, content: str) -> list[_Match]:
     for i, line in enumerate(lines):
         m = _AIOHTTP_ADD_ROUTE_RE.search(line)
         if m:
-            results.append(_Match(
-                line=i + 1, method=m.group(1).upper(),
-                path=m.group(2), handler=m.group(3),
-            ))
+            results.append(
+                _Match(
+                    line=i + 1,
+                    method=m.group(1).upper(),
+                    path=m.group(2),
+                    handler=m.group(3),
+                )
+            )
             continue
         m = _AIOHTTP_METHOD_RE.search(line)
         if m:
-            results.append(_Match(
-                line=i + 1, method=m.group(1).upper(),
-                path=m.group(2), handler=m.group(3),
-            ))
+            results.append(
+                _Match(
+                    line=i + 1,
+                    method=m.group(1).upper(),
+                    path=m.group(2),
+                    handler=m.group(3),
+                )
+            )
             continue
         m = _AIOHTTP_TABLE_RE.search(line)
         if m:
             handler = _next_function_name(lines, i + 1)
-            results.append(_Match(
-                line=i + 1, method=m.group(1).upper(),
-                path=m.group(2), handler=handler,
-            ))
+            results.append(
+                _Match(
+                    line=i + 1,
+                    method=m.group(1).upper(),
+                    path=m.group(2),
+                    handler=handler,
+                )
+            )
     return results
 
 
@@ -178,7 +190,7 @@ def extract_express_routes(filename: str, content: str) -> list[_Match]:
         method = m.group(1).upper()
         path = m.group(2)
         # Try to grab handler name from same line
-        fn_m = _JS_FUNC_ARG_RE.search(line[m.end():])
+        fn_m = _JS_FUNC_ARG_RE.search(line[m.end() :])
         handler = fn_m.group(1) if fn_m else "<anonymous>"
         results.append(_Match(line=i + 1, method=method, path=path, handler=handler))
     return results
@@ -200,16 +212,21 @@ def extract_gin_routes(filename: str, content: str) -> list[_Match]:
         m = _GIN_ROUTE_RE.search(line)
         if not m:
             continue
-        results.append(_Match(
-            line=i + 1, method=m.group(1).upper(),
-            path=m.group(2), handler=m.group(3),
-        ))
+        results.append(
+            _Match(
+                line=i + 1,
+                method=m.group(1).upper(),
+                path=m.group(2),
+                handler=m.group(3),
+            )
+        )
     return results
 
 
 # ---------------------------------------------------------------------------
 # Dispatcher: pick extractors by filename extension.
 # ---------------------------------------------------------------------------
+
 
 def extract_routes(filename: str, content: str) -> list[_Match]:
     """Auto-detect framework and extract routes from *content*.

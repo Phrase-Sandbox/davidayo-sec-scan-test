@@ -25,9 +25,7 @@ from security_scanner.shared.scanners.models import AggregatedCandidate, Scanner
 _OVERLAP_TOLERANCE = 2
 
 
-def _lines_overlap(
-    a_start: int, a_end: int, b_start: int, b_end: int
-) -> bool:
+def _lines_overlap(a_start: int, a_end: int, b_start: int, b_end: int) -> bool:
     """Return True if the two line ranges overlap within ±OVERLAP_TOLERANCE."""
     # Overlap: max(starts) <= min(ends) + tolerance
     return max(a_start, b_start) <= min(a_end, b_end) + _OVERLAP_TOLERANCE

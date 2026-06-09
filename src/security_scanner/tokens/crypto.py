@@ -38,8 +38,8 @@ def _fernet_for(key: str) -> Fernet:
         raise EncryptionKeyInvalid(
             "SCANNER_ENCRYPTION_KEY is set but is not a valid Fernet key "
             "(must be urlsafe-base64-encoded 32 bytes). Generate one with: "
-            "python -c \"from cryptography.fernet import Fernet; "
-            "print(Fernet.generate_key().decode())\""
+            'python -c "from cryptography.fernet import Fernet; '
+            'print(Fernet.generate_key().decode())"'
         ) from exc
 
 

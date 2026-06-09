@@ -71,9 +71,7 @@ class _JwksCache:
                     self._fetched_at = now
                 except Exception as exc:
                     if not self._keys:
-                        raise OidcVerificationError(
-                            f"unable to fetch JWKS: {exc}"
-                        ) from exc
+                        raise OidcVerificationError(f"unable to fetch JWKS: {exc}") from exc
                     # else: fall back to last-known keys
             key = self._keys.get(kid)
             if key is None:
@@ -156,9 +154,7 @@ def verify_github_oidc(
     if allowed_workflow_refs and not any(
         workflow_ref.startswith(prefix) for prefix in allowed_workflow_refs
     ):
-        raise OidcVerificationError(
-            f"workflow_ref {workflow_ref!r} not in allowlist"
-        )
+        raise OidcVerificationError(f"workflow_ref {workflow_ref!r} not in allowlist")
 
     repository = claims.get("repository")
     run_id = claims.get("run_id") or claims.get("runner_id") or ""
