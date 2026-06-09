@@ -46,6 +46,7 @@ services:
       - PORT=8000
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-test-key-placeholder}
       - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-6}
+      - CLAUDE_MAX_TOKENS=${CLAUDE_MAX_TOKENS:-16384}
       - CLAUDE_TIMEOUT_SECONDS=${CLAUDE_TIMEOUT_SECONDS:-180}
       # Provider switch: default anthropic; set to "google" to use Gemini server-side.
       - SCANNER_LLM_PROVIDER=${SCANNER_LLM_PROVIDER:-anthropic}

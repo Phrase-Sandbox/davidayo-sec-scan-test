@@ -54,6 +54,8 @@ env:
     value: "security-scanner-admins"
   - name: ENABLE_MULTI_SCANNER
     value: "true"
+  - name: CLAUDE_MAX_TOKENS
+    value: "8192"
   - name: GITHUB_OIDC_ENABLED
     value: "true"
   - name: GITHUB_OIDC_AUDIENCE

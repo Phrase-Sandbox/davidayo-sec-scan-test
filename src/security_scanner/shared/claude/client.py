@@ -48,10 +48,10 @@ log = get_logger(__name__)
 DEFAULT_MODEL = os.getenv("CLAUDE_MODEL") or "claude-sonnet-4-20250514"
 # Max output tokens for the findings JSON. If the model's reply exceeds this
 # it is truncated mid-JSON and the scan fails to parse (scan_failed).
-# CLAUDE_MAX_TOKENS is an optional override for local simulation, where a
-# vulnerable demo repo can yield more findings than fit in the spec default.
-# Unset (production / Phrase) keeps 4096 — production behaviour is unchanged.
-DEFAULT_MAX_TOKENS = int(os.getenv("CLAUDE_MAX_TOKENS") or 4096)
+# 8192 is the safe default: repos with 15+ findings per chunk no longer
+# truncate. CLAUDE_MAX_TOKENS overrides (set to 16384 in docker-compose
+# to match GEMINI_MAX_TOKENS for large CLAUDE_CHUNK_SIZE=48 batches).
+DEFAULT_MAX_TOKENS = int(os.getenv("CLAUDE_MAX_TOKENS") or 8192)
 # Spec §5 EC-004 mandates a 30 s per-request timeout against Phrase's
 # provisioned Enterprise Claude throughput. CLAUDE_TIMEOUT_SECONDS is an
 # optional override for local simulation, where a personal API key is slower
