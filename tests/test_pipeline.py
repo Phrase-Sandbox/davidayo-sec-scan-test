@@ -565,3 +565,66 @@ def test_scan_result_serialises_to_json():
     data = json.loads(result.model_dump_json())
     assert data["findings_count"] >= 1
     assert "gate_decision" in data
+
+
+# --- _load_active_scanner_settings -------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_load_active_scanner_settings_returns_none_without_db():
+    """Returns None gracefully when DATABASE_URL is not configured."""
+    from security_scanner.pipeline import _load_active_scanner_settings
+
+    result = await _load_active_scanner_settings()
+    assert result is None
+
+
+def test_pipeline_uses_scanner_settings_from_db():
+    """When _load_active_scanner_settings returns a settings row, it is wired
+    through to run_layer1 and verify_vuln_candidates."""
+    from datetime import UTC, datetime
+    from unittest.mock import AsyncMock, patch as _patch
+
+    from security_scanner.tokens.models import ScannerSettings
+
+    sc = ScannerSettings(
+        keep_confidences="high",
+        advisory_confidences="medium",
+        enable_semgrep=True,
+        enable_bandit=False,
+        enable_gosec=False,
+        enable_eslint=False,
+        semgrep_owasp=True,
+        semgrep_audit=False,
+        semgrep_upload=False,
+        vuln_verifier_parallelism=1,
+        high_risk_paths="auth/\n",
+        updated_at=datetime.now(UTC),
+        updated_by_email="admin@phrase.com",
+    )
+
+    files = {"src/app.py": "x = 1\n"}
+    github = _gh(files)
+    claude = _claude([])
+
+    run_layer1_calls: list[dict] = []
+
+    async def capturing_run_layer1(f, scan_id, *, enabled_adapters=None, semgrep_rules=None):
+        run_layer1_calls.append({"enabled_adapters": enabled_adapters, "semgrep_rules": semgrep_rules})
+        return []
+
+    with _patch("security_scanner.pipeline._load_active_scanner_settings", AsyncMock(return_value=sc)), \
+         _patch("security_scanner.pipeline.run_layer1", capturing_run_layer1):
+        _run(
+            ScanPipeline(github, claude, mode=ScanType.deployment_gate),
+            repo_url=_REPO,
+            scan_target=ScanTarget.full_repo,
+            triggered_by="alice@phrase.com",
+        )
+
+    assert len(run_layer1_calls) == 1
+    call = run_layer1_calls[0]
+    # Only semgrep enabled
+    assert call["enabled_adapters"] == {"semgrep"}
+    # Only owasp rule pack
+    assert call["semgrep_rules"] == {"owasp"}
