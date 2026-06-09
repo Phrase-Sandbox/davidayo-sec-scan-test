@@ -311,8 +311,13 @@ def test_empty_files_rejected(client, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_agent_scan_failed_returns_502(client, mock_pipeline):
-    """Same error surfacing on the CI gate endpoint."""
+def test_agent_scan_failed_streams_body(client, mock_pipeline):
+    """scan_failed is returned as HTTP 200 with gate_decision in the body.
+
+    The endpoint streams heartbeat newlines while the scan runs, so it cannot
+    return HTTP 502 after headers are sent.  evaluate-findings reads
+    gate_decision from the JSON body and fails the CI job instead.
+    """
     mock_pipeline.run.return_value = _result(
         [],
         gate_decision=GateDecision.scan_failed,
@@ -327,9 +332,10 @@ def test_agent_scan_failed_returns_502(client, mock_pipeline):
         },
         headers={"Authorization": f"Bearer {_CI_TOKEN}"},
     )
-    assert r.status_code == 502
-    detail = r.json()["detail"]
-    assert detail["error"] == "scanner_upstream_error"
+    assert r.status_code == 200
+    body = r.json()
+    assert body["gate_decision"] == "scan_failed"
+    assert "Claude response could not be parsed" in body["warnings"][0]
 
 
 # ---------------------------------------------------------------------------

@@ -13,11 +13,14 @@ only non-200 responses.
 
 from __future__ import annotations
 
+import asyncio
 import re
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from security_scanner.agent.auth import verify_scan_token
@@ -219,13 +222,13 @@ async def _persist_ci_scan(result: ScanResult, started_at: datetime) -> None:
         await session.commit()
 
 
-@router.post("/scan", response_model=ScanResult)
+@router.post("/scan")
 async def scan(
     body: ScanRequest,
     _token: _TokenDep,
     pipeline: _PipelineDep,
     settings: _SettingsDep,
-) -> ScanResult:
+) -> StreamingResponse:
     if not _REPO_URL_RE.match(body.repo_url):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -234,8 +237,6 @@ async def scan(
                 f"(got {body.repo_url!r})"
             ),
         )
-
-    started_at = datetime.now(UTC)
 
     # When provider_choice is sent, reload org_settings and rebuild the pipeline
     # for this scan only using the requested provider.  The injected `pipeline`
@@ -259,49 +260,62 @@ async def scan(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=str(exc),
             ) from exc
-        # Reuse the GitHub client + mode the injected pipeline was built with.
         pipeline = ScanPipeline(
             pipeline._github, llm_client, mode=pipeline._mode
         )
 
-    try:
-        result = await pipeline.run(
-            repo_url=body.repo_url,
-            scan_target=body.scan_target,
-            triggered_by=body.triggered_by,
-            ref=body.ref,
-            base=body.base,
-            head=body.head,
-            directory=body.directory,
-            prefetched_files=body.files,
-        )
-    except TokenLimitError as exc:
-        log.warning(
-            "token-limit exceeded — BR-005 advisory fallback",
-            estimated_tokens=exc.estimated_tokens,
-            threshold=exc.threshold,
-        )
-        return _token_limit_advisory(body, exc)
+    started_at = datetime.now(UTC)
 
-    # Surface mid-scan LLM parse failures as 502 rather than letting the
-    # caller (CI) interpret a scan_failed result + 0 findings as "clean".
-    if result.gate_decision == GateDecision.scan_failed:
-        reason = result.warnings[0] if result.warnings else "scanner upstream error"
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={
-                "error": "scanner_upstream_error",
-                "message": str(reason),
-                "scan_id": str(result.scan_id),
-            },
+    async def _body() -> AsyncIterator[bytes]:
+        # Run the scan as a task so we can yield heartbeat newlines while it
+        # runs.  APISIX's read-idle timeout fires on silence; periodic \n bytes
+        # prevent it without changing any platform config.
+        task: asyncio.Task[ScanResult] = asyncio.create_task(
+            pipeline.run(
+                repo_url=body.repo_url,
+                scan_target=body.scan_target,
+                triggered_by=body.triggered_by,
+                ref=body.ref,
+                base=body.base,
+                head=body.head,
+                directory=body.directory,
+                prefetched_files=body.files,
+            )
         )
 
-    try:
-        await _persist_ci_scan(result, started_at)
-    except Exception:
-        log.error("failed to persist ci_scan_record", scan_id=result.scan_id)
+        while not task.done():
+            done, _ = await asyncio.wait({task}, timeout=20)
+            if not done:
+                yield b"\n"
 
-    return result
+        try:
+            result = task.result()
+        except TokenLimitError as exc:
+            log.warning(
+                "token-limit exceeded — BR-005 advisory fallback",
+                estimated_tokens=exc.estimated_tokens,
+                threshold=exc.threshold,
+            )
+            result = _token_limit_advisory(body, exc)
+        except Exception as exc:
+            log.error("unexpected pipeline error", exc_info=True)
+            result = _scan_failed_result(body, str(exc))
+
+        if result.gate_decision == GateDecision.scan_failed:
+            # Cannot return HTTP 502 once streaming has started — embed the
+            # error in the body.  evaluate-findings treats scan_failed as a
+            # pipeline error and fails the CI job.
+            reason = result.warnings[0] if result.warnings else "scanner upstream error"
+            log.warning("scan_failed streamed in body", reason=reason, scan_id=result.scan_id)
+        else:
+            try:
+                await _persist_ci_scan(result, started_at)
+            except Exception:
+                log.error("failed to persist ci_scan_record", scan_id=result.scan_id)
+
+        yield result.model_dump_json().encode()
+
+    return StreamingResponse(_body(), media_type="application/json")
 
 
 class SlackConfigResponse(BaseModel):
@@ -399,6 +413,22 @@ async def bypass(body: BypassRequest, _token: _TokenDep) -> ScanResult:
     )
     return bypassed
 
+
+
+def _scan_failed_result(body: ScanRequest, reason: str) -> ScanResult:
+    """Wrap an unexpected pipeline exception as a scan_failed ScanResult."""
+    return ScanResult(
+        repo_url=body.repo_url,
+        scan_target=body.scan_target,
+        scan_type=ScanType.deployment_gate,
+        triggered_by=body.triggered_by,
+        findings_count=0,
+        gate_decision=GateDecision.scan_failed,
+        partial_scan=False,
+        unscanned_files=[],
+        findings=[],
+        warnings=[reason],
+    )
 
 
 def _token_limit_advisory(body: ScanRequest, exc: TokenLimitError) -> ScanResult:
