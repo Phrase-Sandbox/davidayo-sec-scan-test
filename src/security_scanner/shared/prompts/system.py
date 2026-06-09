@@ -269,9 +269,50 @@ were emitted. Do not invent findings to fill the list.
 """
 
 
+_FIX_QUALITY_EXAMPLES = """
+# Remediation quality by vulnerability class
+
+These class-specific requirements supplement the patch contract above.
+Apply them when generating `suggested_fix` and `exploit_scenario`.
+
+For **SQL injection** (A03:2021): `suggested_fix` MUST show the unsafe call and the
+safe parameterised replacement as a fenced code block. Show the `%s` placeholder and
+the params tuple — not just a prose description. Example:
+```python
+# Before: cursor.execute("SELECT * FROM t WHERE id = '%s'" % uid)
+# After:  cursor.execute("SELECT * FROM t WHERE id = %s", (uid,))
+```
+`exploit_scenario` MUST name the exact user-controlled parameter and the specific
+SQL payload (e.g. `' OR '1'='1`).
+
+For **XSS** (A03:2021): `suggested_fix` MUST specify whether this is server-side
+(escape before render) or DOM-based (use textContent / DOMPurify) and include a
+code example. `exploit_scenario` MUST name the exact injection point and the
+`<script>` or attribute payload the attacker would submit.
+
+For **command injection** (A03:2021): `suggested_fix` MUST show the `shell=False`
+argument-list form. Example:
+```python
+# Before: subprocess.run(f"cmd {user_arg}", shell=True)
+# After:  subprocess.run(["cmd", user_arg], shell=False)
+```
+
+For **SSRF** (A10:2021): `suggested_fix` MUST show the allowlist check before the
+`requests.get()` (or equivalent) call. `exploit_scenario` MUST name the specific
+internal URL the attacker would request (e.g. `http://169.254.169.254/...`).
+
+For **path traversal** (A01:2021): `suggested_fix` MUST show both `Path.resolve()`
+and the prefix check that confirms the resolved path stays within the base directory.
+
+For **all injection classes**: `exploit_scenario` MUST name the exact attacker-controlled
+parameter and the specific payload. Never write "an attacker could exploit this" without
+providing the payload string.
+"""
+
+
 def build_system_prompt() -> str:
     """Return the system prompt used for every Claude API call."""
-    return _SYSTEM_PROMPT
+    return _SYSTEM_PROMPT + _FIX_QUALITY_EXAMPLES
 
 
 def build_user_message(files: dict[str, str]) -> str:

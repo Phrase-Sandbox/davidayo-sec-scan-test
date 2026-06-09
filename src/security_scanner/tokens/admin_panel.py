@@ -865,6 +865,7 @@ async def admin_advanced_settings_post(
     enable_consolidation_verifier: Annotated[str, Form()] = "",
     enable_partial_scan: Annotated[str, Form()] = "",
     enable_zero_findings_retry: Annotated[str, Form()] = "",
+    enable_quality_gate: Annotated[str, Form()] = "",
     enable_semgrep: Annotated[str, Form()] = "",
     enable_bandit: Annotated[str, Form()] = "",
     enable_gosec: Annotated[str, Form()] = "",
@@ -900,6 +901,7 @@ async def admin_advanced_settings_post(
         enable_consolidation_verifier=bool(enable_consolidation_verifier),
         enable_partial_scan=bool(enable_partial_scan),
         enable_zero_findings_retry=bool(enable_zero_findings_retry),
+        enable_quality_gate=bool(enable_quality_gate),
         high_risk_paths=high_risk_paths.strip(),
         updated_at=now,
         updated_by_email=admin.email,
@@ -922,6 +924,7 @@ async def admin_advanced_settings_post(
             enable_consolidation_verifier=bool(enable_consolidation_verifier),
             enable_partial_scan=bool(enable_partial_scan),
             enable_zero_findings_retry=bool(enable_zero_findings_retry),
+            enable_quality_gate=bool(enable_quality_gate),
         )
         await session.commit()
 

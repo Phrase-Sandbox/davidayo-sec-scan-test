@@ -71,6 +71,7 @@ from security_scanner.shared.tokens.counter import (
 )
 from security_scanner.shared.validation.schema import validate
 from security_scanner.shared.verification.consolidation import consolidate_findings
+from security_scanner.shared.verification.quality_gate import strengthen_fix_quality
 from security_scanner.shared.verification.parallel import (
     verify_critical_findings,
 )
@@ -206,6 +207,7 @@ class ScanPipeline:
             _enable_consolidation_verifier: bool = sc.enable_consolidation_verifier
             _enable_partial_scan: bool = sc.enable_partial_scan
             _enable_zero_findings_retry: bool = sc.enable_zero_findings_retry
+            _enable_quality_gate: bool = sc.enable_quality_gate
         else:
             enabled_adapters = None      # all adapters (binary-available)
             semgrep_rules = None         # all rule packs
@@ -216,6 +218,7 @@ class ScanPipeline:
             _enable_consolidation_verifier = False
             _enable_partial_scan = True   # default: partial scan preferred over 0 findings
             _enable_zero_findings_retry = True  # default: retry on empty first pass
+            _enable_quality_gate = False  # default: off (zero latency change for existing deployments)
 
         # Step 1: parse owner/repo.
         parsed = _parse_repo_url(repo_url)
@@ -519,6 +522,13 @@ class ScanPipeline:
         # the complete set of confirmed findings together for combined risks.
         if _enable_consolidation_verifier and kept:
             kept = await asyncio.to_thread(consolidate_findings, kept, self._claude)
+
+        # Step 14c: quality gate — optional pass regenerating suggested_fix /
+        # exploit_scenario for verified findings whose fix lacks a code block.
+        if _enable_quality_gate and kept:
+            kept = await asyncio.to_thread(
+                strengthen_fix_quality, kept, scanner_files, self._claude
+            )
 
         all_findings = [*secret_findings, *kept]
 

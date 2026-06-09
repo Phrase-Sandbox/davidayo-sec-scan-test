@@ -46,6 +46,8 @@
     <dd>{{ sc.vuln_verifier_parallelism }} worker{{ "s" if sc.vuln_verifier_parallelism != 1 else "" }}</dd>
     <dt>Consolidation verifier</dt>
     <dd>{% if sc.enable_consolidation_verifier %}Enabled{% else %}<span class="muted">Disabled</span>{% endif %}</dd>
+    <dt>Fix quality gate</dt>
+    <dd>{% if sc.enable_quality_gate %}Enabled{% else %}<span class="muted">Disabled (default)</span>{% endif %}</dd>
     <dt>Active scanners</dt>
     <dd>
       {% set active = [] %}
@@ -197,6 +199,23 @@
               When the AI returns no findings on a non-trivial codebase (&gt;500 source lines),
               run a second analysis pass with an explicit re-examine instruction. Adds one AI
               call on zero-finding repositories. Disable for cost-constrained environments.
+            </span>
+          </span>
+        </label>
+      </div>
+
+      <div style="margin-top:1rem;">
+        <label style="display:flex; align-items:flex-start; gap:0.6rem; cursor:pointer;">
+          <input type="checkbox" name="enable_quality_gate" value="on"
+                 {{ 'checked' if sc and sc.enable_quality_gate else '' }}
+                 style="margin-top:0.2rem; flex-shrink:0;">
+          <span>
+            <strong>Fix quality gate</strong>
+            <span class="muted" style="font-size:0.84rem; display:block;">
+              After verification, re-generate <code>suggested_fix</code> and
+              <code>exploit_scenario</code> for any verified finding whose fix lacks a code
+              example. Adds up to one AI call per 5 such findings. Disable for
+              cost-sensitive environments. Default: off.
             </span>
           </span>
         </label>

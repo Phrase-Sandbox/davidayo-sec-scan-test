@@ -294,6 +294,12 @@ class ScannerSettings(Base):
     )
     # High-risk path prefixes — newline-separated; empty = use built-in YAML list
     high_risk_paths: Mapped[str] = mapped_column(Text(), nullable=False, server_default="")
+    # Quality gate — optional post-verification LLM pass that regenerates suggested_fix
+    # and exploit_scenario for verified findings whose fix lacks a code block.
+    # Default false to preserve previous behaviour (zero latency change for existing deployments).
+    enable_quality_gate: Mapped[bool] = mapped_column(
+        Boolean(), nullable=False, server_default="false"
+    )
     # Audit trail
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_by_email: Mapped[str] = mapped_column(String(320), nullable=False)

@@ -26,6 +26,13 @@ from __future__ import annotations
 # Vulnerability classes that trigger the authz-specific rubric.
 _AUTHZ_CLASSES: frozenset[str] = frozenset({"auth_bypass", "idor"})
 
+# New class registries for Fix 2 rubrics.
+_SQLI_CLASSES: frozenset[str] = frozenset({"sqli"})
+_XSS_CLASSES: frozenset[str] = frozenset({"xss"})
+_SSRF_CLASSES: frozenset[str] = frozenset({"ssrf"})
+_COMMAND_INJECTION_CLASSES: frozenset[str] = frozenset({"command_injection"})
+_PATH_TRAVERSAL_CLASSES: frozenset[str] = frozenset({"path_traversal"})
+
 # Vulnerability classes that trigger the upload-specific rubric.
 _UPLOAD_CLASSES: frozenset[str] = frozenset({"unsafe_file_upload"})
 
@@ -225,6 +232,114 @@ Apply the following additional steps before issuing a verdict:
 """
 
 
+def build_sqli_verifier_rubric() -> str:
+    """Return SQLi-specific verification guidance."""
+    return """\
+
+## SQL Injection Rubric
+
+- Trace user-controlled input (route parameters, request body, headers, cookies) to a database query.
+- Answer `real` if ANY of these patterns appear without parameterisation:
+  - `%` string formatting: `query % user_input`, `"... WHERE x = '%s'" % val`
+  - f-strings: `f"SELECT ... WHERE id = {user_id}"`
+  - `.format()`: `"SELECT ... WHERE id = {}".format(user_id)`
+  - Concatenation: `"SELECT " + user_input`
+- Answer `real` even if the execute() call looks safe in isolation — trace the QUERY variable.
+  If the query was built unsafely before being passed to execute(), it is still vulnerable.
+- Answer `false_positive` ONLY if:
+  - The query is a static string literal with NO user-controlled interpolation, OR
+  - A second argument (params tuple/dict) is passed: `cursor.execute(query, (user_id,))`
+- Second-order SQLi: if user input is stored then later retrieved and used to build a query,
+  answer `real` — the storage step does not sanitise it.
+- ORM usage: SQLAlchemy `session.execute(text(f"... {user_id}"))` is still vulnerable;
+  `session.execute(text("... :id"), {"id": user_id})` is safe.
+"""
+
+
+def build_xss_verifier_rubric() -> str:
+    """Return XSS-specific verification guidance."""
+    return """\
+
+## Cross-Site Scripting (XSS) Rubric
+
+- Trace user-controlled input to a response that is rendered as HTML in a browser.
+- Answer `real` if ANY of these patterns appear:
+  - Server-side: `element.innerHTML = user_input`, `document.write(user_input)`,
+    `{{ variable | safe }}` in Jinja2/Django, `autoescape=False` with user data,
+    echo/print of unescaped user input in PHP templates.
+  - Client-side (DOM): `.innerHTML =`, `.outerHTML =`, `document.write()`,
+    `dangerouslySetInnerHTML={{ __html: userVal }}` in React.
+  - Indirect: URL reflecting query params into the page, `href` set from user input.
+- Answer `real` even if the output is in a JSON response that the frontend immediately
+  inserts into the DOM — the injection point is the DOM operation, not the API.
+- Answer `false_positive` ONLY if:
+  - The framework provably auto-escapes the value (Django templates without `| safe`,
+    React JSX expressions without `dangerouslySetInnerHTML`), OR
+  - The output is in a context that is not rendered as HTML (JSON API to non-browser, email text).
+"""
+
+
+def build_ssrf_verifier_rubric() -> str:
+    """Return SSRF-specific verification guidance."""
+    return """\
+
+## Server-Side Request Forgery (SSRF) Rubric
+
+- Trace user-controlled input to an outbound HTTP/TCP request made by the server.
+- Answer `real` if user input reaches a URL, hostname, or IP without restriction and
+  the server then makes a request to that target (requests.get, urllib, httpx, fetch, etc.).
+- Internal service exposure: answer `real` even if the user cannot access the response directly —
+  blind SSRF can be used to port-scan internal networks or reach cloud metadata endpoints
+  (169.254.169.254, 100.64.x.x).
+- Answer `real` if redirects are followed without validation (`allow_redirects=True`
+  without host checks) — attacker can redirect to internal targets.
+- Answer `false_positive` ONLY if:
+  - The URL is entirely static (no user influence), OR
+  - The hostname is validated against a strict allowlist before the request, AND
+  - DNS rebinding is prevented (re-validate after resolution).
+"""
+
+
+def build_command_injection_verifier_rubric() -> str:
+    """Return command injection-specific verification guidance."""
+    return """\
+
+## Command Injection Rubric
+
+- Trace user-controlled input to a shell command or subprocess invocation.
+- Answer `real` if ANY of these patterns appear with user-controlled data:
+  - `os.system(user_input)`, `os.popen(user_input)`
+  - `subprocess.run(..., shell=True)` where the command string includes user input
+  - `subprocess.Popen(f"cmd {user_input}", shell=True)`
+  - Any function that passes a string to a shell interpreter without argument-list form
+- Answer `false_positive` ONLY if:
+  - `shell=False` AND the command is passed as a list: `subprocess.run(["cmd", user_arg])`, OR
+  - The user input is rejected unless it matches a strict allowlist of known-safe values, OR
+  - The call is inside test code or a CI script (not reachable from the web layer).
+- Note: passing `shell=False` with a single string (not a list) is still unsafe on some platforms.
+"""
+
+
+def build_path_traversal_verifier_rubric() -> str:
+    """Return path traversal-specific verification guidance."""
+    return """\
+
+## Path Traversal Rubric
+
+- Trace user-controlled input to a file system path (open, read, write, delete, include, require).
+- Answer `real` if the path is built from user input without BOTH:
+  1. Resolving to an absolute path (`os.path.realpath` / `Path.resolve()`), AND
+  2. Verifying the resolved path starts with the allowed base directory.
+- Common bypass patterns that are STILL vulnerable:
+  - `os.path.join(base, user_input)` — `os.path.join("/base", "/etc/passwd")` = `/etc/passwd`
+  - `os.path.basename(user_input)` alone — doesn't prevent symlink attacks
+  - Blacklisting `../` without resolving symlinks
+- Answer `real` for zip-slip: extraction of archive entries with `..` in their paths.
+- Answer `false_positive` ONLY if the path is validated with `Path.resolve()` AND a prefix check
+  against the intended base directory, OR the user-controlled part is constrained to a strict allowlist.
+"""
+
+
 def build_vuln_verifier_system_prompt(*, vuln_class: str | None = None) -> str:
     """Return the system prompt for the production-mode binary vuln verifier.
 
@@ -292,7 +407,7 @@ Emit one verdict block per candidate, in order:
 
     VERDICT #N: real | false_positive
     CONFIDENCE #N: high | medium | low
-    REASON #N: <one sentence>
+    REASON #N: <one specific sentence>
 
 Where N is the candidate's 1-based number.
 
@@ -303,18 +418,26 @@ Where N is the candidate's 1-based number.
   exist in another file not shown).
 - `CONFIDENCE #N: low` — significant uncertainty; the verifier should treat
   this as unverified.
-- `REASON #N` — one concise sentence naming the exploit path (for real) or
-  the defence that neutralises the attack (for false_positive).
+- `REASON #N` — one sentence. Be specific: name the exact pattern (e.g.
+  "string formatting with % passes user-controlled name directly to execute()"),
+  the attacker primitive (e.g. "any value in the format arguments controls the
+  full WHERE clause"), and the fix direction. Never write generic phrases like
+  "this is a security issue", "potentially vulnerable", or "could be exploited".
 
 No JSON, no markdown, no preamble. Only the verdict blocks.
 """
-    # Class→rubric registry (exclusive):
-    # auth_bypass / idor → authz rubric only
-    # unsafe_file_upload → upload rubric only
-    # weak_crypto / weak_hash / insecure_hash → weak-crypto rubric only
-    # ldap_injection → LDAP rubric only
-    # nosqli → NoSQL rubric only
-    # other → no rubric appended
+    # Class→rubric registry (exclusive — first match wins):
+    # auth_bypass / idor                      → authz rubric
+    # unsafe_file_upload                      → upload rubric
+    # weak_crypto / weak_hash / insecure_hash → weak-crypto rubric
+    # ldap_injection                          → LDAP rubric
+    # nosqli                                  → NoSQL rubric
+    # sqli                                    → SQLi rubric
+    # xss                                     → XSS rubric
+    # ssrf                                    → SSRF rubric
+    # command_injection                       → command injection rubric
+    # path_traversal                          → path traversal rubric
+    # other                                   → no rubric appended (generic criteria apply)
     if vuln_class:
         norm = vuln_class.lower()
         if norm in _AUTHZ_CLASSES:
@@ -327,4 +450,14 @@ No JSON, no markdown, no preamble. Only the verdict blocks.
             base_prompt += build_ldap_verifier_rubric()
         elif norm in _NOSQL_CLASSES:
             base_prompt += build_nosql_verifier_rubric()
+        elif norm in _SQLI_CLASSES:
+            base_prompt += build_sqli_verifier_rubric()
+        elif norm in _XSS_CLASSES:
+            base_prompt += build_xss_verifier_rubric()
+        elif norm in _SSRF_CLASSES:
+            base_prompt += build_ssrf_verifier_rubric()
+        elif norm in _COMMAND_INJECTION_CLASSES:
+            base_prompt += build_command_injection_verifier_rubric()
+        elif norm in _PATH_TRAVERSAL_CLASSES:
+            base_prompt += build_path_traversal_verifier_rubric()
     return base_prompt

