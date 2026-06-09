@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from security_scanner.shared.filters.file_filter import filter as file_filter, scanner_filter
+from security_scanner.shared.filters.file_filter import filter as file_filter
+from security_scanner.shared.filters.file_filter import scanner_filter
 
 # --- Exclusions ---------------------------------------------------------------
 

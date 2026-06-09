@@ -38,8 +38,8 @@ from security_scanner.shared.claude.client import (
     ClaudeUnavailableError,
 )
 from security_scanner.shared.context import ContextPackager
-from security_scanner.shared.filters.file_filter import filter as filter_files, scanner_filter as scanner_filter_files
-from security_scanner.shared.verification.consolidation import consolidate_findings
+from security_scanner.shared.filters.file_filter import filter as filter_files
+from security_scanner.shared.filters.file_filter import scanner_filter as scanner_filter_files
 from security_scanner.shared.filters.post_filter import filter_findings
 from security_scanner.shared.github.client import GitHubAuthError, GitHubClient, GitHubError
 from security_scanner.shared.logging_util import get_logger, set_scan_id
@@ -64,10 +64,13 @@ from security_scanner.shared.severity.mapping import (
 from security_scanner.shared.tokens.counter import THRESHOLD as TOKEN_THRESHOLD
 from security_scanner.shared.tokens.counter import (
     count as token_count,
+)
+from security_scanner.shared.tokens.counter import (
     exceeds_limit,
     trim_to_budget,
 )
 from security_scanner.shared.validation.schema import validate
+from security_scanner.shared.verification.consolidation import consolidate_findings
 from security_scanner.shared.verification.parallel import (
     verify_critical_findings,
 )

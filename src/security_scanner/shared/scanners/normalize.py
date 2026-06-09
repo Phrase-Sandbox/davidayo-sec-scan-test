@@ -74,7 +74,7 @@ _BANDIT_MAP: dict[str, str] = {
     "B108": "path_traversal",       # hardcoded_tmp_directory
     "B110": "auth_bypass",          # try_except_pass
     "B112": "auth_bypass",          # try_except_continue
-    "B201": "security_misconfiguration",  # flask_debug_true — Werkzeug debugger exposure, not code injection
+    "B201": "security_misconfiguration",  # flask_debug_true — Werkzeug debugger, not injection
     "B301": "deserialization",      # pickle
     "B302": "deserialization",      # marshal
     "B303": "weak_crypto",          # md5
@@ -142,14 +142,14 @@ _GOSEC_MAP: dict[str, str] = {
     "G101": "auth_bypass",          # hardcoded credentials
     "G102": "insecure_network_config",  # bind to all interfaces — exposure, not SSRF
     "G103": "code_injection",          # unsafe block
-    "G104": "poor_error_handling",     # errors unhandled — broad; verifier evaluates security impact
+    "G104": "poor_error_handling",     # errors unhandled — broad; verifier checks impact
     "G106": "weak_crypto",          # ssh InsecureIgnoreHostKey
     "G107": "ssrf",                 # url provided to HTTP request as taint
     "G108": "info_disclosure",         # profiling endpoint — exposes runtime data, not traversal
     "G109": "code_injection",       # Potential Integer overflow
     "G110": "path_traversal",       # potential DoS (zip slip)
     "G111": "path_traversal",       # file path provided as taint
-    "G112": "security_misconfiguration",  # ReadHeaderTimeout not configured — slowloris DoS, not traversal
+    "G112": "security_misconfiguration",  # ReadHeaderTimeout not configured — slowloris DoS
     "G113": "weak_crypto",          # Rat math/big
     "G114": "weak_crypto",          # deprecated ioutil
     "G201": "sqli",                 # SQL query construction using format string
@@ -208,13 +208,13 @@ _SEMGREP_MAP: dict[str, str] = {
     "python-hashlib-md5": "weak_crypto",
     "python-hashlib-sha1": "weak_crypto",
     "python-random-security": "insecure_random",
-    "python-ssl-no-verify": "weak_crypto",        # TLS cert validation disabled (CWE-295, OWASP A02)
+    "python-ssl-no-verify": "weak_crypto",        # TLS cert validation disabled (CWE-295)
     "python-requests-no-verify": "weak_crypto",   # requests verify=False (CWE-295, OWASP A02)
     "python-assert-auth": "auth_bypass",          # assert for auth stripped by -O (OWASP A01)
     "python-yaml-load-unsafe": "unsafe_yaml",     # yaml.load() unsafe Loader (CWE-502)
     "python-tempfile-insecure": "path_traversal", # TOCTOU tempfile race (CWE-377)
     # Security-audit vendored rules — JavaScript/TypeScript
-    "js-localstorage-sensitive": "auth_bypass",    # sensitive tokens in localStorage — XSS steals token → auth bypass (CWE-922, OWASP A01)
+    "js-localstorage-sensitive": "auth_bypass",    # sensitive tokens in localStorage (CWE-922)
     # Generic semgrep community IDs (r2c / p/owasp-top-ten etc.)
     "sql-injection": "sqli",
     "xss": "xss",
@@ -382,7 +382,6 @@ _SEMGREP_MAP: dict[str, str] = {
     "php-code-injection": "code_injection",
     "php-deserialization": "deserialization",
     "php-file-upload": "unsafe_file_upload",
-    "php-open-redirect": "open_redirect",
     "php-header": "xss",
     "java-sqli": "sqli",
     "java-xxe": "xxe",
@@ -390,7 +389,6 @@ _SEMGREP_MAP: dict[str, str] = {
     "java-path-traversal": "path_traversal",
     "java-deserialization": "deserialization",
     "java-ssrf": "ssrf",
-    "java-open-redirect": "open_redirect",
     "java-xss": "xss",
     "java-ldap": "ldap_injection",
     "java-el": "code_injection",
@@ -455,7 +453,7 @@ _TOOL_MAPS: dict[str, dict[str, str]] = {
 _OWASP_MAP: dict[str, str] = {
     "a01:2021": "auth_bypass",       # Broken Access Control
     "a02:2021": "weak_crypto",       # Cryptographic Failures
-    "a03:2021": "injection_generic",  # Injection — specific class inferred from description in merge.py
+    "a03:2021": "injection_generic",  # Injection — specific class inferred in merge.py
     "a04:2021": "insecure_design",              # Insecure Design
     "a05:2021": "security_misconfiguration",    # Security Misconfiguration
     "a06:2021": "vulnerable_components",        # Vulnerable and Outdated Components

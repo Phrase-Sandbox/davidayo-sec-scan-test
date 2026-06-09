@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from security_scanner.pipeline import ScanPipeline, TokenLimitError
+from security_scanner.pipeline import ScanPipeline
 from security_scanner.shared.claude.client import (
     ClaudeClient,
     ClaudeTimeoutError,
