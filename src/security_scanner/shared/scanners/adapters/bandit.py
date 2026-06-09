@@ -22,14 +22,6 @@ log = get_logger(__name__)
 
 TOOL = "bandit"
 
-# Injection-class rules where LOW confidence findings are still worth surfacing.
-# Bandit marks SQLi (B608) and many subprocess rules LOW when it cannot prove
-# user-controlled taint at the call site — the LLM verifier downstream filters
-# false positives far more accurately than a blanket confidence cutoff here.
-_INJECTION_RULES: frozenset[str] = frozenset({
-    "B601", "B602", "B603", "B604", "B605", "B606",
-    "B607", "B608", "B609", "B610", "B611",
-})
 
 
 async def scan(workspace: ScannerWorkspace) -> list[ScannerCandidate]:
@@ -87,13 +79,6 @@ def _parse_output(stdout: bytes, *, workspace_root: str) -> list[ScannerCandidat
             line_end = int(issue.get("line_range", [line_start])[-1])
             message = issue.get("issue_text", "")
             severity = issue.get("issue_severity", "MEDIUM").lower()
-            confidence = issue.get("issue_confidence", "MEDIUM").lower()
-
-            # Only include medium/high confidence to reduce noise.
-            # Exception: injection rules pass through at LOW confidence too —
-            # the LLM verifier filters false positives better than this cutoff.
-            if confidence == "low" and raw_rule_id not in _INJECTION_RULES:
-                continue
 
             vuln_class = normalize(TOOL, raw_rule_id)
             candidates.append(ScannerCandidate(

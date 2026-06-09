@@ -63,6 +63,8 @@ _USE_REGISTRY = os.environ.get("SEMGREP_USE_REGISTRY", "false").lower() in ("1",
 _REGISTRY_PACKS: list[str] = [
     "p/owasp-top-ten",   # 500+ rules, all languages — maintained by Semgrep
     "p/default",          # curated high-confidence rules per language
+    "p/python",           # broad Python security — async, aiohttp, general patterns
+    "p/sql-injection",    # SQL injection across Python/JS/Java patterns
 ]
 
 TOOL = "semgrep"

@@ -37,8 +37,8 @@ def test_parse_output_basic() -> None:
     assert c.line_end == 43
 
 
-def test_parse_output_low_confidence_injection_rule_not_skipped() -> None:
-    """B608 at LOW confidence must pass through — it is in _INJECTION_RULES."""
+def test_parse_output_low_confidence_passes_through() -> None:
+    """All findings pass through regardless of confidence — LLM verifier is the noise gate."""
     from security_scanner.shared.scanners.adapters.bandit import _parse_output
 
     data = {
@@ -61,8 +61,8 @@ def test_parse_output_low_confidence_injection_rule_not_skipped() -> None:
     assert candidates[0].vuln_class == "sqli"
 
 
-def test_parse_output_low_confidence_non_injection_rule_skipped() -> None:
-    """Non-injection rules at LOW confidence are still filtered out."""
+def test_parse_output_low_confidence_non_injection_not_skipped() -> None:
+    """Non-injection LOW confidence findings now pass through to the LLM verifier."""
     from security_scanner.shared.scanners.adapters.bandit import _parse_output
 
     data = {
@@ -81,7 +81,8 @@ def test_parse_output_low_confidence_non_injection_rule_skipped() -> None:
         "errors": [],
     }
     candidates = _parse_output(json.dumps(data).encode(), workspace_root="/tmp/ws")
-    assert candidates == []
+    assert len(candidates) == 1
+    assert candidates[0].raw_rule_id == "B311"
 
 
 def test_parse_output_malformed_json() -> None:
