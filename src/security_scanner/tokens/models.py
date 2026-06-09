@@ -246,8 +246,39 @@ class OrgSettings(Base):
     updated_by_email: Mapped[str] = mapped_column(String(320), nullable=False)
 
 
+class CiScanRecord(Base):
+    """Persisted CI pipeline scan result (one row per /agent/scan call).
+
+    No FK to ``users`` — CI scans are triggered by GitHub actors, not portal users.
+    ``triggered_by`` is the GitHub actor string sent in the scan request body.
+    """
+
+    __tablename__ = "ci_scan_records"
+
+    scan_id: Mapped[uuid.UUID] = mapped_column(Uuid(), primary_key=True)
+    triggered_by: Mapped[str] = mapped_column(String(320), nullable=False, index=True)
+    repo_url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    scan_target: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[ScanStatus] = mapped_column(
+        Enum(ScanStatus, name="scan_status"), nullable=False, default=ScanStatus.ok
+    )
+    findings_count: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
+    critical: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
+    high: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
+    medium: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
+    low: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
+    provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
+
 class ScanRecord(Base):
-    """Persisted CLI scan result (advisory channel only — CI not persisted)."""
+    """Persisted CLI scan result (portal/advisory channel only)."""
 
     __tablename__ = "scan_records"
 

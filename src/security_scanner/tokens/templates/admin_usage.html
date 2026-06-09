@@ -17,14 +17,59 @@
   <h2>Usage Analytics</h2>
   <p class="muted">
     Scan activity (last {{ lookback_days }} days) and LLM token spend (last 3 months).
-    Data from <code>scan_records</code> and <code>llm_usage_monthly</code>.
+    CLI scans from <code>scan_records</code>; CI pipeline scans from <code>ci_scan_records</code>.
   </p>
 </div>
 
-{# ── Scan activity table ── #}
+{# ── CI scan activity table ── #}
 <div class="card" style="padding:0; overflow:hidden;">
   <div style="padding:1rem 1.4rem; border-bottom:1px solid var(--border);">
-    <h2 style="margin:0;">Scan activity — last {{ lookback_days }} days</h2>
+    <h2 style="margin:0;">CI pipeline scans — last {{ lookback_days }} days</h2>
+  </div>
+  {% if ci_scan_rows %}
+  <div style="overflow-x:auto;">
+    <table style="min-width:580px;">
+      <thead>
+        <tr>
+          <th>GitHub actor</th>
+          <th style="text-align:right;">Scans</th>
+          <th style="text-align:right;">Critical</th>
+          <th style="text-align:right;">High</th>
+          <th style="text-align:right;">Findings</th>
+          <th style="white-space:nowrap;">Last scan</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in ci_scan_rows %}
+        <tr>
+          <td class="mono" style="font-size:0.83rem;">{{ row.triggered_by }}</td>
+          <td style="text-align:right; font-variant-numeric:tabular-nums;">{{ row.total_scans }}</td>
+          <td style="text-align:right;">
+            {% if row.total_critical %}<span class="sev sev-C">{{ row.total_critical }}</span>{% else %}<span class="muted">—</span>{% endif %}
+          </td>
+          <td style="text-align:right;">
+            {% if row.total_high %}<span class="sev sev-H">{{ row.total_high }}</span>{% else %}<span class="muted">—</span>{% endif %}
+          </td>
+          <td style="text-align:right; font-variant-numeric:tabular-nums;">{{ row.total_findings or 0 }}</td>
+          <td class="muted" style="font-size:0.83rem; white-space:nowrap;">
+            {% if row.last_scan_at %}{{ row.last_scan_at.strftime('%Y-%m-%d %H:%M') }} UTC{% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="padding:2rem 1.5rem; text-align:center; color:var(--muted);">
+    <p>No CI pipeline scans in the last {{ lookback_days }} days.</p>
+  </div>
+  {% endif %}
+</div>
+
+{# ── CLI scan activity table ── #}
+<div class="card" style="padding:0; overflow:hidden;">
+  <div style="padding:1rem 1.4rem; border-bottom:1px solid var(--border);">
+    <h2 style="margin:0;">CLI scans — last {{ lookback_days }} days</h2>
   </div>
   {% if scan_rows %}
   <div style="overflow-x:auto;">
@@ -61,7 +106,7 @@
   </div>
   {% else %}
   <div style="padding:2rem 1.5rem; text-align:center; color:var(--muted);">
-    <p>No scans in the last {{ lookback_days }} days.</p>
+    <p>No CLI scans in the last {{ lookback_days }} days.</p>
   </div>
   {% endif %}
 </div>

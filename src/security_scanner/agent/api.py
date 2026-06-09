@@ -14,6 +14,8 @@ only non-200 responses.
 from __future__ import annotations
 
 import re
+import uuid
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -24,6 +26,7 @@ from security_scanner.agent.slack_alert import send_bypass_alert
 from security_scanner.pipeline import ScanPipeline, TokenLimitError
 from security_scanner.shared.config import Settings, get_settings
 from security_scanner.shared.github.client import GitHubClient
+from security_scanner.tokens.db import get_session_factory
 from security_scanner.shared.llm.base import LLMConfigError
 from security_scanner.shared.llm.factory import (
     build_llm_client,
@@ -37,6 +40,7 @@ from security_scanner.shared.models.enums import (
     Severity,
 )
 from security_scanner.shared.models.scan_result import ScanResult
+from security_scanner.tokens.models import CiScanRecord, ScanStatus
 
 log = get_logger(__name__)
 
@@ -142,6 +146,38 @@ _TokenDep = Annotated[str, Depends(verify_scan_token)]
 _PipelineDep = Annotated[ScanPipeline, Depends(get_pipeline)]
 
 
+async def _persist_ci_scan(result: ScanResult, started_at: datetime) -> None:
+    """Write a row to ci_scan_records after a successful /agent/scan."""
+    def _count(sev: Severity) -> int:
+        return sum(1 for f in result.findings if f.severity == sev)
+
+    provider = model = None
+    if result.llm_usage is not None:
+        provider = getattr(result.llm_usage, "provider", None)
+        model = getattr(result.llm_usage, "model", None)
+
+    record = CiScanRecord(
+        scan_id=result.scan_id,
+        triggered_by=result.triggered_by,
+        repo_url=result.repo_url,
+        started_at=started_at,
+        finished_at=datetime.now(UTC),
+        scan_target=result.scan_target.value if result.scan_target else None,
+        status=ScanStatus.ok,
+        findings_count=result.findings_count,
+        critical=_count(Severity.Critical),
+        high=_count(Severity.High),
+        medium=_count(Severity.Medium),
+        low=_count(Severity.Low),
+        provider=provider,
+        model=model,
+    )
+    factory = get_session_factory()
+    async with factory() as session:
+        session.add(record)
+        await session.commit()
+
+
 @router.post("/scan", response_model=ScanResult)
 async def scan(
     body: ScanRequest,
@@ -157,6 +193,8 @@ async def scan(
                 f"(got {body.repo_url!r})"
             ),
         )
+
+    started_at = datetime.now(UTC)
 
     # When provider_choice is sent, reload org_settings and rebuild the pipeline
     # for this scan only using the requested provider.  The injected `pipeline`
@@ -216,6 +254,11 @@ async def scan(
                 "scan_id": str(result.scan_id),
             },
         )
+
+    try:
+        await _persist_ci_scan(result, started_at)
+    except Exception:
+        log.exception("failed to persist ci_scan_record for scan_id=%s", result.scan_id)
 
     return result
 

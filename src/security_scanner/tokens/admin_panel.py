@@ -39,6 +39,7 @@ from security_scanner.tokens.models import (
     AuditEvent,
     AuditEventType,
     CIToken,
+    CiScanRecord,
     LLMProvider,
     LLMUsageMonthly,
     OrgSettings,
@@ -950,6 +951,22 @@ async def admin_usage(
         )
         scan_rows = list((await session.execute(scan_stmt)).all())
 
+        # --- CI scan activity: per-actor aggregates over last 90 days ---
+        ci_scan_stmt = (
+            select(
+                CiScanRecord.triggered_by,
+                func.count().label("total_scans"),
+                func.sum(CiScanRecord.critical).label("total_critical"),
+                func.sum(CiScanRecord.high).label("total_high"),
+                func.sum(CiScanRecord.findings_count).label("total_findings"),
+                func.max(CiScanRecord.started_at).label("last_scan_at"),
+            )
+            .where(CiScanRecord.started_at >= cutoff)
+            .group_by(CiScanRecord.triggered_by)
+            .order_by(desc("total_scans"))
+        )
+        ci_scan_rows = list((await session.execute(ci_scan_stmt)).all())
+
         # --- Token spend: last 3 months, all rows ---
         usage_stmt = (
             select(LLMUsageMonthly)
@@ -968,6 +985,7 @@ async def admin_usage(
         {
             "user": admin,
             "scan_rows": scan_rows,
+            "ci_scan_rows": ci_scan_rows,
             "usage_rows": usage_rows,
             "months": months,
             "lookback_days": _USAGE_LOOKBACK_DAYS,
