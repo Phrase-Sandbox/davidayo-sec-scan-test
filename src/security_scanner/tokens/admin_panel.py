@@ -1185,7 +1185,7 @@ async def _fetch_report_rows(session) -> list[_ReportRow]:  # type: ignore[type-
             high=r.high,
             medium=r.medium,
             low=r.low,
-            has_report=False,
+            has_report=bool(r.html_report),
         ))
 
     rows.sort(key=lambda x: x.started_at, reverse=True)
@@ -1344,3 +1344,32 @@ async def admin_delete_report(
     log.info("admin reports delete", actor_email=admin.email, scan_id=scan_id, deleted=deleted)
     flash = f"ok:Record deleted." if deleted else f"error:Record {scan_id} not found."
     return _render_reports(request, admin, all_rows, page=1, flash=flash)
+
+
+@router.get("/reports/{scan_id}/html", response_class=HTMLResponse)
+async def admin_report_html(
+    scan_id: str,
+    admin: _AdminDep,
+) -> HTMLResponse:
+    """Serve raw HTML report for a CI or portal scan (admin view)."""
+    try:
+        scan_uuid = _uuid.UUID(scan_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Invalid scan ID.") from exc
+
+    factory = get_session_factory()
+    async with factory() as session:
+        ci = (await session.execute(
+            select(CiScanRecord).where(CiScanRecord.scan_id == scan_uuid)
+        )).scalar_one_or_none()
+        if ci is not None:
+            html = ci.html_report
+        else:
+            portal = (await session.execute(
+                select(ScanRecord).where(ScanRecord.scan_id == scan_uuid)
+            )).scalar_one_or_none()
+            html = portal.html_report if portal else None
+
+    if not html:
+        raise HTTPException(status_code=404, detail="Report not found.")
+    return HTMLResponse(content=html)

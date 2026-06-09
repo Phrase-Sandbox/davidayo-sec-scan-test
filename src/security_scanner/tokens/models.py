@@ -315,6 +315,7 @@ class CiScanRecord(Base):
     low: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
     provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
     model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    html_report: Mapped[str | None] = mapped_column(Text(), nullable=True)
 
 
 class ScanRecord(Base):

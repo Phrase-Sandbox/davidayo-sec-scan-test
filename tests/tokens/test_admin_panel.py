@@ -568,3 +568,85 @@ async def test_admin_advanced_settings_post_invalid_confidence_422(client, sessi
         data=form_data,
     )
     assert r.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Report HTML endpoint (/admin/reports/{scan_id}/html)
+# ---------------------------------------------------------------------------
+
+
+async def test_admin_report_html_serves_ci_scan_report(client, session_factory):
+    """GET /admin/reports/{id}/html returns HTML content for a CI scan."""
+    import uuid
+
+    from security_scanner.tokens.models import CiScanRecord, ScanStatus
+
+    scan_id = uuid.uuid4()
+    async with session_factory() as session:
+        session.add(CiScanRecord(
+            scan_id=scan_id,
+            triggered_by="actor@phrase.com",
+            repo_url="https://github.com/Phrase-Launchpad/test-repo",
+            started_at=datetime.now(UTC),
+            status=ScanStatus.ok,
+            findings_count=1,
+            critical=0,
+            high=1,
+            medium=0,
+            low=0,
+            html_report="<html><body>CI Report</body></html>",
+        ))
+        await session.commit()
+
+    r = client.get(f"/admin/reports/{scan_id}/html", headers=_admin_headers())
+    assert r.status_code == 200
+    assert "CI Report" in r.text
+    assert r.headers["content-type"].startswith("text/html")
+
+
+async def test_admin_report_html_serves_portal_scan_report(client, session_factory):
+    """GET /admin/reports/{id}/html returns HTML for a portal ScanRecord."""
+    import uuid
+
+    from security_scanner.tokens.models import ScanRecord, ScanStatus
+
+    scan_id = uuid.uuid4()
+    async with session_factory() as session:
+        session.add(ScanRecord(
+            scan_id=scan_id,
+            user_email="alice@phrase.com",
+            repo_url="https://github.com/Phrase-Launchpad/test-repo",
+            started_at=datetime.now(UTC),
+            status=ScanStatus.ok,
+            findings_count=0,
+            html_report="<html><body>Portal Report</body></html>",
+        ))
+        await session.commit()
+
+    r = client.get(f"/admin/reports/{scan_id}/html", headers=_admin_headers())
+    assert r.status_code == 200
+    assert "Portal Report" in r.text
+
+
+def test_admin_report_html_404_for_missing_scan(client, session_factory):
+    """GET /admin/reports/{id}/html returns 404 when no record exists."""
+    import uuid
+
+    r = client.get(f"/admin/reports/{uuid.uuid4()}/html", headers=_admin_headers())
+    assert r.status_code == 404
+
+
+def test_admin_report_html_401_without_auth(client):
+    """Unauthenticated request is rejected."""
+    import uuid
+
+    r = client.get(f"/admin/reports/{uuid.uuid4()}/html")
+    assert r.status_code == 401
+
+
+def test_admin_report_html_403_for_non_admin(client, session_factory):
+    """Non-admin user cannot view reports via admin endpoint."""
+    import uuid
+
+    r = client.get(f"/admin/reports/{uuid.uuid4()}/html", headers=_user_headers())
+    assert r.status_code == 403

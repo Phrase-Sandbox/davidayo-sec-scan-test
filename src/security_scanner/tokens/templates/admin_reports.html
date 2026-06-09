@@ -3,6 +3,7 @@
 
 {% block extra_styles %}
 <style>
+  main { max-width: 1100px; }
   .source-badge {
     display: inline-block;
     font: 11px/1 ui-monospace, "SF Mono", Menlo, monospace;
@@ -38,7 +39,7 @@
   </div>
   <p class="muted" style="margin:0; font-size:0.83rem;">
     Combined view of all portal and CI scans across the organisation.
-    Portal scans have full HTML reports; CI scans show metadata only.
+    Combined view of all portal and CI scans across the organisation.
   </p>
 </div>
 
@@ -128,8 +129,8 @@
             {% if row.low %}<span class="sev sev-L">{{ row.low }}</span>{% else %}<span class="muted">0</span>{% endif %}
           </td>
           <td style="white-space:nowrap;">
-            {% if row.source == "portal" and row.has_report %}
-              <a href="/portal/reports/{{ row.scan_id }}" target="_blank" rel="noopener"
+            {% if row.has_report %}
+              <a href="/admin/reports/{{ row.scan_id }}/html" target="_blank" rel="noopener"
                  style="font-size:0.8rem; margin-right:0.5rem;">View ↗</a>
             {% else %}
               <span class="muted" style="font-size:0.8rem; margin-right:0.5rem;">—</span>

@@ -41,6 +41,7 @@ from security_scanner.shared.models.enums import (
     Severity,
 )
 from security_scanner.shared.models.scan_result import ScanResult
+from security_scanner.shared.reports.html import build_html_report
 from security_scanner.tokens.db import get_session_factory
 from security_scanner.tokens.models import CiScanRecord, ScanStatus
 
@@ -149,7 +150,11 @@ _TokenDep = Annotated[str, Depends(verify_scan_token)]
 _PipelineDep = Annotated[ScanPipeline, Depends(get_pipeline)]
 
 
-async def _persist_ci_scan(result: ScanResult, started_at: datetime) -> None:
+async def _persist_ci_scan(
+    result: ScanResult,
+    started_at: datetime,
+    html_report: str | None = None,
+) -> None:
     """Write a row to ci_scan_records + bump llm_usage_monthly after /agent/scan."""
 
     def _count(sev: Severity) -> int:
@@ -180,6 +185,7 @@ async def _persist_ci_scan(result: ScanResult, started_at: datetime) -> None:
         low=_count(Severity.Low),
         provider=provider,
         model=model,
+        html_report=html_report,
     )
 
     usage = result.llm_usage
@@ -310,7 +316,11 @@ async def scan(
             log.warning("scan_failed streamed in body", reason=reason, scan_id=result.scan_id)
         else:
             try:
-                await _persist_ci_scan(result, started_at)
+                try:
+                    _html = build_html_report(result, files=body.files or [])
+                except Exception:
+                    _html = None
+                await _persist_ci_scan(result, started_at, html_report=_html)
             except Exception:
                 log.error("failed to persist ci_scan_record", scan_id=result.scan_id)
 
