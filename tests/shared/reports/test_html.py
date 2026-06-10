@@ -220,18 +220,17 @@ def test_owasp_reference_url_renders_as_anchor():
 def test_detail_section_contains_description_exploit_and_fix():
     finding = _finding()
     html = build_html_report(_result(findings=[finding]))
-    assert "Finding details" in html
+    assert "Finding Details" in html
     assert finding.description in html
     assert finding.exploit_scenario in html
     assert finding.suggested_fix in html
     assert finding.patch_file_path in html
 
 
-def test_findings_table_present_when_findings_exist():
+def test_findings_cards_present_when_findings_exist():
     html = build_html_report(_result(findings=[_finding()]))
-    assert "<table>" in html
-    assert "<thead>" in html
-    assert "<tbody>" in html
+    assert 'class="finding-block' in html
+    assert 'id="finding-1"' in html
 
 
 # --- New visual / structural contracts (UX polish pass) ---------------------
@@ -313,9 +312,9 @@ def test_findings_split_into_urgent_cleanup_advisory_buckets():
     assert "bucket-cleanup" in html
     assert "bucket-advisory" in html
     # Each bucket header carries its bucket count.
-    assert "Urgent (2)" in html
-    assert "Cleanup (1)" in html
-    assert "Advisory (1)" in html
+    assert "Urgent Findings (2)" in html
+    assert "High Priority Findings (1)" in html
+    assert "Additional Findings (1)" in html
 
 
 def test_groups_findings_sharing_vulnerability_id_and_severity():
@@ -353,7 +352,7 @@ def test_ai_prompt_block_appears_in_every_finding_card():
     # The dark "paste this" block is rendered with a class hook so tests
     # (and future polish) can pin it.
     assert html.count('class="ai-prompt"') >= 2
-    assert "PASTE THIS INTO YOUR AI EDITOR" in html
+    assert "→ AI fix prompt" in html
 
 
 def test_ai_prompt_text_includes_file_path_and_suggested_fix_phrase():
@@ -564,23 +563,23 @@ def test_upload_panel_xss_safe():
 
 
 def test_detected_by_renders_for_single_voter_claude_finding():
-    """Fix #5: a Claude-only finding (sources=['claude']) must show Detected by: claude."""
+    """Fix #5: a Claude-only finding (sources=['claude']) must show Detected By: claude."""
     f = _finding(verification_status=VerificationStatus.verified)
     f = f.model_copy(update={"sources": ["claude"], "consensus_score": 1})
     html = build_html_report(_result(findings=[f]))
-    assert "Detected by:" in html
+    assert "Detected By" in html
     assert "claude" in html
 
 
 def test_detected_by_renders_for_multi_voter_finding():
-    """Fix #5 regression: multi-voter findings still show Detected by: with voter count."""
+    """Fix #5 regression: multi-voter findings still show Detected By with engine count."""
     f = _finding(verification_status=VerificationStatus.verified)
     f = f.model_copy(update={"sources": ["claude", "bandit"], "consensus_score": 2})
     html = build_html_report(_result(findings=[f]))
-    assert "Detected by:" in html
+    assert "Detected By" in html
     assert "claude" in html
     assert "bandit" in html
-    assert "2 voters" in html
+    assert "2 engines" in html
 
 
 def test_detected_by_absent_when_sources_empty():

@@ -1650,7 +1650,7 @@ def _card_meta_row(f: VulnerabilityFinding) -> str:
     )
 
     # ── OWASP mapping (full-width) ───────────────────────────────────────────
-    owasp_id = _extract_owasp_id(f.owasp_reference) or _extract_owasp_id(f.vulnerability_id)
+    owasp_id = _extract_owasp_id(f.vulnerability_id) or _extract_owasp_id(f.owasp_reference)
     if owasp_id and owasp_id in _OWASP_2021_META:
         cat_name, id_2025 = _OWASP_2021_META[owasp_id]
         if id_2025:
