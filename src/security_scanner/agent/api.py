@@ -42,6 +42,7 @@ from security_scanner.shared.models.enums import (
 )
 from security_scanner.shared.models.scan_result import ScanResult
 from security_scanner.shared.reports.html import build_html_report
+from security_scanner.tokens.crypto import encrypt_report
 from security_scanner.tokens.db import get_session_factory
 from security_scanner.tokens.models import CiScanRecord, ScanStatus
 
@@ -185,7 +186,7 @@ async def _persist_ci_scan(
         low=_count(Severity.Low),
         provider=provider,
         model=model,
-        html_report=html_report,
+        html_report=encrypt_report(html_report) if html_report else None,
     )
 
     usage = result.llm_usage

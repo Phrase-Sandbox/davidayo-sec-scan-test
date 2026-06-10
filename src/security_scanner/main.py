@@ -78,28 +78,35 @@ def _check_local_password_safety(settings) -> None:
 
 
 def _check_db_ssl_safety(settings) -> None:
-    """Warn if DATABASE_URL points at a remote host with no SSL directive.
+    """Abort startup if DATABASE_URL points at a remote host without SSL.
 
-    This is a *warning* only — not a hard exit — because some deployments
-    use mutual TLS at the network layer (sidecar, VPN) that is not reflected
-    in the connection string.  The warning prompts operators to investigate
-    without rejecting valid configurations.
+    Reports and API keys stored in the database are encrypted at rest; the
+    transport layer must also be encrypted so that data is never sent in the
+    clear between the app and RDS.
 
     SSL indicators checked: ``sslmode=``, ``ssl=true``, ``ssl_ca=``, ``tls=``.
+
+    If your network layer provides mutual TLS transparently (e.g. a service
+    mesh) and the connection string cannot reflect that, set
+    ``DATABASE_SSL_OVERRIDE=true`` to bypass this check.
     """
     url = settings.DATABASE_URL or ""
     if not url:
         return
+    if settings.DATABASE_SSL_OVERRIDE:
+        return
     is_remote = not any(h in url for h in _LOCAL_DB_HINTS)
     has_ssl = any(s in url.lower() for s in ("sslmode=", "ssl=true", "ssl_ca=", "tls="))
     if is_remote and not has_ssl:
-        log.warning(
-            "DATABASE_URL appears to use a remote host without an explicit SSL "
-            "directive (sslmode=require not found). Token hashes and encrypted "
-            "keys may transit the network unencrypted. "
-            "Add ?sslmode=require to DATABASE_URL to silence this warning.",
+        log.error(
+            "startup refused: DATABASE_URL uses a remote host without an explicit "
+            "SSL directive. Report content and API keys are encrypted at rest but "
+            "would transit the network unencrypted. "
+            "Add ?sslmode=require to DATABASE_URL, or set DATABASE_SSL_OVERRIDE=true "
+            "if your network layer provides TLS transparently.",
             database_url_host=(url.split("@")[-1].split("/")[0] if "@" in url else "(unparseable)"),
         )
+        sys.exit(1)
 
 
 def _run_migrations() -> None:

@@ -51,6 +51,7 @@ from security_scanner.tokens.auth import (
     require_phrase_user,
     sign_portal_session,
 )
+from security_scanner.tokens.crypto import decrypt_report
 from security_scanner.tokens.db import get_session_factory
 from security_scanner.tokens.models import (
     AuditEventType,
@@ -828,7 +829,11 @@ async def portal_report_html(
         headers["Content-Disposition"] = (
             f'attachment; filename="scan-{scan_id[:8]}.html"'
         )
-    return Response(content=scan.html_report, media_type="text/html", headers=headers)
+    return Response(
+        content=decrypt_report(scan.html_report),
+        media_type="text/html",
+        headers=headers,
+    )
 
 
 # ---------------------------------------------------------------------------

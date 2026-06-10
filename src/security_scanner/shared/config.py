@@ -193,6 +193,14 @@ class Settings(BaseSettings):
             "value is set but malformed."
         ),
     )
+    DATABASE_SSL_OVERRIDE: bool = Field(
+        default=False,
+        description=(
+            "Set to true to bypass the startup SSL check on DATABASE_URL. "
+            "Use only when the network layer (service mesh, VPN) provides TLS "
+            "transparently and the connection string cannot reflect it."
+        ),
+    )
 
     PORT: int = Field(default=8000, description="HTTP port")
     LOG_LEVEL: str = Field(default="INFO", description="Logging level")

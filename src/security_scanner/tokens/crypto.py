@@ -1,4 +1,4 @@
-"""Fernet-backed encryption for at-rest secrets (user + org LLM API keys).
+"""Fernet-backed encryption for at-rest secrets and scan report content.
 
 The key lives in ``SCANNER_ENCRYPTION_KEY`` (urlsafe-b64, 32 bytes). It is
 distinct from the LLM API keys it protects: rotating one does not require
@@ -93,6 +93,50 @@ def mask_for_display(secret: str, *, keep: int = 4) -> str:
     if len(secret) <= keep:
         return "…" * keep
     return f"…{secret[-keep:]}"
+
+
+# Fernet v1 tokens, when base64-encoded, always begin with this prefix.
+# Used to distinguish encrypted report text from legacy plaintext rows.
+_FERNET_PREFIX = "gAAAAA"
+
+
+def encrypt_report(plaintext: str, *, settings: Settings | None = None) -> str:
+    """Encrypt a report string for at-rest storage.
+
+    Returns the Fernet token as an ASCII string (URL-safe base64) so it can
+    be stored in an existing ``Text`` column without a schema change.
+
+    If ``SCANNER_ENCRYPTION_KEY`` is not configured (e.g. local dev without
+    the key), the plaintext is returned unchanged so scans still work.
+    """
+    s = settings or get_settings()
+    if not s.SCANNER_ENCRYPTION_KEY:
+        return plaintext
+    fernet = _fernet_for(s.SCANNER_ENCRYPTION_KEY)
+    return fernet.encrypt(plaintext.encode("utf-8")).decode("ascii")
+
+
+def decrypt_report(ciphertext: str | None, *, settings: Settings | None = None) -> str | None:
+    """Decrypt a Fernet-encrypted report, or return the value unchanged for
+    legacy plaintext rows that pre-date encryption.
+
+    Legacy rows are detected by the absence of the Fernet token prefix so
+    the service continues to serve reports written before migration 0014.
+    """
+    if ciphertext is None:
+        return None
+    if not ciphertext.startswith(_FERNET_PREFIX):
+        # Legacy plaintext row — return as-is.
+        return ciphertext
+    s = settings or get_settings()
+    if not s.SCANNER_ENCRYPTION_KEY:
+        # Key removed after rows were encrypted — cannot decrypt.
+        raise EncryptionKeyMissing(
+            "SCANNER_ENCRYPTION_KEY is not set but the database contains "
+            "encrypted report rows. Restore the key and restart."
+        )
+    fernet = _fernet_for(s.SCANNER_ENCRYPTION_KEY)
+    return fernet.decrypt(ciphertext.encode("ascii")).decode("utf-8")
 
 
 InvalidToken = InvalidToken  # re-export for callers that catch it

@@ -36,6 +36,7 @@ from security_scanner.shared.logging_util import get_logger
 from security_scanner.tokens import audit as token_audit
 from security_scanner.tokens import registry as token_registry
 from security_scanner.tokens.auth import PhraseUser, require_admin
+from security_scanner.tokens.crypto import decrypt_report
 from security_scanner.tokens.db import get_session_factory
 from security_scanner.tokens.models import (
     AuditEvent,
@@ -1367,12 +1368,12 @@ async def admin_report_html(
             select(CiScanRecord).where(CiScanRecord.scan_id == scan_uuid)
         )).scalar_one_or_none()
         if ci is not None:
-            html = ci.html_report
+            html = decrypt_report(ci.html_report)
         else:
             portal = (await session.execute(
                 select(ScanRecord).where(ScanRecord.scan_id == scan_uuid)
             )).scalar_one_or_none()
-            html = portal.html_report if portal else None
+            html = decrypt_report(portal.html_report) if portal else None
 
     if not html:
         raise HTTPException(status_code=404, detail="Report not found.")

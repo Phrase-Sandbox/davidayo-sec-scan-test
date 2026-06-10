@@ -53,6 +53,7 @@ from security_scanner.shared.reports.html import build_html_report
 from security_scanner.shared.reports.markdown import build_markdown_report
 from security_scanner.tokens import audit as token_audit
 from security_scanner.tokens import registry as token_registry
+from security_scanner.tokens.crypto import encrypt_report
 from security_scanner.tokens.db import get_session_factory
 from security_scanner.tokens.models import (
     AuditEventType,
@@ -348,8 +349,8 @@ async def _persist_scan_data(
             high=severity_counts.get("high", 0),
             medium=severity_counts.get("medium", 0),
             low=severity_counts.get("low", 0),
-            markdown_report=markdown_report,
-            html_report=html_report,
+            markdown_report=encrypt_report(markdown_report),
+            html_report=encrypt_report(html_report),
             provider=provider,
             model=model,
         )
