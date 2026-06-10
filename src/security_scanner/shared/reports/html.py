@@ -704,15 +704,79 @@ def _warnings_section(warnings: list[str]) -> str:
     return f"<section>\n<h2>Warnings</h2>\n{blocks}\n</section>"
 
 
-def _gate_decision_section(decision: GateDecision) -> str:
-    colour = _GATE_COLOURS.get(decision, "#7f8c8d")
+def _gate_decision_section(decision: GateDecision, findings: list[VulnerabilityFinding]) -> str:
+    c = sum(1 for f in findings if f.severity == Severity.Critical)
+    h = sum(1 for f in findings if f.severity == Severity.High)
+    m = sum(1 for f in findings if f.severity == Severity.Medium)
+    low = sum(1 for f in findings if f.severity == Severity.Low)
+
+    count_parts: list[str] = []
+    if c:
+        count_parts.append(f"{c} Critical")
+    if h:
+        count_parts.append(f"{h} High")
+    if m:
+        count_parts.append(f"{m} Medium")
+    if low:
+        count_parts.append(f"{low} Low")
+    counts_html = " · ".join(escape(p) for p in count_parts) if count_parts else "No findings"
+
+    _REASONS: dict[GateDecision, str] = {
+        GateDecision.blocked: (
+            "Deployment blocked. Verified critical issues could expose sensitive data "
+            "or allow unauthorized access. Fix critical findings before deploying."
+        ),
+        GateDecision.pass_: "No blocking issues found. Safe to deploy.",
+        GateDecision.advisory: (
+            "Deployment can proceed with caution. Non-blocking issues were found — "
+            "review and schedule fixes before the next sprint."
+        ),
+        GateDecision.bypassed: "Gate bypassed. Issues were acknowledged and the override is recorded for audit.",
+        GateDecision.scan_failed: "Scan encountered an error and could not reach a gate decision.",
+    }
+    reason = _REASONS.get(decision, "Gate decision: " + decision.value)
+
+    top_findings = [f for f in findings if f.severity in (Severity.Critical, Severity.High)][:3]
+    chips_html = ""
+    if top_findings:
+        chips = "".join(
+            f'<span class="top-risk-chip">'
+            f"{escape(vuln_display_name(f.vulnerability_id) or f.vulnerability_id)}"
+            f"</span>"
+            for f in top_findings
+        )
+        chips_html = f'<div class="gate-top-risks">{chips}</div>'
+
+    css_cls = decision.value.replace("_", "_")  # "pass_" stays but CSS class is "pass"
+    # GateDecision.pass_ has value "pass", others match their value directly.
+    css_cls = decision.value
+
     return (
-        "<section>\n"
-        "<h2>Gate decision</h2>\n"
-        f'<span class="gate-decision" style="background:{colour}">'
-        f"{escape(decision.value)}</span>\n"
-        "</section>"
+        f'<div class="gate-hero {css_cls}">\n'
+        f'<div class="gate-hero-verdict">{escape(decision.value.upper())}</div>\n'
+        f'<div class="gate-hero-counts">{counts_html}</div>\n'
+        f'<div class="gate-hero-reason">{escape(reason)}</div>\n'
+        f"{chips_html}\n"
+        f"</div>"
     )
+
+
+def _action_callout(decision: GateDecision, findings: list[VulnerabilityFinding]) -> str:
+    top = next(
+        (f for f in findings if f.severity in (Severity.Critical, Severity.High)),
+        findings[0] if findings else None,
+    )
+    if top is None:
+        return ""
+    top_file = top.affected_file.split("/")[-1]
+    name = vuln_display_name(top.vulnerability_id) or top.vulnerability_id
+    if decision == GateDecision.blocked:
+        text = f"Fix {escape(name)} in {escape(top_file)} before deploying."
+    elif decision == GateDecision.advisory:
+        text = f"Review {escape(name)} in {escape(top_file)} — advisory findings detected."
+    else:
+        return ""
+    return f'<div class="action-callout">{text}</div>'
 
 
 def _findings_table(findings: list[VulnerabilityFinding]) -> str:
