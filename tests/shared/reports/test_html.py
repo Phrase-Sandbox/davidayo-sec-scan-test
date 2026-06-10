@@ -75,14 +75,21 @@ def _result(
 def test_report_is_self_contained_html_document():
     html = build_html_report(_result())
     assert html.startswith("<!DOCTYPE html>")
-    assert "<title>Security Scan Report</title>" in html
-    # CSS is inlined — no external <link rel=stylesheet> dependencies.
+    # Title is dynamic based on scan type.
+    assert "<title>Deployment Risk Assessment</title>" in html
+    # CSS is inlined; only font preconnect <link> tags are present (no stylesheets).
     assert "<style>" in html
-    assert "<link" not in html
+    assert 'rel="stylesheet"' not in html
 
 
 def test_report_contains_h1_header():
-    assert "<h1>Security Scan Report</h1>" in build_html_report(_result())
+    assert "<h1>Deployment Risk Assessment</h1>" in build_html_report(_result())
+
+
+def test_on_demand_report_title():
+    html = build_html_report(_result(scan_type=ScanType.on_demand))
+    assert "<title>Repository Security Assessment</title>" in html
+    assert "<h1>Repository Security Assessment</h1>" in html
 
 
 def test_metadata_section_includes_all_fields():

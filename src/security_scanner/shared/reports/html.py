@@ -263,11 +263,16 @@ pre {
   letter-spacing: 0.02em;
 }
 
-/* Finding cards — left-border accent only, no outer box */
+/* Finding cards */
 details.finding-block {
   border-left: 3px solid var(--border);
-  padding: 0 0 0 1.25em;
-  margin: 0.8em 0;
+  border-radius: 0 6px 6px 0;
+  padding: 0 1.25em 0 1.25em;
+  margin: 0.6em 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 details.finding-block.sev-critical { border-left-color: var(--critical); }
 details.finding-block.sev-high     { border-left-color: var(--high); }
@@ -275,13 +280,12 @@ details.finding-block.sev-medium   { border-left-color: var(--medium); }
 details.finding-block.sev-low      { border-left-color: var(--low); }
 details.finding-block:target,
 details.finding-block:has(:target) {
-  background: rgba(74, 125, 163, 0.04);
-  border-radius: 0 6px 6px 0;
+  box-shadow: 0 0 0 3px rgba(74, 125, 163, 0.18);
 }
 details.finding-block > summary {
   cursor: pointer;
   list-style: none;
-  padding: 0.9em 0;
+  padding: 0.85em 0;
   font-weight: 600;
   display: flex;
   align-items: center;
@@ -297,6 +301,10 @@ details.finding-block > summary::before {
   flex-shrink: 0;
 }
 details.finding-block[open] > summary::before { transform: rotate(90deg); }
+details.finding-block[open] > summary {
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.75em;
+}
 details.finding-block > *:last-child { margin-bottom: 1em; }
 
 /* Quick-fix badge */
@@ -608,7 +616,7 @@ ol.location-list > li { margin: 0.5em 0; }
   text-decoration: none;
   color: inherit;
 }
-.fix-first-list a:hover .fix-first-name { text-decoration: underline; }
+.fix-first-list a:hover .fix-first-name { text-decoration: underline; color: var(--accent); }
 .fix-first-num {
   font-size: 1em;
   font-weight: 700;

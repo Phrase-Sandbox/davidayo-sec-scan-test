@@ -13,7 +13,7 @@
 
   .admin-layout {
     display: grid;
-    grid-template-columns: 210px 1fr;
+    grid-template-columns: 220px 1fr;
     gap: 1.75rem;
     align-items: start;
   }
@@ -66,6 +66,18 @@
     color: var(--muted);
     opacity: 0.55;
   }
+  .admin-sidebar-section a {
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    opacity: 0.55;
+    padding: 0;
+    background: none !important;
+  }
+  .admin-sidebar-section a:hover { opacity: 0.85; }
+  .admin-sidebar-section a::before { display: none !important; }
 
   .admin-sidebar a {
     display: flex;
@@ -97,6 +109,32 @@
     background: var(--accent);
     border-radius: 0 2px 2px 0;
   }
+
+  /* Configuration sub-links */
+  .admin-sidebar a.sub-link {
+    padding: 0.38rem 1rem 0.38rem 2.2rem;
+    font-size: 0.815rem;
+    color: var(--muted);
+  }
+  .admin-sidebar a.sub-link:hover { color: var(--fg); background: var(--bg-inset); }
+  .admin-sidebar a.sub-link.active {
+    color: var(--accent);
+    font-weight: 600;
+    background: var(--accent-subtle);
+  }
+  .admin-sidebar a.sub-link.active::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--accent);
+    border-radius: 0 2px 2px 0;
+  }
+  .admin-sidebar a.sub-link.sub-danger { color: var(--danger); opacity: 0.75; }
+  .admin-sidebar a.sub-link.sub-danger:hover { opacity: 1; background: rgba(196,26,26,0.05); }
+  .admin-sidebar a.sub-link.sub-danger.active { color: var(--danger); background: rgba(196,26,26,0.08); }
+  .admin-sidebar a.sub-link.sub-danger.active::before { background: var(--danger); }
+
   .admin-sidebar hr {
     border: none;
     border-top: 1px solid var(--border);
@@ -105,6 +143,8 @@
   .admin-sidebar svg { flex-shrink: 0; opacity: 0.6; }
   .admin-sidebar a.active svg { opacity: 1; }
   .admin-sidebar a:hover svg { opacity: 0.85; }
+  .admin-sidebar a.sub-link svg { opacity: 0.5; }
+  .admin-sidebar a.sub-link.active svg { opacity: 1; }
 
   /* Admin page title pattern */
   .admin-page-header {
