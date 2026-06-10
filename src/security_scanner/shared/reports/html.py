@@ -721,7 +721,9 @@ ol.location-list > li { margin: 0.5em 0; }
 }
 .meta-owasp-arrow { color: var(--muted); }
 .meta-owasp-new   { color: var(--accent); }
-.meta-owasp-removed { color: var(--muted); font-style: italic; font-weight: 400; font-size: 0.88em; }
+.meta-owasp-removed {
+  color: var(--muted); font-style: italic; font-weight: 400; font-size: 0.88em;
+}
 .meta-owasp-name {
   font-size: 0.82em;
   color: var(--muted);
@@ -969,7 +971,7 @@ def _fix_first_section(findings: list[VulnerabilityFinding]) -> str:
         return ""
 
     items_html = []
-    for i, f in enumerate(findings, start=1):
+    for _i, f in enumerate(findings, start=1):
         if f not in top:
             continue
         idx = findings.index(f) + 1
@@ -1130,7 +1132,10 @@ def _metadata_section(result: ScanResult) -> str:
         ("Triggered by", escape(result.triggered_by)),
     ]
     items = "\n".join(f"<dt>{escape(label)}</dt><dd>{value}</dd>" for label, value in rows)
-    inner = f'<section class="metadata" style="margin-top:0.75em;">\n<dl>\n{items}\n</dl>\n</section>'
+    inner = (
+        f'<section class="metadata" style="margin-top:0.75em;">'
+        f"\n<dl>\n{items}\n</dl>\n</section>"
+    )
     return (
         '<details style="margin:2.5em 0 1em;">'
         '<summary style="cursor:pointer;list-style:none;font-size:0.88em;font-weight:600;'

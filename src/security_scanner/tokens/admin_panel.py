@@ -2133,7 +2133,10 @@ async def admin_config_org_post(
     if default_provider not in ("anthropic", "google"):
         raise HTTPException(status_code=422, detail=f"Unknown provider {default_provider!r}")
     if bypass_slack_mode not in ("dev_only", "all", "none"):
-        raise HTTPException(status_code=422, detail=f"Unknown bypass_slack_mode {bypass_slack_mode!r}")
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown bypass_slack_mode {bypass_slack_mode!r}",
+        )
 
     factory = get_session_factory()
     async with factory() as session:
@@ -2156,7 +2159,9 @@ async def admin_config_org_post(
                 raise HTTPException(status_code=422, detail="Slack webhook URL must start with https://")
             enc_slack = encrypt(slack_webhook)
 
-        provider_enum = LLMProvider.anthropic if default_provider == "anthropic" else LLMProvider.google
+        provider_enum = (
+            LLMProvider.anthropic if default_provider == "anthropic" else LLMProvider.google
+        )
         new_row = OrgSettings(
             encrypted_anthropic_key=enc_anthropic,
             encrypted_google_key=enc_google,
@@ -2291,7 +2296,9 @@ async def admin_config_org_test_slack(request: Request, admin: _AdminDep) -> HTM
         f"• Sent by: {admin.email}\n"
         f"• If you see this, your Slack webhook is working correctly."
     )
-    delivered = await _post_to_slack(text, kind="admin-test", http_client=None, webhook_url=webhook_url)
+    delivered = await _post_to_slack(
+        text, kind="admin-test", http_client=None, webhook_url=webhook_url
+    )
     flash = "ok:Test message sent to Slack successfully." if delivered else (
         "error:Slack did not deliver the message. "
         "The webhook URL may be invalid or the channel no longer exists."
@@ -2433,7 +2440,10 @@ async def admin_config_gate_post(
     advisory_confidences: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
     if keep_confidences not in _KEEP_CONF_OPTIONS:
-        raise HTTPException(status_code=422, detail=f"Invalid keep_confidences: {keep_confidences!r}")
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid keep_confidences: {keep_confidences!r}",
+        )
 
     factory = get_session_factory()
     async with factory() as session:
@@ -2463,7 +2473,11 @@ async def admin_config_gate_post(
         )
         await session.commit()
 
-    log.info("admin config gate policy saved", actor_email=admin.email, keep_confidences=keep_confidences)
+    log.info(
+        "admin config gate policy saved",
+        actor_email=admin.email,
+        keep_confidences=keep_confidences,
+    )
     return templates.TemplateResponse(
         request,
         "admin_config_gate.html",
@@ -2567,7 +2581,11 @@ async def admin_config_scanner_post(
     return templates.TemplateResponse(
         request,
         "admin_config_scanner.html",
-        {"user": admin, "sc": new_sc, "flash": "ok:Scanner configuration saved. Takes effect on the next scan."},
+        {
+            "user": admin,
+            "sc": new_sc,
+            "flash": "ok:Scanner configuration saved. Takes effect on the next scan.",
+        },
         headers=_NO_STORE_HEADERS,
     )
 

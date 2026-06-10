@@ -23,6 +23,18 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Extend the native PostgreSQL audit_event_type enum with group operations.
+    # IF NOT EXISTS makes this safe to re-run if the value was already added.
+    for value in (
+        "group_created",
+        "group_deleted",
+        "group_member_added",
+        "group_member_removed",
+        "group_permission_added",
+        "group_permission_removed",
+    ):
+        op.execute(f"ALTER TYPE audit_event_type ADD VALUE IF NOT EXISTS '{value}'")
+
     op.create_table(
         "app_groups",
         sa.Column(
