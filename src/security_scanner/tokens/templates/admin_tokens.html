@@ -4,18 +4,19 @@
 {% block extra_styles %}
 {{ super() }}
 <style>
-  .status-tabs {
-    display: flex;
+  /* ── Status filter pill-nav ── */
+  .filter-nav {
+    display: inline-flex;
     gap: 0;
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: var(--radius-s);
     padding: 0.2rem;
   }
-  .status-tab {
+  .filter-nav-item {
     display: inline-flex;
     align-items: center;
-    padding: 0.28rem 0.75rem;
+    padding: 0.26rem 0.85rem;
     font-size: 0.8rem;
     font-weight: 500;
     border-radius: 4px;
@@ -24,103 +25,137 @@
     transition: background 0.12s, color 0.12s;
     white-space: nowrap;
   }
-  .status-tab:hover { background: var(--card); color: var(--fg); text-decoration: none; }
-  .status-tab-active { background: var(--card); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
-  .status-tab-active.status-tab-ok { color: var(--ok); }
-  .status-tab-active.status-tab-danger { color: var(--danger); }
+  .filter-nav-item:hover { background: var(--card); color: var(--fg); text-decoration: none; }
+  .filter-nav-item.is-active { background: var(--card); color: var(--fg); box-shadow: var(--shadow-s); }
+  .filter-nav-item.is-active.is-ok  { color: var(--ok); }
+  .filter-nav-item.is-active.is-bad { color: var(--danger); }
+
+  /* ── Table token ID cell ── */
+  .token-id-cell {
+    font-family: var(--ff-mono);
+    font-size: 0.75rem;
+    color: var(--fg-2);
+    letter-spacing: 0.01em;
+  }
+  /* ── Card header bar ── */
+  .card-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 1rem 1.4rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+  .card-header h2 { margin: 0; font-size: 0.95rem; }
+  .card-no-pad { padding: 0; overflow: hidden; }
+
+  /* ── Row count chip ── */
+  .count-chip {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--muted);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 99px;
+    padding: 0.1rem 0.55rem;
+  }
 </style>
 {% endblock %}
 
 {% block admin_content %}
 
-{# ── Filter card ── #}
-<div class="card">
-  <div style="display:flex; align-items:center; justify-content:space-between;
-              flex-wrap:wrap; gap:0.75rem; margin-bottom:0.85rem;">
-    <h2 style="margin:0;">Token Registry</h2>
+{# ── Page heading ── #}
+<div style="margin-bottom: 1.25rem;">
+  <h2 style="margin: 0 0 0.2rem; font-size: 1.2rem; letter-spacing: -0.015em;">Token Registry</h2>
+  <p class="muted" style="margin: 0; font-size: 0.855rem;">
+    <strong style="color: var(--fg);">Revoke</strong> immediately invalidates a token.
+    Users must regenerate via the
+    <a href="/portal/">self-service portal</a>.
+    Tokens expire after 30 days.
+  </p>
+</div>
 
-    {# Quick-status toggle: All / Active / Revoked — single click, no form submit needed #}
-    <div class="status-tabs">
+{# ── Filter bar ── #}
+<div class="card" style="padding: 0.9rem 1.25rem;">
+  <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+    {# Status pill-nav #}
+    <div class="filter-nav">
       <a href="/admin/tokens{% if filter_user %}?user={{ filter_user | urlencode }}{% endif %}"
-         class="status-tab {{ 'status-tab-active' if filter_status == '' else '' }}">
+         class="filter-nav-item {{ 'is-active' if filter_status == '' else '' }}">
         All
       </a>
       <a href="/admin/tokens?status=active{% if filter_user %}&amp;user={{ filter_user | urlencode }}{% endif %}"
-         class="status-tab {{ 'status-tab-active status-tab-ok' if filter_status == 'active' else '' }}">
+         class="filter-nav-item is-ok {{ 'is-active' if filter_status == 'active' else '' }}">
         Active
       </a>
       <a href="/admin/tokens?status=revoked{% if filter_user %}&amp;user={{ filter_user | urlencode }}{% endif %}"
-         class="status-tab {{ 'status-tab-active status-tab-danger' if filter_status == 'revoked' else '' }}">
+         class="filter-nav-item is-bad {{ 'is-active' if filter_status == 'revoked' else '' }}">
         Revoked
       </a>
     </div>
+
+    {# Email search #}
+    <form method="get" action="/admin/tokens"
+          style="display: flex; gap: 0.4rem; align-items: center; flex: 1; min-width: 220px;">
+      {% if filter_status %}
+        <input type="hidden" name="status" value="{{ filter_status }}">
+      {% endif %}
+      <input type="text" name="user" placeholder="Filter by email…"
+             value="{{ filter_user }}" style="flex: 1; min-width: 0;" autocomplete="off">
+      <button type="submit" class="btn" style="flex-shrink: 0;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"
+             style="display: inline; vertical-align: -1px; margin-right: 3px;">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        Search
+      </button>
+      {% if filter_user or filter_status %}
+        <a href="/admin/tokens" class="btn" style="flex-shrink: 0;">Clear</a>
+      {% endif %}
+    </form>
   </div>
-
-  <p class="muted" style="margin:0 0 0.85rem; font-size:0.84rem;">
-    <strong>Revoke</strong> immediately invalidates a token.
-    The user must then generate a new one themselves via the
-    <a href="/portal/" style="color:var(--accent);">self-service portal</a>.
-    Tokens expire after 30 days.
-  </p>
-
-  {# Email search (preserves status tab) #}
-  <form method="get" action="/admin/tokens"
-        style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
-    {% if filter_status %}
-      <input type="hidden" name="status" value="{{ filter_status }}">
-    {% endif %}
-    <input type="text" name="user" placeholder="Filter by email…"
-           value="{{ filter_user }}" style="width:240px;" autocomplete="off">
-    <button type="submit" class="btn">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-           stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-      </svg>
-      Search
-    </button>
-    {% if filter_user or filter_status %}
-      <a href="/admin/tokens" class="btn">Clear all filters</a>
-    {% endif %}
-  </form>
 </div>
 
 {# ── Token table ── #}
-<div class="card" style="padding:0; overflow:hidden;">
-  <div style="padding:1rem 1.4rem; border-bottom:1px solid var(--border);
-              display:flex; align-items:baseline; justify-content:space-between;">
-    <h2 style="margin:0;">
-      {{ rows|length }} token{{ '' if rows|length == 1 else 's' }}
-      {% if filter_status == 'active' %}<span class="muted" style="font-weight:400; font-size:0.83rem;"> — active only</span>
-      {% elif filter_status == 'revoked' %}<span class="muted" style="font-weight:400; font-size:0.83rem;"> — revoked only</span>
+<div class="card card-no-pad">
+  <div class="card-header">
+    <h2>
+      {{ rows|length }}
+      token{{ '' if rows|length == 1 else 's' }}
+      {% if filter_status == 'active' %}<span class="muted" style="font-weight: 400;"> · active only</span>
+      {% elif filter_status == 'revoked' %}<span class="muted" style="font-weight: 400;"> · revoked only</span>
       {% endif %}
-      {% if filter_user %}<span class="muted" style="font-weight:400; font-size:0.83rem;"> for "{{ filter_user }}"</span>{% endif %}
+      {% if filter_user %}<span class="muted" style="font-weight: 400;"> for "{{ filter_user }}"</span>{% endif %}
     </h2>
   </div>
 
   {% if rows %}
-  <div style="overflow-x:auto;">
-    <table style="min-width:680px;">
+  <div style="overflow-x: auto;">
+    <table style="min-width: 680px;">
       <thead>
         <tr>
           <th>User</th>
           <th>Token ID</th>
-          <th style="white-space:nowrap;">Issued</th>
-          <th style="white-space:nowrap;">Last used</th>
+          <th style="white-space: nowrap;">Issued</th>
+          <th style="white-space: nowrap;">Last used</th>
           <th>Status</th>
-          <th>Actions</th>
+          <th style="text-align: right;">Actions</th>
         </tr>
       </thead>
       <tbody>
         {% for r in rows %}
         <tr>
-          <td style="font-size:0.85rem;">{{ r.user_email }}</td>
-          <td><code style="font-size:0.77rem;">{{ r.token_id }}</code></td>
-          <td class="muted" style="font-size:0.82rem; white-space:nowrap;">
+          <td style="font-size: 0.875rem; font-weight: 450;">{{ r.user_email }}</td>
+          <td class="token-id-cell">{{ r.token_id }}</td>
+          <td class="muted" style="font-size: 0.82rem; white-space: nowrap;">
             {{ r.issued_at.strftime("%Y-%m-%d %H:%M") }}
           </td>
-          <td class="muted" style="font-size:0.82rem; white-space:nowrap;">
+          <td class="muted" style="font-size: 0.82rem; white-space: nowrap;">
             {% if r.last_used_at %}{{ r.last_used_at.strftime("%Y-%m-%d %H:%M") }}
-            {% else %}<span>—</span>{% endif %}
+            {% else %}—{% endif %}
           </td>
           <td>
             {% if r.revoked_at %}
@@ -129,20 +164,20 @@
               <span class="pill pill-ok">active</span>
             {% endif %}
           </td>
-          <td style="white-space:nowrap;">
+          <td style="text-align: right; white-space: nowrap;">
             {% if not r.revoked_at %}
               <span class="confirm-delete-wrap">
                 <button type="button" class="btn btn-sm btn-danger confirm-trigger">Revoke</button>
-                <span class="confirm-delete-row">
-                  <span style="font-size:0.8rem; color:var(--danger); margin-right:0.2rem;">Revoke?</span>
-                  <form method="post" action="/admin/tokens/{{ r.token_id }}/revoke" style="display:inline;">
+                <span class="confirm-delete-row" style="gap: 0.3rem;">
+                  <span style="font-size: 0.8rem; color: var(--danger);">Revoke?</span>
+                  <form method="post" action="/admin/tokens/{{ r.token_id }}/revoke">
                     <button type="submit" class="btn btn-sm btn-danger">Yes</button>
                   </form>
                   <button type="button" class="confirm-cancel btn btn-sm">No</button>
                 </span>
               </span>
             {% else %}
-              <span class="muted">—</span>
+              <span class="muted" style="font-size: 0.82rem;">—</span>
             {% endif %}
           </td>
         </tr>
@@ -152,13 +187,15 @@
   </div>
 
   {% else %}
-  <div style="padding:2.5rem 1.5rem; text-align:center; color:var(--muted);">
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         stroke-width="1.5" style="margin-bottom:0.75rem; opacity:0.35;">
+  <div class="empty-state">
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
       <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
       <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
     </svg>
-    <p style="margin:0;">No tokens match the current filter.</p>
+    <p class="empty-state-title">No tokens match the current filter</p>
+    {% if filter_user or filter_status %}
+    <p class="empty-state-hint"><a href="/admin/tokens">Clear filters</a> to see all tokens.</p>
+    {% endif %}
   </div>
   {% endif %}
 </div>

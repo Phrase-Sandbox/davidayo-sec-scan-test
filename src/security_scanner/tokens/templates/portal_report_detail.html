@@ -1,5 +1,47 @@
 {% extends "base.html" %}
 {% block title %}Report {{ scan.scan_id }} — Phrase Security Scanner{% endblock %}
+
+{% block extra_styles %}
+<style>
+  :root { --main-max-w: 900px; }
+
+  .scan-banner {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 0.75rem;
+    padding: 1rem 1.4rem;
+    border-radius: var(--radius); border: 1px solid var(--border);
+    margin-bottom: 1rem; box-shadow: var(--shadow-s);
+  }
+  .scan-banner-ok   { background: var(--ok-subtle);     border-color: var(--ok); }
+  .scan-banner-fail { background: var(--danger-subtle); border-color: var(--danger); }
+  .scan-banner-warn { background: rgba(217,119,6,0.07); border-color: var(--warn); }
+  .scan-banner-left { display: flex; align-items: center; gap: 0.75rem; }
+  .scan-banner-dot  { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .scan-banner-ok   .scan-banner-dot { background: var(--ok); }
+  .scan-banner-fail .scan-banner-dot { background: var(--danger); animation: ps-pulse 2s ease-in-out infinite; }
+  .scan-banner-warn .scan-banner-dot { background: var(--warn); }
+  .scan-banner-status { font-weight: 600; font-size: 0.95rem; }
+  .scan-banner-ok   .scan-banner-status { color: var(--ok); }
+  .scan-banner-fail .scan-banner-status { color: var(--danger); }
+  .scan-banner-warn .scan-banner-status { color: var(--warn); }
+  .scan-banner-id   { font-family: var(--ff-mono); font-size: 0.8rem; color: var(--muted); }
+  .sev-row { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+
+  @media (min-width: 600px) {
+    .dl-two-col { display: grid; grid-template-columns: repeat(2, max-content 1fr); gap: 0.5rem 1.25rem; }
+  }
+
+  .rid-table { width: 100%; border-collapse: collapse; }
+  .rid-table td { padding: 0.55rem 1rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .rid-table tr:last-child td { border-bottom: none; }
+  .rid-table .rid-index { width: 36px; color: var(--muted); font-size: 0.75rem; font-family: var(--ff-mono); text-align: center; }
+  .rid-table .rid-code  { font-family: var(--ff-mono); font-size: 0.8rem; color: var(--fg-2); word-break: break-all; }
+  .rid-table .rid-actions { width: 1%; white-space: nowrap; text-align: right; padding-right: 1rem; }
+  .rid-table tr:hover td { background: rgba(0,0,0,0.015); }
+  [data-theme="dark"] .rid-table tr:hover td { background: rgba(255,255,255,0.02); }
+</style>
+{% endblock %}
+
 {% block tabs %}
 <nav class="tabs">
   <a href="/portal/">Token</a>
@@ -10,42 +52,61 @@
 </nav>
 {% endblock %}
 {% block content %}
-<p style="margin-bottom: 1rem;">
-  <a href="/portal/reports" style="font-size: 0.9rem;">← All reports</a>
+
+<p style="margin: 0 0 1rem; font-size: 0.855rem;">
+  <a href="/portal/reports">← All reports</a>
 </p>
 
+{# ── Status banner ── #}
+{% if scan.critical %}
+  {% set banner_cls = "scan-banner-fail" %}
+  {% set banner_label = scan.critical|string + " critical finding" + ("s" if scan.critical != 1 else "") %}
+{% elif scan.findings_count %}
+  {% set banner_cls = "scan-banner-warn" %}
+  {% set banner_label = scan.findings_count|string + " finding" + ("s" if scan.findings_count != 1 else "") %}
+{% else %}
+  {% set banner_cls = "scan-banner-ok" %}
+  {% set banner_label = "No findings — scan passed clean" %}
+{% endif %}
+<div class="scan-banner {{ banner_cls }}">
+  <div class="scan-banner-left">
+    <div class="scan-banner-dot"></div>
+    <div>
+      <div class="scan-banner-status">{{ banner_label }}</div>
+      <div class="scan-banner-id">{{ scan.scan_id }}</div>
+    </div>
+  </div>
+  <div class="sev-row">
+    {% if scan.critical %}<span class="sev sev-C">{{ scan.critical }}C</span>{% endif %}
+    {% if scan.high %}<span class="sev sev-H">{{ scan.high }}H</span>{% endif %}
+    {% if scan.medium %}<span class="sev sev-M">{{ scan.medium }}M</span>{% endif %}
+    {% if scan.low %}<span class="sev sev-L">{{ scan.low }}L</span>{% endif %}
+    {% if not scan.findings_count %}<span class="pill pill-ok">ok</span>{% endif %}
+  </div>
+</div>
+
+{# ── Scan summary ── #}
 <div class="card">
-  <h2>Scan Summary</h2>
-  <dl>
-    <dt>Scan ID</dt><dd class="mono" style="font-size: 0.85rem;">{{ scan.scan_id }}</dd>
+  <h2 style="margin-bottom: 1rem;">Scan Summary</h2>
+  <dl class="dl-two-col">
     <dt>Repo</dt><dd>{{ scan.repo_url }}</dd>
+    <dt>Provider</dt><dd>{{ scan.provider or "—" }}</dd>
     <dt>Started</dt><dd>{{ scan.started_at.strftime("%Y-%m-%d %H:%M UTC") if scan.started_at else "—" }}</dd>
+    <dt>Model</dt><dd>{{ scan.model or "—" }}</dd>
     <dt>Finished</dt><dd>{{ scan.finished_at.strftime("%Y-%m-%d %H:%M UTC") if scan.finished_at else "—" }}</dd>
     <dt>Status</dt>
     <dd>
       {% if scan.status == "ok" %}<span class="pill pill-ok">ok</span>
       {% else %}<span class="pill pill-fail">{{ scan.status }}</span>{% endif %}
     </dd>
-    <dt>Provider</dt><dd>{{ scan.provider or "—" }}</dd>
-    <dt>Model</dt><dd>{{ scan.model or "—" }}</dd>
-    <dt>Findings</dt>
-    <dd>
-      {{ scan.findings_count }}
-      {% if scan.critical %}&nbsp;<span class="sev sev-C">{{ scan.critical }}C</span>{% endif %}
-      {% if scan.high %}&nbsp;<span class="sev sev-H">{{ scan.high }}H</span>{% endif %}
-      {% if scan.medium %}&nbsp;<span class="sev sev-M">{{ scan.medium }}M</span>{% endif %}
-      {% if scan.low %}&nbsp;<span class="sev sev-L">{{ scan.low }}L</span>{% endif %}
-    </dd>
   </dl>
 </div>
 
+{# ── LLM usage ── #}
 {% if usage %}
 <div class="card">
-  <h2>LLM Usage — this scan</h2>
-  <p class="muted" style="font-size: 0.85rem; margin-bottom: 1rem;">
-    These numbers come directly from the provider SDK response. Cross-reference
-    with your provider console using the response IDs below.
-  </p>
+  <h2>LLM Usage</h2>
+  <p class="muted" style="margin-bottom: 1rem;">Directly from the provider SDK response. Cross-reference with your provider console using the response IDs below.</p>
   <div class="stat-grid">
     <div class="stat-card">
       <div class="stat-num">{{ "{:,}".format(usage.n_llm_calls) }}</div>
@@ -62,57 +123,59 @@
     {% if usage.cache_read_input_tokens %}
     <div class="stat-card">
       <div class="stat-num">{{ "{:,}".format(usage.cache_read_input_tokens) }}</div>
-      <div class="stat-label">Cache-read tokens</div>
+      <div class="stat-label">Cache read</div>
     </div>
     {% endif %}
     {% if usage.cache_creation_input_tokens %}
     <div class="stat-card">
       <div class="stat-num">{{ "{:,}".format(usage.cache_creation_input_tokens) }}</div>
-      <div class="stat-label">Cache-write tokens</div>
+      <div class="stat-label">Cache write</div>
     </div>
     {% endif %}
   </div>
 </div>
 {% endif %}
 
+{# ── Provider response IDs ── #}
 {% if response_ids %}
-<div class="card">
-  <h2>Provider Response IDs</h2>
-  <p class="muted" style="font-size: 0.85rem; margin-bottom: 0.75rem;">
-    Each ID maps to a single LLM API call. Click
-    <strong>Open in Console</strong> to verify the exact token counts
-    and content against your provider's own records.
-  </p>
-  <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-    {% for rid in response_ids %}
-    <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.75rem;
-                background: var(--bg); border: 1px solid var(--border); border-radius: 6px;">
-      <code class="mono" style="flex: 1; font-size: 0.82rem;">{{ rid }}</code>
-      <button onclick="navigator.clipboard.writeText('{{ rid }}').then(() => { this.textContent = 'Copied!'; setTimeout(() => this.textContent = 'Copy', 1500); })"
-              class="btn" style="font-size: 0.8rem; padding: 0.3rem 0.6rem; flex-shrink: 0;">Copy</button>
-      {% if scan.provider == "anthropic" %}
-      <a href="{{ console_base }}?message={{ rid }}" target="_blank" rel="noopener"
-         class="btn" style="font-size: 0.8rem; padding: 0.3rem 0.6rem; flex-shrink: 0; white-space: nowrap;">
-        Open in Anthropic Console ↗
-      </a>
-      {% else %}
-      <a href="{{ console_base }}" target="_blank" rel="noopener"
-         class="btn" style="font-size: 0.8rem; padding: 0.3rem 0.6rem; flex-shrink: 0; white-space: nowrap;">
-        Open in Google Cloud ↗
-      </a>
-      {% endif %}
-    </div>
-    {% endfor %}
+<div class="card card-no-pad">
+  <div class="card-header">
+    <h2>Provider Response IDs</h2>
+    <span style="font-size: 0.8rem; color: var(--muted);">{{ response_ids|length }} API call{{ '' if response_ids|length == 1 else 's' }}</span>
   </div>
+  <p class="muted" style="padding: 0.75rem 1.4rem 0; font-size: 0.84rem;">
+    Each ID maps to one LLM API call.
+    <strong style="color: var(--fg);">Open in Console</strong>
+    to verify token counts against your provider's records.
+  </p>
+  <table class="rid-table">
+    <tbody>
+      {% for rid in response_ids %}
+      <tr>
+        <td class="rid-index">{{ loop.index }}</td>
+        <td class="rid-code">{{ rid }}</td>
+        <td class="rid-actions">
+          <button onclick="navigator.clipboard.writeText('{{ rid }}').then(() => { this.textContent = 'Copied!'; setTimeout(() => this.textContent = 'Copy', 1500); })"
+                  class="btn btn-sm">Copy</button>
+          {% if scan.provider == "anthropic" %}
+          <a href="{{ console_base }}?message={{ rid }}" target="_blank" rel="noopener" class="btn btn-sm">Anthropic Console ↗</a>
+          {% else %}
+          <a href="{{ console_base }}" target="_blank" rel="noopener" class="btn btn-sm">Google Cloud ↗</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
 </div>
 {% endif %}
 
+{# ── Full report ── #}
 {% if scan.html_report %}
-<div class="card" style="padding: 0; overflow: hidden;">
-  <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
-    <h2 style="margin: 0;">Full Report</h2>
-    <a href="/portal/reports/{{ scan.scan_id }}/html?download=true"
-       style="font-size: 0.85rem; color: var(--accent);">Download HTML ↓</a>
+<div class="card card-no-pad">
+  <div class="card-header">
+    <h2>Full Report</h2>
+    <a href="/portal/reports/{{ scan.scan_id }}/html?download=true" style="font-size: 0.85rem;">Download HTML ↓</a>
   </div>
   <iframe
     id="report-iframe"
@@ -127,10 +190,7 @@
   (function () {
     var iframe = document.getElementById('report-iframe');
     function resize() {
-      try {
-        iframe.style.height =
-          iframe.contentWindow.document.documentElement.scrollHeight + 'px';
-      } catch (_) {}
+      try { iframe.style.height = iframe.contentWindow.document.documentElement.scrollHeight + 'px'; } catch (_) {}
     }
     iframe.addEventListener('load', resize);
   })();
@@ -138,7 +198,7 @@
 {% elif scan.markdown_report %}
 <div class="card">
   <h2>Report</h2>
-  <pre style="font-size: 0.85rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word;">{{ scan.markdown_report }}</pre>
+  <pre style="font-family: var(--ff-mono); font-size: 0.84rem; line-height: 1.55; white-space: pre-wrap; word-break: break-word; margin: 0;">{{ scan.markdown_report }}</pre>
 </div>
 {% endif %}
 {% endblock %}

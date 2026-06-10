@@ -10,70 +10,69 @@
 </nav>
 {% endblock %}
 {% block content %}
-<div class="card" style="padding: 0; overflow: hidden;">
-  <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border);">
-    <h2 style="margin: 0;">Scan Reports</h2>
+<div class="card card-no-pad">
+  <div class="card-header">
+    <h2>Scan Reports</h2>
   </div>
   {% if scans %}
-  <table>
-    <thead>
-      <tr>
-        <th>Started</th>
-        <th>Repo</th>
-        <th>Provider</th>
-        <th>Status</th>
-        <th style="text-align: center;"><abbr title="Critical" style="text-decoration: none; cursor: help; border-bottom: 1px dotted var(--muted);">C</abbr></th>
-        <th style="text-align: center;"><abbr title="High"     style="text-decoration: none; cursor: help; border-bottom: 1px dotted var(--muted);">H</abbr></th>
-        <th style="text-align: center;"><abbr title="Medium"   style="text-decoration: none; cursor: help; border-bottom: 1px dotted var(--muted);">M</abbr></th>
-        <th style="text-align: center;"><abbr title="Low"      style="text-decoration: none; cursor: help; border-bottom: 1px dotted var(--muted);">L</abbr></th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for scan in scans %}
-      <tr>
-        <td class="mono" style="font-size: 0.82rem; white-space: nowrap;">
-          {{ scan.started_at.strftime("%Y-%m-%d %H:%M") if scan.started_at else "—" }}
-        </td>
-        <td style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-          <span title="{{ scan.repo_url }}">{{ scan.repo_url | replace("https://github.com/", "") }}</span>
-        </td>
-        <td class="muted" style="font-size: 0.85rem;">{{ scan.provider or "—" }}</td>
-        <td>
-          {% if scan.status == "ok" %}
-            <span class="pill pill-ok">ok</span>
-          {% else %}
-            <span class="pill pill-fail">{{ scan.status }}</span>
-          {% endif %}
-        </td>
-        <td style="text-align: center;">
-          {% if scan.critical %}<span class="sev sev-C">{{ scan.critical }}</span>{% else %}<span class="muted">0</span>{% endif %}
-        </td>
-        <td style="text-align: center;">
-          {% if scan.high %}<span class="sev sev-H">{{ scan.high }}</span>{% else %}<span class="muted">0</span>{% endif %}
-        </td>
-        <td style="text-align: center;">
-          {% if scan.medium %}<span class="sev sev-M">{{ scan.medium }}</span>{% else %}<span class="muted">0</span>{% endif %}
-        </td>
-        <td style="text-align: center;">
-          {% if scan.low %}<span class="sev sev-L">{{ scan.low }}</span>{% else %}<span class="muted">0</span>{% endif %}
-        </td>
-        <td>
-          <a href="/portal/reports/{{ scan.scan_id }}" style="font-size: 0.85rem; white-space: nowrap;">View &rarr;</a>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-
-  <div style="padding: 0.75rem 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-    <span class="muted" style="font-size: 0.85rem;">Page {{ page }}</span>
-    <div>
+  <div style="overflow-x: auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>Started</th>
+          <th>Repo</th>
+          <th>Provider</th>
+          <th>Status</th>
+          <th style="text-align: center;"><abbr title="Critical" style="text-decoration: none; cursor: help; border-bottom: 1px dotted var(--muted);">C</abbr></th>
+          <th style="text-align: center;"><abbr title="High"     style="text-decoration: none; cursor: help; border-bottom: 1px dotted var(--muted);">H</abbr></th>
+          <th style="text-align: center;"><abbr title="Medium"   style="text-decoration: none; cursor: help; border-bottom: 1px dotted var(--muted);">M</abbr></th>
+          <th style="text-align: center;"><abbr title="Low"      style="text-decoration: none; cursor: help; border-bottom: 1px dotted var(--muted);">L</abbr></th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for scan in scans %}
+        <tr>
+          <td class="mono" style="font-size: 0.8rem; white-space: nowrap; color: var(--muted);">
+            {{ scan.started_at.strftime("%Y-%m-%d") }}<br>
+            <span style="font-size: 0.74rem;">{{ scan.started_at.strftime("%H:%M") if scan.started_at else "—" }}</span>
+          </td>
+          <td style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.875rem;">
+            <span title="{{ scan.repo_url }}">{{ scan.repo_url | replace("https://github.com/", "") }}</span>
+          </td>
+          <td class="muted" style="font-size: 0.85rem;">{{ scan.provider or "—" }}</td>
+          <td>
+            {% if scan.status == "ok" %}<span class="pill pill-ok">ok</span>
+            {% else %}<span class="pill pill-fail">{{ scan.status }}</span>{% endif %}
+          </td>
+          <td style="text-align: center;">
+            {% if scan.critical %}<span class="sev sev-C">{{ scan.critical }}</span>{% else %}<span class="muted">0</span>{% endif %}
+          </td>
+          <td style="text-align: center;">
+            {% if scan.high %}<span class="sev sev-H">{{ scan.high }}</span>{% else %}<span class="muted">0</span>{% endif %}
+          </td>
+          <td style="text-align: center;">
+            {% if scan.medium %}<span class="sev sev-M">{{ scan.medium }}</span>{% else %}<span class="muted">0</span>{% endif %}
+          </td>
+          <td style="text-align: center;">
+            {% if scan.low %}<span class="sev sev-L">{{ scan.low }}</span>{% else %}<span class="muted">0</span>{% endif %}
+          </td>
+          <td>
+            <a href="/portal/reports/{{ scan.scan_id }}" style="font-size: 0.85rem; white-space: nowrap;">View &rarr;</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="pagination-bar">
+    <span class="muted" style="font-size: 0.82rem;">Page {{ page }}</span>
+    <div style="display: flex; gap: 0.3rem;">
       {% if page > 1 %}
-        <a href="/portal/reports?page={{ page - 1 }}" class="btn" style="font-size: 0.85rem;">&larr; Prev</a>
+        <a href="/portal/reports?page={{ page - 1 }}" class="btn btn-sm">&larr; Prev</a>
       {% endif %}
       {% if has_next %}
-        <a href="/portal/reports?page={{ page + 1 }}" class="btn" style="font-size: 0.85rem;">Next &rarr;</a>
+        <a href="/portal/reports?page={{ page + 1 }}" class="btn btn-sm">Next &rarr;</a>
       {% endif %}
     </div>
   </div>

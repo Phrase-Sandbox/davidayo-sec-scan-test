@@ -406,6 +406,63 @@
     .empty-state-hint { font-size: 0.85rem; margin: 0; }
 
     .confirm-delete-row { display: none; white-space: nowrap; align-items: center; gap: 0.25rem; }
+
+    /* ── Shared layout utilities ── */
+    /* Zero-padding card wrapper (table cards) */
+    .card-no-pad { padding: 0; overflow: hidden; }
+    /* Standard card title bar */
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 1rem 1.4rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+      border-radius: var(--radius) var(--radius) 0 0;
+    }
+    .card-header h2 { margin: 0; font-size: 0.95rem; }
+    /* Pagination footer attached to table cards */
+    .pagination-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.65rem 1rem;
+      border-top: 1px solid var(--border);
+      gap: 0.5rem;
+    }
+    /* Monospace input for API keys / tokens */
+    .input-mono { font-family: var(--ff-mono) !important; font-size: 0.86rem !important; }
+    /* Settings fieldset card */
+    .fieldset-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.1rem;
+      margin: 0 0 1.25rem;
+    }
+    .fieldset-card legend { font-weight: 600; padding: 0 0.4rem; font-size: 0.9rem; }
+    textarea {
+      font: inherit;
+      font-family: var(--ff);
+      padding: 0.4rem 0.7rem;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-s);
+      background: var(--card);
+      color: var(--fg);
+      font-size: 0.875rem;
+      transition: border-color 0.1s, box-shadow 0.1s;
+      resize: vertical;
+    }
+    textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-subtle);
+    }
+    /* Form section label */
+    .form-label { display: block; font-weight: 600; font-size: 0.875rem; margin-bottom: 0.35rem; }
+    .form-hint { font-size: 0.82rem; color: var(--muted); margin: 0.3rem 0 0; }
+    /* Section divider */
+    .section-divider { border: none; border-top: 1px solid var(--border); margin: 1.25rem 0; }
   </style>
   {% block extra_styles %}{% endblock %}
 </head>

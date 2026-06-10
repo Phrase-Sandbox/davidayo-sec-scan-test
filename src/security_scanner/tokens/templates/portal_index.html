@@ -13,12 +13,12 @@
 <div class="card">
   <h2>Your /scan/local token</h2>
   {% if active %}
-    <p class="ok">&#10003; You have an active token.</p>
-    <dl>
+    <p class="ok" style="margin-bottom: 0.75rem;">&#10003; You have an active token.</p>
+    <dl style="margin-bottom: 1rem;">
       <dt>Token ID</dt>
       <dd>
         <code id="tok-id" class="mono">{{ active.token_id }}</code>
-        <button type="button" id="copy-tok" class="theme-toggle" style="margin-left: 0.5rem; font-size: 0.8rem;" aria-label="Copy token ID" title="Copy to clipboard">&#8984;</button>
+        <button type="button" id="copy-tok" class="btn btn-sm" style="margin-left: 0.4rem;" aria-label="Copy token ID" title="Copy to clipboard">Copy ID</button>
       </dd>
       <dt>Issued</dt><dd>{{ active.issued_at.strftime("%Y-%m-%d %H:%M UTC") }}</dd>
       <dt>Issued via</dt><dd>{{ active.issued_via.value }}</dd>
@@ -31,48 +31,46 @@
         {% endif %}
       </dd>
     </dl>
-    <p class="muted" style="margin-top: 1rem;">
+    <p class="muted" style="margin-bottom: 1rem; font-size: 0.875rem;">
       We never store the plaintext token. If you lost it, rotate to get a new one
       &mdash; your existing token will stop working immediately.
     </p>
-    <p>
+    <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
       <form method="post" action="/portal/tokens">
         <button type="submit" class="btn btn-primary">Rotate token</button>
       </form>
       <form method="post" action="/portal/tokens/revoke">
         <button type="submit" class="btn btn-danger">Revoke token</button>
       </form>
-    </p>
+    </div>
     <script>
       (function(){
         var btn = document.getElementById('copy-tok');
         btn.addEventListener('click', function(){
           var text = document.getElementById('tok-id').textContent.trim();
           navigator.clipboard.writeText(text).then(function(){
-            btn.textContent = '✓';
-            setTimeout(function(){ btn.textContent = '⌘'; }, 1500);
+            btn.textContent = 'Copied!';
+            setTimeout(function(){ btn.textContent = 'Copy ID'; }, 1500);
           });
         });
       })();
     </script>
   {% else %}
     <p>You don&rsquo;t have an active token yet.</p>
-    <p class="muted">Issue a token to authenticate the CLI scanner against this portal.</p>
-    <p>
-      <form method="post" action="/portal/tokens">
-        <button type="submit" class="btn btn-primary">Issue token</button>
-      </form>
-    </p>
+    <p class="muted" style="margin-bottom: 1rem;">Issue a token to authenticate the CLI scanner against this portal.</p>
+    <form method="post" action="/portal/tokens">
+      <button type="submit" class="btn btn-primary">Issue token</button>
+    </form>
   {% endif %}
 </div>
 
 <div class="card">
   <h2>How to use it</h2>
-  <p class="muted">Pass the token as a bearer header when calling <code>/scan/local</code>:</p>
+  <p class="muted" style="margin-bottom: 0.75rem;">Pass the token as a bearer header when calling <code>/scan/local</code>:</p>
   <pre class="token-box">curl -H "Authorization: Bearer phs_local_tok-..." \
      -d '{"files": {...}}' \
      https://&lt;scanner&gt;/scan/local</pre>
-  <p class="muted">
+  <p class="muted" style="margin-top: 0.75rem;">
     Or run <code>phrase-sec-scan login</code> from your machine &mdash; it will open
     this portal in your browser and write the token to <code>~/.phrase-sec-scan/config.yaml</code>.
   </p>
