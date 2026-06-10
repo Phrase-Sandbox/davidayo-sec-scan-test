@@ -1,19 +1,37 @@
-{% extends "base.html" %}
+{% extends "admin_base.html" %}
 {% block title %}Admin — Tokens{% endblock %}
 
-{% block content %}
-<div class="card" style="padding:0.6rem 1rem;">
-  <p style="margin:0; display:flex; gap:0.35rem; flex-wrap:wrap;">
-    <a href="/admin/tokens" class="btn">Tokens</a>
-    <a href="/admin/users" class="btn">Users</a>
-    <a href="/admin/org-settings" class="btn">Org Settings</a>
-    <a href="/admin/ci-token" class="btn">CI Token</a>
-    <a href="/admin/audit" class="btn">Audit log</a>
-    <a href="/admin/usage" class="btn">Usage</a>
-    <a href="/admin/reports" class="btn">Reports</a>
-    <a href="/admin/advanced-settings" class="btn">Advanced Settings</a>
-  </p>
-</div>
+{% block extra_styles %}
+{{ super() }}
+<style>
+  .status-tabs {
+    display: flex;
+    gap: 0;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-s);
+    padding: 0.2rem;
+  }
+  .status-tab {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.28rem 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    border-radius: 4px;
+    text-decoration: none;
+    color: var(--muted);
+    transition: background 0.12s, color 0.12s;
+    white-space: nowrap;
+  }
+  .status-tab:hover { background: var(--card); color: var(--fg); text-decoration: none; }
+  .status-tab-active { background: var(--card); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+  .status-tab-active.status-tab-ok { color: var(--ok); }
+  .status-tab-active.status-tab-danger { color: var(--danger); }
+</style>
+{% endblock %}
+
+{% block admin_content %}
 
 {# ── Filter card ── #}
 <div class="card">
@@ -66,33 +84,6 @@
   </form>
 </div>
 
-<style>
-  .status-tabs {
-    display: flex;
-    gap: 0;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-s);
-    padding: 0.2rem;
-  }
-  .status-tab {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.28rem 0.75rem;
-    font-size: 0.8rem;
-    font-weight: 500;
-    border-radius: 4px;
-    text-decoration: none;
-    color: var(--muted);
-    transition: background 0.12s, color 0.12s;
-    white-space: nowrap;
-  }
-  .status-tab:hover { background: var(--card); color: var(--fg); text-decoration: none; }
-  .status-tab-active { background: var(--card); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
-  .status-tab-active.status-tab-ok { color: var(--ok); }
-  .status-tab-active.status-tab-danger { color: var(--danger); }
-</style>
-
 {# ── Token table ── #}
 <div class="card" style="padding:0; overflow:hidden;">
   <div style="padding:1rem 1.4rem; border-bottom:1px solid var(--border);
@@ -140,11 +131,16 @@
           </td>
           <td style="white-space:nowrap;">
             {% if not r.revoked_at %}
-              <form method="post" action="/admin/tokens/{{ r.token_id }}/revoke"
-                    style="display:inline;"
-                    onsubmit="return confirm('Revoke this token? The user will need to generate a new one via the portal.')">
-                <button type="submit" class="btn btn-sm btn-danger">Revoke</button>
-              </form>
+              <span class="confirm-delete-wrap">
+                <button type="button" class="btn btn-sm btn-danger confirm-trigger">Revoke</button>
+                <span class="confirm-delete-row">
+                  <span style="font-size:0.8rem; color:var(--danger); margin-right:0.2rem;">Revoke?</span>
+                  <form method="post" action="/admin/tokens/{{ r.token_id }}/revoke" style="display:inline;">
+                    <button type="submit" class="btn btn-sm btn-danger">Yes</button>
+                  </form>
+                  <button type="button" class="confirm-cancel btn btn-sm">No</button>
+                </span>
+              </span>
             {% else %}
               <span class="muted">—</span>
             {% endif %}
@@ -167,4 +163,4 @@
   {% endif %}
 </div>
 
-{% endblock content %}
+{% endblock admin_content %}

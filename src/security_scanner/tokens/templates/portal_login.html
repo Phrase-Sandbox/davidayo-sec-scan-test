@@ -13,11 +13,16 @@
                 var(--bg);
   }
   @media (prefers-color-scheme: dark) {
-    body {
+    :root:not([data-theme="light"]) body {
       background: radial-gradient(ellipse 80% 60% at 20% 10%, rgba(37,99,235,0.1) 0%, transparent 70%),
                   radial-gradient(ellipse 60% 50% at 80% 90%, rgba(5,150,105,0.07) 0%, transparent 70%),
                   var(--bg);
     }
+  }
+  [data-theme="dark"] body {
+    background: radial-gradient(ellipse 80% 60% at 20% 10%, rgba(37,99,235,0.1) 0%, transparent 70%),
+                radial-gradient(ellipse 60% 50% at 80% 90%, rgba(5,150,105,0.07) 0%, transparent 70%),
+                var(--bg);
   }
 
   .login-outer {
@@ -126,14 +131,14 @@
     display: block;
     font-size: 0.81rem;
     font-weight: 600;
-    color: var(--fg-2, var(--muted));
+    color: var(--muted);
     margin-bottom: 0.35rem;
     letter-spacing: 0.01em;
   }
   .form-group input {
     width: 100%;
     padding: 0.55rem 0.75rem;
-    border: 1px solid var(--border-2);
+    border: 1px solid var(--border);
     border-radius: var(--radius-s);
     background: var(--bg);
     color: var(--fg);
@@ -172,7 +177,7 @@
     padding: 1.2rem 1.3rem;
     font-size: 0.875rem;
     line-height: 1.65;
-    color: var(--fg-2, var(--fg));
+    color: var(--fg);
   }
   .no-auth-box strong { display: block; margin-bottom: 0.5rem; font-size: 0.9rem; }
 

@@ -4,6 +4,74 @@
   Child pages override {% block admin_content %} rather than {% block content %}.
   Active sidebar link is detected automatically from request.url.path.
 #}
+
+{% block header_title %}Phrase Security Scanner — Admin{% endblock %}
+
+{% block extra_styles %}
+<style>
+  /* Widen the page for admin content */
+  main { max-width: 1200px; }
+
+  /* Two-column grid: sidebar + content */
+  .admin-layout {
+    display: grid;
+    grid-template-columns: 196px 1fr;
+    gap: 1.5rem;
+    align-items: start;
+  }
+
+  /* Sidebar */
+  .admin-sidebar {
+    position: sticky;
+    top: 1.5rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.65rem 0.4rem;
+  }
+  .admin-sidebar-label {
+    display: block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--muted);
+    padding: 0.15rem 0.75rem 0.55rem;
+  }
+  .admin-sidebar a {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.46rem 0.75rem;
+    border-radius: 6px;
+    text-decoration: none;
+    color: var(--muted);
+    font-size: 0.875rem;
+    transition: background 0.1s, color 0.1s;
+    white-space: nowrap;
+  }
+  .admin-sidebar a:hover { background: var(--bg); color: var(--fg); text-decoration: none; }
+  .admin-sidebar a.active {
+    background: rgba(37,99,235,0.09);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .admin-sidebar hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 0.45rem 0.4rem;
+  }
+  .admin-sidebar svg { flex-shrink: 0; opacity: 0.75; }
+  .admin-sidebar a.active svg { opacity: 1; }
+
+  /* Collapse to single column on narrow viewports */
+  @media (max-width: 740px) {
+    .admin-layout { grid-template-columns: 1fr; }
+    .admin-sidebar { position: static; }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
   {%- set cp = request.url.path -%}
   <div class="admin-layout">

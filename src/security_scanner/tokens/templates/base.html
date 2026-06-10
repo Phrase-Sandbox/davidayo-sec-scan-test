@@ -19,9 +19,11 @@
       --card: #ffffff;
       --muted: #6b7280;
       --accent: #2563eb;
+      --accent-h: #1d4ed8;
       --danger: #b91c1c;
       --ok: #047857;
       --border: #e5e7eb;
+      --radius-s: 6px;
     }
     /* Dark mode via system preference — respects explicit light override */
     @media (prefers-color-scheme: dark) {
@@ -210,7 +212,7 @@
 <body>
   <main>
     <header>
-      <h1>Phrase Security Scanner — Portal</h1>
+      <h1>{% block header_title %}Phrase Security Scanner — Portal{% endblock %}</h1>
       {% if user is defined and user %}
         <span class="who">
           {{ user.email }}
