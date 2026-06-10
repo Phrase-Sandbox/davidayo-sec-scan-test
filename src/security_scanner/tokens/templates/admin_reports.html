@@ -48,22 +48,7 @@
   </div>
 </div>
 
-{# ── Bulk toolbar (appears when rows are checked) ── #}
-<form method="post" id="bulk-form" class="bulk-form">
-
 <div class="admin-list-card">
-
-  {# Bulk toolbar — hidden until checkboxes selected #}
-  <div class="bulk-toolbar" id="bulk-toolbar">
-    <span class="bt-count">0 selected</span>
-    <button type="submit" formaction="/admin/reports/bulk-delete" class="btn btn-danger btn-sm"
-            onclick="return document.querySelectorAll('input[name=scan_ids]:checked').length > 0 || (alert('Select at least one row.'), false)"
-            style="margin-right:0;">Delete selected</button>
-    <label style="margin-left:auto; font-size:var(--text-xs); color:var(--muted); cursor:pointer; display:flex; align-items:center; gap:0.3rem;">
-      <input type="checkbox" class="bulk-cb-all" id="select-all">
-      Select all
-    </label>
-  </div>
 
   {% if rows %}
 
@@ -80,10 +65,7 @@
     {% elif row.status == 'ok' %}{% set gcls = 'gate-pass' %}
     {% else %}{% set gcls = 'gate-none' %}{% endif %}
 
-    <div class="risk-row" style="padding-left:0.85rem;">
-      {# Checkbox #}
-      <input type="checkbox" name="scan_ids" value="{{ row.source }}:{{ row.scan_id }}"
-             class="bulk-cb" style="flex-shrink:0;">
+    <div class="risk-row">
       {# Gate dot #}
       <div class="rr-gate {{ gcls }}" style="flex-shrink:0; margin:0;"></div>
       {# Center info #}
@@ -114,29 +96,22 @@
           {% endif %}
         </div>
       </div>
-      {# Actions #}
+      {# Actions — primary: View Report; overflow: Open HTML (portal rows only) #}
       <div class="rr-right">
         {% if row.has_report %}
           {% if row.source == "portal" %}
             <a href="/portal/reports/{{ row.scan_id }}" class="btn btn-sm btn-primary" style="margin-right:0; white-space:nowrap;">View Report</a>
+            <div class="overflow-anchor">
+              <button class="overflow-trigger" type="button" aria-label="More actions">···</button>
+              <div class="overflow-menu">
+                <a href="/admin/reports/{{ row.scan_id }}/html" target="_blank" rel="noopener">Open HTML ↗</a>
+              </div>
+            </div>
           {% else %}
             <a href="/admin/reports/{{ row.scan_id }}/html" target="_blank" rel="noopener"
                class="btn btn-sm btn-primary" style="margin-right:0; white-space:nowrap;">View ↗</a>
           {% endif %}
         {% endif %}
-        <div class="overflow-anchor">
-          <button class="overflow-trigger" type="button" aria-label="More actions">···</button>
-          <div class="overflow-menu">
-            {% if row.has_report %}
-            <a href="/admin/reports/{{ row.scan_id }}/html" target="_blank" rel="noopener">Open HTML</a>
-            {% endif %}
-            <hr>
-            <form method="post" action="/admin/reports/{{ row.scan_id }}/delete" style="display:block;"
-                  onsubmit="return confirm('Delete this scan record? This cannot be undone.');">
-              <button type="submit" class="om-danger">Delete</button>
-            </form>
-          </div>
-        </div>
       </div>
     </div>
     {% endfor %}
@@ -162,21 +137,6 @@
   </div>
   {% endif %}
 
-</div>
-</form>
-
-{# ── Danger zone: Purge All ── #}
-<div class="danger-zone">
-  <div class="danger-zone-header">
-    <h3>Danger Zone</h3>
-  </div>
-  <div class="danger-zone-body">
-    <p>Permanently delete all scan records from all users and CI pipelines. This cannot be undone.</p>
-    <form method="post" action="/admin/reports/purge-all"
-          onsubmit="return confirm('Delete ALL scan records for all users? This cannot be undone.')">
-      <button type="submit" class="btn btn-danger btn-sm">Purge All Scans</button>
-    </form>
-  </div>
 </div>
 
 {% endblock admin_content %}

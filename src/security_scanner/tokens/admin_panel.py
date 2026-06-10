@@ -833,6 +833,7 @@ async def admin_advanced_settings_get(
     async with factory() as session:
         stmt = select(ScannerSettings).order_by(ScannerSettings.id.desc()).limit(1)
         sc = (await session.execute(stmt)).scalar_one_or_none()
+        cleanup_rows = await _fetch_report_rows(session)
 
     return templates.TemplateResponse(
         request,
@@ -843,6 +844,7 @@ async def admin_advanced_settings_get(
             "keep_conf_options": _KEEP_CONF_OPTIONS,
             "advisory_conf_options": _ADVISORY_CONF_OPTIONS,
             "flash": None,
+            "cleanup_rows": cleanup_rows,
         },
         headers=_NO_STORE_HEADERS,
     )

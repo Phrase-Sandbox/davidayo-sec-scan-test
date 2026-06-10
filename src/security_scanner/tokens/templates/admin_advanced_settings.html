@@ -53,6 +53,49 @@
   .check-row input[type="checkbox"] { margin-top: 0.15rem; flex-shrink: 0; accent-color: var(--accent); }
   .check-row .cr-name { font-weight: 600; font-size: var(--text-sm); display: flex; align-items: center; gap: 0.4rem; }
   .check-row .cr-desc { font-size: var(--text-xs); color: var(--muted); margin-top: 0.15rem; }
+
+  /* Cleanup table in Danger Zone */
+  .cleanup-table-wrap {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    max-height: 340px;
+    overflow-y: auto;
+    margin-top: 0.75rem;
+  }
+  .cleanup-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .cleanup-table th {
+    background: var(--bg-inset);
+    padding: 0.45rem 0.65rem;
+    text-align: left;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.66rem;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    border-bottom: 1px solid var(--border);
+  }
+  .cleanup-table td {
+    padding: 0.4rem 0.65rem;
+    border-bottom: 1px solid var(--border);
+    font-size: var(--text-xs);
+    color: var(--text);
+    vertical-align: middle;
+  }
+  .cleanup-table tbody tr:last-child td { border-bottom: none; }
+  .cleanup-table tbody tr:hover { background: var(--bg-inset); }
+  .ct-repo {
+    max-width: 280px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 </style>
 {% endblock %}
 
@@ -314,14 +357,141 @@
 
 </form>
 
+{# ── Danger Zone ── #}
+<div class="danger-zone">
+  <div class="danger-zone-header">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+         stroke-linecap="round" stroke-linejoin="round" style="color:var(--danger); flex-shrink:0;">
+      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+      <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+    </svg>
+    <h3>Danger Zone</h3>
+  </div>
+
+  {# ── Delete Selected ── #}
+  <div class="danger-zone-body" style="border-bottom:1px solid rgba(196,26,26,0.15);">
+    <strong style="font-size:var(--text-sm); color:var(--text); display:block; margin-bottom:0.25rem;">Delete Selected Scan Reports</strong>
+    <p>Permanently remove individual scan records. Select scans from the table below then click Delete Selected. This cannot be undone.</p>
+
+    {% if cleanup_rows %}
+    <form method="post" action="/admin/reports/bulk-delete" id="cleanup-form">
+      <div class="cleanup-table-wrap">
+        <table class="cleanup-table">
+          <thead>
+            <tr>
+              <th style="width:32px;"><input type="checkbox" id="cleanup-all" title="Select all" style="accent-color:var(--danger);"></th>
+              <th>Repository</th>
+              <th>Source</th>
+              <th>Date</th>
+              <th>Risk</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in cleanup_rows %}
+            {% set c = row.critical or 0 %}
+            {% set h = row.high or 0 %}
+            {% set m = row.medium or 0 %}
+            {% set l = row.low or 0 %}
+            <tr>
+              <td><input type="checkbox" name="scan_ids" value="{{ row.source }}:{{ row.scan_id }}" class="cleanup-cb" style="accent-color:var(--danger);"></td>
+              <td class="ct-repo" title="{{ row.repo_url }}">{{ row.repo_url | replace("https://github.com/", "") | replace("https://gitlab.com/", "") or "—" }}</td>
+              <td>
+                {% if row.source == "portal" %}
+                  <span class="source-badge source-portal" style="font-size:0.65rem;">portal</span>
+                {% else %}
+                  <span class="source-badge source-ci" style="font-size:0.65rem;">CI</span>
+                {% endif %}
+              </td>
+              <td style="white-space:nowrap; color:var(--muted);">{{ row.started_at.strftime("%d %b %Y") if row.started_at else "—" }}</td>
+              <td>
+                {% if c > 0 or h > 0 or m > 0 or l > 0 %}
+                <div class="sev-chips">
+                  {% if c > 0 %}<span class="sev-chip sev-chip-C">C·{{ c }}</span>{% endif %}
+                  {% if h > 0 %}<span class="sev-chip sev-chip-H">H·{{ h }}</span>{% endif %}
+                  {% if m > 0 %}<span class="sev-chip sev-chip-M">M·{{ m }}</span>{% endif %}
+                  {% if l > 0 %}<span class="sev-chip sev-chip-L">L·{{ l }}</span>{% endif %}
+                </div>
+                {% else %}
+                  <span class="pill pill-ok" style="font-size:0.65rem;">Clean</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div style="margin-top:0.9rem; display:flex; align-items:center; gap:0.75rem;">
+        <button type="submit" class="btn btn-danger btn-sm" id="cleanup-delete-btn" disabled
+                onclick="return confirm('Permanently delete the selected scan records? This cannot be undone.')">
+          Delete Selected
+        </button>
+        <span id="cleanup-count-label" style="font-size:var(--text-xs); color:var(--muted);">No scans selected</span>
+      </div>
+    </form>
+    {% else %}
+    <p style="margin:0.25rem 0 0; font-size:var(--text-sm); color:var(--muted);">No scan records found.</p>
+    {% endif %}
+  </div>
+
+  {# ── Purge All ── #}
+  <div class="danger-zone-body">
+    <strong style="font-size:var(--text-sm); color:var(--text); display:block; margin-bottom:0.25rem;">Purge All Scan Reports</strong>
+    <p>Permanently delete <em>all</em> scan records across all users and CI pipelines. Type <strong>DELETE SCANS</strong> to confirm.</p>
+    <form method="post" action="/admin/reports/purge-all" id="purge-form"
+          onsubmit="return document.getElementById('purge-confirm').value.trim() === 'DELETE SCANS' || (alert('Type DELETE SCANS to confirm.'), false)">
+      <div style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
+        <input type="text" id="purge-confirm" placeholder="Type DELETE SCANS to confirm"
+               style="width:270px; border-color:rgba(196,26,26,0.3);" autocomplete="off" spellcheck="false">
+        <button type="submit" class="btn btn-danger btn-sm" id="purge-btn" disabled>Purge All Scans</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
 (function () {
   var semgrepCb = document.getElementById('enable_semgrep');
   var rulesBox  = document.getElementById('semgrep-rules');
-  if (!semgrepCb || !rulesBox) return;
-  function toggle() { rulesBox.style.display = semgrepCb.checked ? '' : 'none'; }
-  semgrepCb.addEventListener('change', toggle);
-  toggle();
+  if (semgrepCb && rulesBox) {
+    function toggleSemgrep() { rulesBox.style.display = semgrepCb.checked ? '' : 'none'; }
+    semgrepCb.addEventListener('change', toggleSemgrep);
+    toggleSemgrep();
+  }
+
+  // Cleanup table
+  var cleanupAll = document.getElementById('cleanup-all');
+  var cleanupForm = document.getElementById('cleanup-form');
+  var deleteBtn = document.getElementById('cleanup-delete-btn');
+  var countLabel = document.getElementById('cleanup-count-label');
+
+  function updateCleanup() {
+    var checked = document.querySelectorAll('.cleanup-cb:checked');
+    var n = checked.length;
+    if (deleteBtn) deleteBtn.disabled = n === 0;
+    if (countLabel) countLabel.textContent = n === 0 ? 'No scans selected' : n + ' scan' + (n === 1 ? '' : 's') + ' selected';
+    if (cleanupAll) cleanupAll.checked = n > 0 && n === document.querySelectorAll('.cleanup-cb').length;
+  }
+
+  if (cleanupForm) {
+    cleanupForm.addEventListener('change', function (e) {
+      if (e.target.matches('.cleanup-cb')) updateCleanup();
+    });
+  }
+  if (cleanupAll) {
+    cleanupAll.addEventListener('change', function () {
+      document.querySelectorAll('.cleanup-cb').forEach(function (cb) { cb.checked = cleanupAll.checked; });
+      updateCleanup();
+    });
+  }
+
+  // Purge all confirmation phrase
+  var purgeInput = document.getElementById('purge-confirm');
+  var purgeBtn = document.getElementById('purge-btn');
+  if (purgeInput && purgeBtn) {
+    purgeInput.addEventListener('input', function () {
+      purgeBtn.disabled = purgeInput.value.trim() !== 'DELETE SCANS';
+    });
+  }
 })();
 </script>
 
