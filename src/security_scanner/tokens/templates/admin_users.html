@@ -58,7 +58,7 @@
   </form>
 </div>
 
-<div class="card" style="padding:0; overflow:hidden;">
+<div class="card card-no-pad">
   {% if users %}
   <table>
     <thead>
@@ -105,7 +105,6 @@
               <button type="submit" class="btn-sm btn-promote">↑ Make Admin</button>
             </form>
           {% elif is_protected %}
-            {# Protected super-admin — demote is blocked #}
             <span class="muted" style="font-size:0.75rem; margin-left:0.3rem;"
                   title="Super-admin — cannot be demoted via this panel">🔒</span>
           {% elif u.email != user.email %}
@@ -133,7 +132,6 @@
         </td>
         <td style="white-space:nowrap;">
           {% if is_protected %}
-            {# Protected — all dangerous actions are locked #}
             <span class="protected-locked" title="Super-admin — actions locked">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -183,28 +181,27 @@
     </tbody>
   </table>
 
-  <div style="display:flex; justify-content:space-between; align-items:center;
-              padding:0.7rem 1rem; border-top:1px solid var(--border);">
+  <div class="pagination-bar">
     <span class="muted" style="font-size:0.82rem;">Page {{ page }}</span>
-    <div>
+    <div style="display:flex; gap:0.3rem;">
       {% if page > 1 %}
         <a href="/admin/users?page={{ page - 1 }}{% if q %}&q={{ q }}{% endif %}"
-           class="btn" style="font-size:0.82rem;">← Prev</a>
+           class="btn btn-sm">← Prev</a>
       {% endif %}
       {% if has_next %}
         <a href="/admin/users?page={{ page + 1 }}{% if q %}&q={{ q }}{% endif %}"
-           class="btn" style="font-size:0.82rem;">Next →</a>
+           class="btn btn-sm">Next →</a>
       {% endif %}
     </div>
   </div>
 
   {% else %}
-  <div style="padding:2.5rem 1.5rem; text-align:center; color:var(--muted);">
+  <div class="empty-state">
     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         stroke-width="1.5" style="margin-bottom:0.75rem; opacity:0.35;">
+         stroke-width="1.5">
       <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
     </svg>
-    <p style="margin:0;">No users found{% if q %} matching <em>{{ q }}</em>{% endif %}.</p>
+    <p class="empty-state-title">No users found{% if q %} matching <em>{{ q }}</em>{% endif %}</p>
   </div>
   {% endif %}
 </div>
