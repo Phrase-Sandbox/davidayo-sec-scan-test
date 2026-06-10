@@ -4,7 +4,6 @@
 {% block extra_styles %}
 {{ super() }}
 <style>
-  /* ── Audit-specific overrides ─────────────────────────────────────── */
   .audit-row { transition: background 0.1s; }
   .audit-row.has-meta { cursor: pointer; }
   .audit-row.has-meta:hover td { background: rgba(37,99,235,0.04); }
@@ -31,10 +30,7 @@
     white-space: nowrap;
     padding-top: 0.05em;
   }
-  .meta-chip-val {
-    color: var(--fg);
-    word-break: break-word;
-  }
+  .meta-chip-val { color: var(--fg); word-break: break-word; }
 
   .meta-toggle {
     display: inline-flex;
@@ -54,10 +50,10 @@
   .meta-toggle .chevron { font-style: normal; font-size: 0.7rem; transition: transform 0.15s; }
   .meta-toggle.open .chevron { transform: rotate(90deg); }
 
-  /* Event badge */
   .event-badge {
     display: inline-block;
-    font: 11px/1 ui-monospace, "SF Mono", Menlo, monospace;
+    font-family: var(--ff-mono);
+    font-size: 0.72rem;
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 4px;
@@ -65,13 +61,16 @@
     white-space: nowrap;
     letter-spacing: 0.01em;
   }
-  /* Colour-code the most important events */
   .event-badge.ev-ok     { background: rgba(5,150,105,0.07);  border-color: rgba(5,150,105,0.25);  color: #065f46; }
   .event-badge.ev-danger { background: rgba(220,38,38,0.07);  border-color: rgba(220,38,38,0.25);  color: #7f1d1d; }
   .event-badge.ev-warn   { background: rgba(245,158,11,0.09); border-color: rgba(245,158,11,0.3);  color: #78350f; }
   .event-badge.ev-info   { background: rgba(37,99,235,0.06);  border-color: rgba(37,99,235,0.2);   color: #1e3a8a; }
 
-  /* Truncate long emails */
+  [data-theme="dark"] .event-badge.ev-ok     { color: #34d399; }
+  [data-theme="dark"] .event-badge.ev-danger { color: #f87171; }
+  [data-theme="dark"] .event-badge.ev-warn   { color: #fbbf24; }
+  [data-theme="dark"] .event-badge.ev-info   { color: #93c5fd; }
+
   .email-cell {
     max-width: 180px;
     overflow: hidden;
@@ -83,7 +82,6 @@
 {% endblock %}
 
 {% block admin_content %}
-{# ── Filter card ── #}
 <div class="card">
   <div style="display:flex; align-items:center; justify-content:space-between;
               flex-wrap:wrap; gap:0.6rem; margin-bottom:0.85rem;">
@@ -100,7 +98,7 @@
         style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
     <input type="text" name="user" placeholder="Filter by email…"
            value="{{ filter_user }}" style="width:210px;" autocomplete="off">
-    <select name="event_type">
+    <select name="event_type" style="max-width: 220px;">
       <option value="">(any event)</option>
       {% for e in event_types %}
         <option value="{{ e }}" {% if e == filter_event_type %}selected{% endif %}>{{ e }}</option>
@@ -119,9 +117,7 @@
   </form>
 </div>
 
-{# ── Events table ── #}
-<div class="card" style="padding:0; overflow:hidden;">
-
+<div class="card card-no-pad">
   {% if rows %}
   <div style="overflow-x:auto;">
     <table style="min-width:700px;">
@@ -138,7 +134,6 @@
       <tbody>
         {% for r in rows %}
 
-        {# Determine badge class from event type name #}
         {%- set ev = r.event_type.value -%}
         {%- if 'issued' in ev or 'ok' in ev or 'activated' in ev -%}
           {%- set badge_cls = 'ev-ok' -%}
@@ -164,7 +159,7 @@
           </td>
           <td>
             {% if r.token_id %}
-              <code style="font-size:0.74rem;">{{ r.token_id }}</code>
+              <span class="mono" style="font-size:0.74rem;">{{ r.token_id }}</span>
             {% else %}
               <span class="muted">—</span>
             {% endif %}
@@ -184,7 +179,6 @@
           </td>
         </tr>
 
-        {# Expandable metadata row — hidden until the parent row is clicked #}
         {% if r.event_metadata %}
         <tr id="meta-{{ loop.index }}" class="audit-meta-row" style="display:none;">
           <td colspan="6">
@@ -205,34 +199,31 @@
     </table>
   </div>
 
-  {# Pagination #}
-  <div style="display:flex; justify-content:space-between; align-items:center;
-              padding:0.65rem 1rem; border-top:1px solid var(--border);">
+  <div class="pagination-bar">
     <span class="muted" style="font-size:0.81rem;">Page {{ page }}</span>
     <div style="display:flex; gap:0.3rem;">
       {% if page > 1 %}
         <a href="/admin/audit?page={{ page - 1 }}{% if filter_user %}&amp;user={{ filter_user | urlencode }}{% endif %}{% if filter_event_type %}&amp;event_type={{ filter_event_type | urlencode }}{% endif %}"
-           class="btn" style="font-size:0.82rem;">← Prev</a>
+           class="btn btn-sm">← Prev</a>
       {% endif %}
       {% if has_next %}
         <a href="/admin/audit?page={{ page + 1 }}{% if filter_user %}&amp;user={{ filter_user | urlencode }}{% endif %}{% if filter_event_type %}&amp;event_type={{ filter_event_type | urlencode }}{% endif %}"
-           class="btn" style="font-size:0.82rem;">Next →</a>
+           class="btn btn-sm">Next →</a>
       {% endif %}
     </div>
   </div>
 
   {% else %}
-  <div style="padding:3rem 1.5rem; text-align:center; color:var(--muted);">
-    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         stroke-width="1.5" style="margin-bottom:0.85rem; opacity:0.3;">
+  <div class="empty-state">
+    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
       <polyline points="14 2 14 8 20 8"/>
       <line x1="16" y1="13" x2="8" y2="13"/>
       <line x1="16" y1="17" x2="8" y2="17"/>
     </svg>
-    <p style="margin:0; font-size:0.9rem;">No audit events match the current filter.</p>
+    <p class="empty-state-title">No audit events match the current filter</p>
     {% if filter_user or filter_event_type %}
-    <p style="margin:0.4rem 0 0;"><a href="/admin/audit" class="btn" style="font-size:0.82rem;">Clear filters</a></p>
+    <p class="empty-state-hint"><a href="/admin/audit">Clear filters</a></p>
     {% endif %}
   </div>
   {% endif %}
