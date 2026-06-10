@@ -7,19 +7,21 @@
   main { max-width: 1100px; }
   .source-badge {
     display: inline-block;
-    font: 11px/1 ui-monospace, "SF Mono", Menlo, monospace;
+    font-family: var(--ff-mono);
+    font-size: 0.72rem;
     border-radius: 4px;
     padding: 0.18em 0.45em;
     white-space: nowrap;
   }
   .source-portal { background: rgba(37,99,235,0.08); border: 1px solid rgba(37,99,235,0.25); color: #1e3a8a; }
   .source-ci     { background: rgba(5,150,105,0.07);  border: 1px solid rgba(5,150,105,0.25);  color: #065f46; }
+  [data-theme="dark"] .source-portal { color: #93c5fd; }
+  [data-theme="dark"] .source-ci     { color: #34d399; }
   .email-cell { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.82rem; }
 </style>
 {% endblock %}
 
 {% block admin_content %}
-{# ── Header + bulk actions ── #}
 <div class="card">
   <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.6rem; margin-bottom:0.6rem;">
     <h2 style="margin:0;">Scan Reports</h2>
@@ -30,19 +32,15 @@
   </p>
 </div>
 
-{# ── Main table (wrapped in a form for bulk/purge actions) ── #}
 <form method="post" id="bulk-form">
-<div class="card" style="padding:0; overflow:hidden;">
+<div class="card card-no-pad">
 
-  {# Toolbar #}
   <div style="padding:0.6rem 1rem; border-bottom:1px solid var(--border); display:flex; gap:0.4rem; flex-wrap:wrap; align-items:center;">
-    <button type="submit" formaction="/admin/reports/bulk-delete" class="btn btn-danger"
-            style="font-size:0.82rem;"
+    <button type="submit" formaction="/admin/reports/bulk-delete" class="btn btn-danger btn-sm"
             onclick="return document.querySelectorAll('input[name=scan_ids]:checked').length > 0 || (alert('Select at least one row.'), false)">
       Delete Selected
     </button>
-    <button type="submit" formaction="/admin/reports/purge-all" class="btn btn-danger"
-            style="font-size:0.82rem;"
+    <button type="submit" formaction="/admin/reports/purge-all" class="btn btn-danger btn-sm"
             onclick="return confirm('Delete ALL scan records? This cannot be undone.')">
       Purge All
     </button>
@@ -65,10 +63,10 @@
           <th>Repo</th>
           <th style="width:90px;">Provider</th>
           <th style="width:60px;">Status</th>
-          <th style="text-align:center; width:32px;">C</th>
-          <th style="text-align:center; width:32px;">H</th>
-          <th style="text-align:center; width:32px;">M</th>
-          <th style="text-align:center; width:32px;">L</th>
+          <th style="text-align:center; width:32px;"><abbr title="Critical" style="text-decoration:none; border-bottom:1px dotted var(--muted); cursor:help;">C</abbr></th>
+          <th style="text-align:center; width:32px;"><abbr title="High"     style="text-decoration:none; border-bottom:1px dotted var(--muted); cursor:help;">H</abbr></th>
+          <th style="text-align:center; width:32px;"><abbr title="Medium"   style="text-decoration:none; border-bottom:1px dotted var(--muted); cursor:help;">M</abbr></th>
+          <th style="text-align:center; width:32px;"><abbr title="Low"      style="text-decoration:none; border-bottom:1px dotted var(--muted); cursor:help;">L</abbr></th>
           <th style="width:140px;">Actions</th>
         </tr>
       </thead>
@@ -139,23 +137,21 @@
     </table>
   </div>
 
-  {# Pagination #}
-  <div style="display:flex; justify-content:space-between; align-items:center;
-              padding:0.65rem 1rem; border-top:1px solid var(--border);">
+  <div class="pagination-bar">
     <span class="muted" style="font-size:0.81rem;">Page {{ page }}</span>
     <div style="display:flex; gap:0.3rem;">
       {% if page > 1 %}
-        <a href="/admin/reports?page={{ page - 1 }}" class="btn" style="font-size:0.82rem;">← Prev</a>
+        <a href="/admin/reports?page={{ page - 1 }}" class="btn btn-sm">← Prev</a>
       {% endif %}
       {% if has_next %}
-        <a href="/admin/reports?page={{ page + 1 }}" class="btn" style="font-size:0.82rem;">Next →</a>
+        <a href="/admin/reports?page={{ page + 1 }}" class="btn btn-sm">Next →</a>
       {% endif %}
     </div>
   </div>
 
   {% else %}
-  <div style="padding:3rem 1.5rem; text-align:center; color:var(--muted);">
-    <p style="margin:0; font-size:0.9rem;">No scan records found.</p>
+  <div class="empty-state">
+    <p class="empty-state-title">No scan records found</p>
   </div>
   {% endif %}
 

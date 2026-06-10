@@ -23,16 +23,14 @@
   <p style="margin-top: 0.75rem;">
     <button type="button" class="btn btn-primary" onclick="copyNewToken()">Copy to clipboard</button>
   </p>
-  <div style="margin-top: 1rem; background: var(--bg); border: 1px solid var(--border);
-              border-radius: 6px; padding: 0.75rem 1rem; font-size: 0.88rem;">
-    <strong>Next steps:</strong>
-    <ol style="margin: 0.5rem 0 0; padding-left: 1.25rem; line-height: 1.7;">
-      <li>Copy the token above.</li>
-      <li>Go to <strong>GitHub → master-scanner-pipeline → Settings → Secrets</strong>.</li>
-      <li>Update <code>SCANNER_API_TOKEN</code> with the new value.</li>
-      <li>Trigger a test CI run to confirm connectivity.</li>
-    </ol>
-  </div>
+  <div class="section-divider"></div>
+  <p style="font-size: 0.88rem; font-weight: 600; margin: 0 0 0.5rem;">Next steps</p>
+  <ol style="margin: 0; padding-left: 1.25rem; line-height: 1.8; font-size: 0.88rem; color: var(--fg-2);">
+    <li>Copy the token above.</li>
+    <li>Go to <strong>GitHub → master-scanner-pipeline → Settings → Secrets</strong>.</li>
+    <li>Update <code>SCANNER_API_TOKEN</code> with the new value.</li>
+    <li>Trigger a test CI run to confirm connectivity.</li>
+  </ol>
 </div>
 {% endif %}
 
@@ -40,7 +38,7 @@
   <h2>Active CI token</h2>
   {% if active %}
   <dl>
-    <dt>Token ID</dt><dd><code>{{ active.id }}</code></dd>
+    <dt>Token ID</dt><dd><span class="mono" style="font-size:0.82rem;">{{ active.id }}</span></dd>
     <dt>Created</dt><dd>{{ active.created_at.strftime("%Y-%m-%d %H:%M UTC") }}</dd>
     <dt>Created by</dt><dd>{{ active.created_by_email }}</dd>
     <dt>Hash (sha256)</dt>

@@ -81,21 +81,19 @@
   </p>
   <form method="post" action="/admin/advanced-settings" autocomplete="off">
 
-    {# ── Confidence thresholds ── #}
-    <fieldset style="border:1px solid var(--border); border-radius:8px; padding:1rem; margin:0 0 1.25rem;">
+    <fieldset style="border:1px solid var(--border); border-radius:var(--radius); padding:1rem; margin:0 0 1.25rem;">
       <legend style="font-weight:600; padding:0 0.4rem;">Confidence thresholds</legend>
 
       <div style="margin-bottom:1rem;">
-        <label style="display:block; font-weight:600; margin-bottom:0.3rem;" for="keep_confidences">
+        <label class="form-label" for="keep_confidences">
           Which findings should block a deployment?
         </label>
-        <p class="muted" style="font-size:0.84rem; margin:0 0 0.4rem;">
+        <p class="form-hint">
           High-confidence findings are nearly certain security issues. Medium adds findings where the scanner
           is fairly sure but not certain. Only raise this threshold if you are seeing too many false alarms.
         </p>
         <select name="keep_confidences" id="keep_confidences"
-                style="font:inherit; padding:0.4rem 0.6rem; border:1px solid var(--border);
-                       border-radius:6px; background:var(--card); color:var(--fg); width:100%; max-width:400px;">
+                style="width:100%; max-width:400px;">
           {% for value, label in keep_conf_options.items() %}
           <option value="{{ value }}"
             {{ 'selected' if sc and sc.keep_confidences == value else ('selected' if not sc and value == 'high,medium' else '') }}>
@@ -106,16 +104,15 @@
       </div>
 
       <div>
-        <label style="display:block; font-weight:600; margin-bottom:0.3rem;" for="advisory_confidences">
+        <label class="form-label" for="advisory_confidences">
           Which findings should appear as warnings only (non-blocking)?
         </label>
-        <p class="muted" style="font-size:0.84rem; margin:0 0 0.4rem;">
+        <p class="form-hint">
           Warning findings are shown in the scan report but do not stop the deployment.
           They are useful for tracking issues you intend to fix later.
         </p>
         <select name="advisory_confidences" id="advisory_confidences"
-                style="font:inherit; padding:0.4rem 0.6rem; border:1px solid var(--border);
-                       border-radius:6px; background:var(--card); color:var(--fg); width:100%; max-width:400px;">
+                style="width:100%; max-width:400px;">
           {% for value, label in advisory_conf_options.items() %}
           <option value="{{ value }}"
             {{ 'selected' if sc and sc.advisory_confidences == value else ('selected' if not sc and value == 'low' else '') }}>
@@ -126,22 +123,20 @@
       </div>
     </fieldset>
 
-    {# ── Parallelism ── #}
-    <fieldset style="border:1px solid var(--border); border-radius:8px; padding:1rem; margin:0 0 1.25rem;">
+    <fieldset style="border:1px solid var(--border); border-radius:var(--radius); padding:1rem; margin:0 0 1.25rem;">
       <legend style="font-weight:600; padding:0 0.4rem;">Speed tuning</legend>
 
       <div>
-        <label style="display:block; font-weight:600; margin-bottom:0.3rem;" for="vuln_verifier_parallelism">
+        <label class="form-label" for="vuln_verifier_parallelism">
           How many verification checks should run at the same time?
         </label>
-        <p class="muted" style="font-size:0.84rem; margin:0 0 0.4rem;">
+        <p class="form-hint">
           A higher number makes scans faster on large repos but uses more memory.
           <strong>2</strong> is the safe default. Maximum is 16.
         </p>
         <input type="number" name="vuln_verifier_parallelism" id="vuln_verifier_parallelism"
                min="1" max="16" value="{{ sc.vuln_verifier_parallelism if sc else 2 }}"
-               style="font:inherit; padding:0.4rem 0.6rem; border:1px solid var(--border);
-                      border-radius:6px; background:var(--card); color:var(--fg); width:80px;">
+               style="width:80px;">
       </div>
 
       <div style="margin-top:1rem;">
@@ -212,8 +207,7 @@
       </div>
     </fieldset>
 
-    {# ── Scanner toggles ── #}
-    <fieldset style="border:1px solid var(--border); border-radius:8px; padding:1rem; margin:0 0 1.25rem;">
+    <fieldset style="border:1px solid var(--border); border-radius:var(--radius); padding:1rem; margin:0 0 1.25rem;">
       <legend style="font-weight:600; padding:0 0.4rem;">Which security tools should run?</legend>
       <p class="muted" style="font-size:0.84rem; margin:0 0 0.8rem;">
         Each tool scans for different types of problems. Disable a tool if it is producing
@@ -233,7 +227,6 @@
         </span>
       </label>
 
-      {# Semgrep sub-options — shown/hidden by JS based on the Semgrep checkbox #}
       <fieldset id="semgrep-rules" style="border:1px solid var(--border); border-radius:6px;
                 padding:0.75rem 1rem; margin:0 0 0.75rem 1.8rem;
                 {{ 'display:none' if sc and not sc.enable_semgrep else '' }}">
@@ -297,15 +290,14 @@
       </label>
     </fieldset>
 
-    {# ── Report retention ── #}
-    <fieldset style="border:1px solid var(--border); border-radius:8px; padding:1rem; margin:0 0 1.25rem;">
+    <fieldset style="border:1px solid var(--border); border-radius:var(--radius); padding:1rem; margin:0 0 1.25rem;">
       <legend style="font-weight:600; padding:0 0.4rem;">Report retention</legend>
 
       <div>
-        <label style="display:block; font-weight:600; margin-bottom:0.3rem;" for="report_retention_days">
+        <label class="form-label" for="report_retention_days">
           Auto-purge scan records older than how many days?
         </label>
-        <p class="muted" style="font-size:0.84rem; margin:0 0 0.5rem;">
+        <p class="form-hint">
           When set, the scanner deletes entire <strong>scan_records</strong> and
           <strong>ci_scan_records</strong> rows (including any stored HTML report) that are
           older than this threshold. The purge runs at startup and once every 24 hours.
@@ -316,33 +308,29 @@
           <input type="number" name="report_retention_days" id="report_retention_days"
                  min="1" max="3650" placeholder="blank = keep forever"
                  value="{{ sc.report_retention_days if sc and sc.report_retention_days else '' }}"
-                 style="font:inherit; padding:0.4rem 0.6rem; border:1px solid var(--border);
-                        border-radius:6px; background:var(--card); color:var(--fg); width:160px;">
+                 style="width:160px;">
           <span class="muted" style="font-size:0.85rem;">days (e.g. 90 = keep 3 months)</span>
         </div>
       </div>
     </fieldset>
 
-    {# ── High-risk paths ── #}
-    <fieldset style="border:1px solid var(--border); border-radius:8px; padding:1rem; margin:0 0 1.25rem;">
+    <fieldset style="border:1px solid var(--border); border-radius:var(--radius); padding:1rem; margin:0 0 1.25rem;">
       <legend style="font-weight:600; padding:0 0.4rem;">Sensitive folder list</legend>
 
       <div>
-        <label style="display:block; font-weight:600; margin-bottom:0.3rem;" for="high_risk_paths">
+        <label class="form-label" for="high_risk_paths">
           Which folders contain sensitive code that needs extra scrutiny?
         </label>
-        <p class="muted" style="font-size:0.84rem; margin:0 0 0.5rem;">
+        <p class="form-hint">
           Findings inside these folders are treated as more serious — a medium-confidence issue
           in a folder on this list becomes a blocking finding instead of an advisory warning.
           Enter one folder path prefix per line (e.g. <code>auth/</code>, <code>payments/</code>).
           Leave blank to use the built-in defaults.
         </p>
         <textarea name="high_risk_paths" id="high_risk_paths" rows="6"
+                  class="input-mono"
                   placeholder="Leave blank to use built-in defaults&#10;Example:&#10;auth/&#10;payments/&#10;admin/"
-                  style="font:14px/1.5 ui-monospace, 'SF Mono', Menlo, monospace;
-                         padding:0.45rem 0.65rem; border:1px solid var(--border);
-                         border-radius:6px; background:var(--card); color:var(--fg);
-                         width:100%; max-width:480px; resize:vertical;">{{ sc.high_risk_paths if sc else '' }}</textarea>
+                  style="width:100%; max-width:480px; resize:vertical;">{{ sc.high_risk_paths if sc else '' }}</textarea>
       </div>
     </fieldset>
 
