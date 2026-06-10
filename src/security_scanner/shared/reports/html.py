@@ -406,6 +406,22 @@ details.finding-block > *:last-child { margin-bottom: 1em; }
   margin-bottom: 0.6em;
 }
 
+/* AI-prompt collapse toggle inside a finding card. */
+details.prompt-toggle {
+  margin: 0.4em 0 0.9em;
+}
+details.prompt-toggle > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 0.35em 0;
+  font-size: 0.82em;
+  color: var(--accent);
+  font-weight: 600;
+}
+details.prompt-toggle > summary::-webkit-details-marker { display: none; }
+details.prompt-toggle > summary::before { content: "▸ "; }
+details.prompt-toggle[open] > summary::before { content: "▾ "; }
+
 /* Nested code-reveal toggle inside a finding card. */
 details.code-toggle {
   margin: 0.4em 0 1em;
@@ -469,7 +485,7 @@ ol.location-list > li { margin: 0.5em 0; }
   font-size: 0.85em;
 }
 
-/* Gate decision hero banner */
+/* Verdict hero banner */
 .gate-hero {
   border-radius: 8px;
   padding: 1.4em 1.75em 1.2em;
@@ -1149,8 +1165,8 @@ def _synthesize_group_prompt(group: list[VulnerabilityFinding]) -> str:
 
 def _ai_prompt_block(prompt_text: str, *, header: str) -> str:
     return (
-        '<details class="code-toggle" style="border:none;background:transparent;padding:0 0 0.3em;">'
-        f'<summary style="font-size:0.82em;font-weight:600;color:var(--accent);padding:0.3em 0;border:none;">📋 {escape(header)}</summary>'
+        '<details class="prompt-toggle">'
+        f'<summary>📋 {escape(header)}</summary>'
         '<div class="ai-prompt">'
         f"{escape(prompt_text)}"
         "</div>"

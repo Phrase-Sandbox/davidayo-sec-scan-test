@@ -101,7 +101,9 @@ def test_gate_decision_omitted_for_skill_scans():
 
 def test_gate_decision_shown_with_label_for_gate_scans():
     html = build_html_report(_result(gate_decision=GateDecision.blocked))
-    assert "Gate decision" in html
+    # Gate hero banner shows the verdict in uppercase; no longer uses "Gate decision" heading.
+    assert "BLOCKED" in html
+    assert "gate-hero" in html
     assert "blocked" in html
 
 
