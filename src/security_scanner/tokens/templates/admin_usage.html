@@ -10,10 +10,9 @@
   </p>
 </div>
 
-{# ── CI scan activity table ── #}
-<div class="card" style="padding:0; overflow:hidden;">
-  <div style="padding:1rem 1.4rem; border-bottom:1px solid var(--border);">
-    <h2 style="margin:0;">CI pipeline scans — last {{ lookback_days }} days</h2>
+<div class="card card-no-pad">
+  <div class="card-header">
+    <h2>CI pipeline scans — last {{ lookback_days }} days</h2>
   </div>
   {% if ci_scan_rows %}
   <div style="overflow-x:auto;">
@@ -49,16 +48,15 @@
     </table>
   </div>
   {% else %}
-  <div style="padding:2rem 1.5rem; text-align:center; color:var(--muted);">
-    <p>No CI pipeline scans in the last {{ lookback_days }} days.</p>
+  <div class="empty-state">
+    <p class="empty-state-title">No CI pipeline scans in the last {{ lookback_days }} days</p>
   </div>
   {% endif %}
 </div>
 
-{# ── CLI scan activity table ── #}
-<div class="card" style="padding:0; overflow:hidden;">
-  <div style="padding:1rem 1.4rem; border-bottom:1px solid var(--border);">
-    <h2 style="margin:0;">CLI scans — last {{ lookback_days }} days</h2>
+<div class="card card-no-pad">
+  <div class="card-header">
+    <h2>CLI scans — last {{ lookback_days }} days</h2>
   </div>
   {% if scan_rows %}
   <div style="overflow-x:auto;">
@@ -94,16 +92,15 @@
     </table>
   </div>
   {% else %}
-  <div style="padding:2rem 1.5rem; text-align:center; color:var(--muted);">
-    <p>No CLI scans in the last {{ lookback_days }} days.</p>
+  <div class="empty-state">
+    <p class="empty-state-title">No CLI scans in the last {{ lookback_days }} days</p>
   </div>
   {% endif %}
 </div>
 
-{# ── LLM token spend ── #}
-<div class="card" style="padding:0; overflow:hidden;">
-  <div style="padding:1rem 1.4rem; border-bottom:1px solid var(--border);">
-    <h2 style="margin:0;">LLM token spend — last 3 months</h2>
+<div class="card card-no-pad">
+  <div class="card-header">
+    <h2>LLM token spend — last 3 months</h2>
   </div>
   {% if usage_rows %}
   <div style="overflow-x:auto;">
@@ -151,15 +148,16 @@
     </table>
   </div>
   {% else %}
-  <div style="padding:2rem 1.5rem; text-align:center; color:var(--muted);">
-    <p>No LLM usage data for {% for m in months %}{{ m }}{% if not loop.last %}, {% endif %}{% endfor %}.</p>
+  <div class="empty-state">
+    <p class="empty-state-title">No LLM usage data for {% for m in months %}{{ m }}{% if not loop.last %}, {% endif %}{% endfor %}</p>
   </div>
   {% endif %}
 </div>
 
 <div style="position:fixed; bottom:1rem; right:1.2rem; font-size:0.75rem;
             color:var(--muted); background:var(--bg); border:1px solid var(--border);
-            border-radius:6px; padding:0.3rem 0.7rem; z-index:100;" id="usage-refresh-chip">
+            border-radius:6px; padding:0.3rem 0.7rem; z-index:100; box-shadow:var(--shadow-s);"
+     id="usage-refresh-chip">
   Updated <span id="usage-updated-at"></span> &middot; refreshing in <span id="usage-countdown">60</span>s
 </div>
 <script>
