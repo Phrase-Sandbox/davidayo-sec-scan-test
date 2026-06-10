@@ -1,4 +1,4 @@
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,23 +15,23 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    ANTHROPIC_API_KEY: str = Field(..., description="Anthropic API key for Claude")
+    ANTHROPIC_API_KEY: SecretStr = Field(..., description="Anthropic API key for Claude")
 
     # Optional non-default LLM providers (Appendix D-15 — DEVIATION, sim-only).
     # Unset by default → the spec-mandated Anthropic path is unchanged. Only
     # consulted when SCANNER_LLM_PROVIDER selects that provider; DATA
     # GOVERNANCE: ZDR/DPA is confirmed for Anthropic ONLY (§7.2/§8.3).
-    GOOGLE_API_KEY: str | None = Field(
+    GOOGLE_API_KEY: SecretStr | None = Field(
         default=None,
         description="Google API key — only used when SCANNER_LLM_PROVIDER=google (D-15)",
     )
 
-    PHRASE_SCAN_TOKEN: str | None = Field(
+    PHRASE_SCAN_TOKEN: SecretStr | None = Field(
         default=None,
         description="CI gate-path token (jurisdiction: enforcement); None disables gate auth",
     )
 
-    LOCAL_SCAN_TOKEN: str | None = Field(
+    LOCAL_SCAN_TOKEN: SecretStr | None = Field(
         default=None,
         description=(
             "DEPRECATED single-shared bearer for /scan/local. Kept as a "
@@ -107,8 +107,8 @@ class Settings(BaseSettings):
         ),
     )
 
-    LOCAL_PORTAL_PASSWORD: str = Field(
-        default="",
+    LOCAL_PORTAL_PASSWORD: SecretStr = Field(
+        default=SecretStr(""),
         description=(
             "LOCAL DEVELOPMENT ONLY. When set, enables a simple email + password "
             "login form on /portal/login. Any user who authenticates with this "
@@ -127,9 +127,9 @@ class Settings(BaseSettings):
         default="",
         description="Okta application client ID.",
     )
-    OKTA_CLIENT_SECRET: str = Field(
-        default="",
-        description="Okta client secret. NEVER logged (covered by REDACT_FIELDS 'secret').",
+    OKTA_CLIENT_SECRET: SecretStr = Field(
+        default=SecretStr(""),
+        description="Okta client secret. NEVER logged.",
     )
     OKTA_REDIRECT_URI: str = Field(
         default="",
@@ -150,12 +150,12 @@ class Settings(BaseSettings):
     )
 
     GITHUB_APP_ID: str = Field(..., description="GitHub App ID")
-    GITHUB_APP_PRIVATE_KEY: str = Field(
+    GITHUB_APP_PRIVATE_KEY: SecretStr = Field(
         ...,
         description="GitHub App PEM private key (newlines escaped in env)",
     )
 
-    SLACK_WEBHOOK_URL: str | None = Field(
+    SLACK_WEBHOOK_URL: SecretStr | None = Field(
         default=None,
         description="Slack #security webhook for bypass alerts; None disables Slack",
     )
@@ -185,7 +185,7 @@ class Settings(BaseSettings):
     # Required when the new two-channel model is active. Generated with:
     #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     # Rotating: decrypt-with-old, re-encrypt-with-new; see devci-readme.md.
-    SCANNER_ENCRYPTION_KEY: str | None = Field(
+    SCANNER_ENCRYPTION_KEY: SecretStr | None = Field(
         default=None,
         description=(
             "Fernet key (urlsafe-b64, 32 bytes). Required when encrypted "

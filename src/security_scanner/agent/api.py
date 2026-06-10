@@ -136,7 +136,7 @@ async def get_pipeline(settings: _SettingsDep) -> ScanPipeline:
     """
     github_client = GitHubClient(
         app_id=settings.GITHUB_APP_ID,
-        private_key=settings.GITHUB_APP_PRIVATE_KEY,
+        private_key=settings.GITHUB_APP_PRIVATE_KEY.get_secret_value(),
     )
     org_row = await _load_active_org_settings()
     if org_row is not None:
@@ -353,7 +353,9 @@ async def get_slack_webhook_config(
     ``scanner.yml``.
     """
     org_row = await _load_active_org_settings()
-    webhook_url = _resolve_slack_webhook(org_row) or settings.SLACK_WEBHOOK_URL
+    webhook_url = _resolve_slack_webhook(org_row) or (
+        settings.SLACK_WEBHOOK_URL.get_secret_value() if settings.SLACK_WEBHOOK_URL else None
+    )
     return SlackConfigResponse(webhook_url=webhook_url)
 
 

@@ -179,7 +179,7 @@ async def portal_login_submit(
     """
     settings = get_settings()
     next = _safe_next(next)  # reject external URLs (open-redirect guard)
-    local_pw = settings.LOCAL_PORTAL_PASSWORD
+    local_pw = settings.LOCAL_PORTAL_PASSWORD.get_secret_value()
 
     def _render_error(msg: str, code: int) -> HTMLResponse:
         return templates.TemplateResponse(

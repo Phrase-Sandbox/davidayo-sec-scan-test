@@ -50,7 +50,7 @@ def _resolve_key(settings: Settings | None) -> str:
             "SCANNER_ENCRYPTION_KEY is not configured. The scanner cannot "
             "encrypt or decrypt stored API keys. Set it and restart."
         )
-    return s.SCANNER_ENCRYPTION_KEY
+    return s.SCANNER_ENCRYPTION_KEY.get_secret_value()
 
 
 def encrypt(plaintext: str, *, settings: Settings | None = None) -> bytes:
@@ -81,7 +81,7 @@ def validate_startup_key(settings: Settings) -> None:
     validate the value when it is present.
     """
     if settings.SCANNER_ENCRYPTION_KEY:
-        _fernet_for(settings.SCANNER_ENCRYPTION_KEY)
+        _fernet_for(settings.SCANNER_ENCRYPTION_KEY.get_secret_value())
 
 
 def mask_for_display(secret: str, *, keep: int = 4) -> str:
@@ -112,7 +112,7 @@ def encrypt_report(plaintext: str, *, settings: Settings | None = None) -> str:
     s = settings or get_settings()
     if not s.SCANNER_ENCRYPTION_KEY:
         return plaintext
-    fernet = _fernet_for(s.SCANNER_ENCRYPTION_KEY)
+    fernet = _fernet_for(s.SCANNER_ENCRYPTION_KEY.get_secret_value())
     return fernet.encrypt(plaintext.encode("utf-8")).decode("ascii")
 
 

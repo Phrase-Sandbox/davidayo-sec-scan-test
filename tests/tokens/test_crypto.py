@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from cryptography.fernet import Fernet
+from pydantic import SecretStr
 
 from security_scanner.tokens.crypto import (
     EncryptionKeyMissing,
@@ -22,7 +23,7 @@ def _settings(key_value: str | None):
     from unittest.mock import MagicMock
 
     s = MagicMock()
-    s.SCANNER_ENCRYPTION_KEY = key_value
+    s.SCANNER_ENCRYPTION_KEY = SecretStr(key_value) if key_value else None
     return s
 
 

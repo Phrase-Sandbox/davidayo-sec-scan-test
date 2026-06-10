@@ -168,7 +168,7 @@ async def verify_local_scan_token(request: Request) -> AuthenticatedLocalCaller:
 
     # --- Legacy single-token path -------------------------------------------
     if not settings.USE_TOKEN_REGISTRY:
-        expected = settings.LOCAL_SCAN_TOKEN
+        expected = settings.LOCAL_SCAN_TOKEN.get_secret_value() if settings.LOCAL_SCAN_TOKEN else None
         if token is None or expected is None or not hmac.compare_digest(token, expected):
             local_scan_auth_outcomes_total.labels(outcome="legacy_unauthorized").inc()
             raise HTTPException(

@@ -44,7 +44,7 @@ def test_loads_required_vars_from_environment(clean_env):
     for key, value in REQUIRED_VARS.items():
         clean_env.setenv(key, value)
     settings = get_settings()
-    assert settings.ANTHROPIC_API_KEY == REQUIRED_VARS["ANTHROPIC_API_KEY"]
+    assert settings.ANTHROPIC_API_KEY.get_secret_value() == REQUIRED_VARS["ANTHROPIC_API_KEY"]
     assert settings.GITHUB_APP_ID == REQUIRED_VARS["GITHUB_APP_ID"]
 
 

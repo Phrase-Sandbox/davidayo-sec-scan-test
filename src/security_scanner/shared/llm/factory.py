@@ -194,10 +194,11 @@ def build_llm_client(settings: Settings) -> LLMClient:
     if provider in ("anthropic", "claude"):
         if not settings.ANTHROPIC_API_KEY:
             raise LLMConfigError("ANTHROPIC_API_KEY is not set (bootstrap fallback path).")
-        return _make_claude(settings.ANTHROPIC_API_KEY, model)
+        return _make_claude(settings.ANTHROPIC_API_KEY.get_secret_value(), model)
 
     if provider in ("google", "gemini"):
-        key = getattr(settings, "GOOGLE_API_KEY", None)
+        _google_secret = getattr(settings, "GOOGLE_API_KEY", None)
+        key = _google_secret.get_secret_value() if _google_secret else None
         if not key:
             raise LLMConfigError(
                 "SCANNER_LLM_PROVIDER=google but GOOGLE_API_KEY is not set "

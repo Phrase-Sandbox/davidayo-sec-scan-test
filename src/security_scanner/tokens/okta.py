@@ -151,7 +151,7 @@ async def _exchange_code(code: str, settings) -> str:
                 "code": code,
                 "redirect_uri": settings.OKTA_REDIRECT_URI,
                 "client_id": settings.OKTA_CLIENT_ID,
-                "client_secret": settings.OKTA_CLIENT_SECRET,
+                "client_secret": settings.OKTA_CLIENT_SECRET.get_secret_value(),
             },
             headers={"Accept": "application/json"},
         )

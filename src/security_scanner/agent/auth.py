@@ -67,7 +67,7 @@ def verify_scan_token(request: Request) -> str:
         request.state.github_identity = identity
         return token
 
-    expected = settings.PHRASE_SCAN_TOKEN
+    expected = settings.PHRASE_SCAN_TOKEN.get_secret_value() if settings.PHRASE_SCAN_TOKEN else None
     if expected is None or not hmac.compare_digest(token, expected):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
