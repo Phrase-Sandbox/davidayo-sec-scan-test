@@ -37,7 +37,7 @@ import bcrypt
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 
 from security_scanner.shared.config import get_settings, okta_is_configured
 from security_scanner.shared.logging_util import get_logger
@@ -702,6 +702,112 @@ async def _portal_scans_redirect() -> HTMLResponse:
 async def _portal_scan_detail_redirect(scan_id: str) -> HTMLResponse:
     from fastapi.responses import RedirectResponse  # noqa: PLC0415
     return RedirectResponse(f"/portal/reports/{scan_id}", status_code=301)
+
+
+@router.get("/dashboard", response_class=HTMLResponse)
+async def portal_dashboard(request: Request, user: _UserDep) -> HTMLResponse:
+    """Security posture dashboard — aggregated risk overview for the caller."""
+    from datetime import timedelta  # noqa: PLC0415
+
+    now = datetime.now(UTC)
+    cutoff = now - timedelta(days=90)
+
+    factory = get_session_factory()
+    async with factory() as session:
+        # Total scans in last 90 days
+        total_stmt = select(func.count(ScanRecord.scan_id)).where(
+            ScanRecord.user_email == user.email,
+            ScanRecord.started_at >= cutoff,
+        )
+        total_scans: int = (await session.execute(total_stmt)).scalar_one_or_none() or 0
+
+        # Blocked deployments (critical > 0)
+        blocked_stmt = select(func.count(ScanRecord.scan_id)).where(
+            ScanRecord.user_email == user.email,
+            ScanRecord.started_at >= cutoff,
+            ScanRecord.critical > 0,
+        )
+        blocked_deployments: int = (
+            await session.execute(blocked_stmt)
+        ).scalar_one_or_none() or 0
+
+        # Total critical findings
+        critical_stmt = select(func.sum(ScanRecord.critical)).where(
+            ScanRecord.user_email == user.email,
+            ScanRecord.started_at >= cutoff,
+        )
+        total_critical: int = (
+            await session.execute(critical_stmt)
+        ).scalar_one_or_none() or 0
+
+        # Repos at risk (distinct repos with critical > 0)
+        at_risk_stmt = select(func.count(func.distinct(ScanRecord.repo_url))).where(
+            ScanRecord.user_email == user.email,
+            ScanRecord.started_at >= cutoff,
+            ScanRecord.critical > 0,
+        )
+        repos_at_risk: int = (
+            await session.execute(at_risk_stmt)
+        ).scalar_one_or_none() or 0
+
+        # Top risky repos — group by repo, sum criticals + highs
+        risky_repos_stmt = (
+            select(
+                ScanRecord.repo_url,
+                func.sum(ScanRecord.critical).label("total_critical"),
+                func.sum(ScanRecord.high).label("total_high"),
+                func.max(ScanRecord.started_at).label("last_scan"),
+            )
+            .where(
+                ScanRecord.user_email == user.email,
+                ScanRecord.started_at >= cutoff,
+            )
+            .group_by(ScanRecord.repo_url)
+            .order_by(desc("total_critical"), desc("total_high"))
+            .limit(5)
+        )
+        risky_repos = list((await session.execute(risky_repos_stmt)).all())
+
+        # Recent blocked deployments
+        recent_blocked_stmt = (
+            select(ScanRecord)
+            .where(
+                ScanRecord.user_email == user.email,
+                ScanRecord.critical > 0,
+            )
+            .order_by(desc(ScanRecord.started_at))
+            .limit(5)
+        )
+        recent_blocked = list(
+            (await session.execute(recent_blocked_stmt)).scalars().all()
+        )
+
+        # Recent activity (all scans)
+        activity_stmt = (
+            select(ScanRecord)
+            .where(ScanRecord.user_email == user.email)
+            .order_by(desc(ScanRecord.started_at))
+            .limit(10)
+        )
+        recent_activity = list(
+            (await session.execute(activity_stmt)).scalars().all()
+        )
+
+    return templates.TemplateResponse(
+        request,
+        "portal_dashboard.html",
+        {
+            "user": user,
+            "total_scans": total_scans,
+            "blocked_deployments": blocked_deployments,
+            "total_critical": total_critical,
+            "repos_at_risk": repos_at_risk,
+            "risky_repos": risky_repos,
+            "recent_blocked": recent_blocked,
+            "recent_activity": recent_activity,
+        },
+        headers=_NO_STORE_HEADERS,
+    )
 
 
 @router.get("/reports", response_class=HTMLResponse)
