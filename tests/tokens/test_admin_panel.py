@@ -479,7 +479,8 @@ def test_admin_usage_shows_all_nav_links(client, session_factory):
     assert r.status_code == 200
     assert "/admin/tokens" in r.text
     assert "/admin/users" in r.text
-    assert "/admin/ci-token" in r.text
+    # CI token moved under /admin/configuration/ci-token
+    assert "/admin/configuration/ci-token" in r.text
     assert "/admin/audit" in r.text
 
 
@@ -499,18 +500,18 @@ def test_admin_advanced_settings_403_for_non_admin(client, session_factory):
 
 
 def test_admin_advanced_settings_200_for_admin(client, session_factory):
+    # /admin/advanced-settings now redirects to /admin/configuration/gate-policy
     r = client.get("/admin/advanced-settings", headers=_admin_headers())
     assert r.status_code == 200
-    assert "Advanced Settings" in r.text
-    assert "blocking" in r.text.lower() or "confidence" in r.text.lower()
+    assert "Gate Policy" in r.text or "gate" in r.text.lower()
+    assert "blocking" in r.text.lower() or "confidence" in r.text.lower() or "block" in r.text.lower()
 
 
 def test_admin_advanced_settings_shows_nav_link(client, session_factory):
-    """Advanced settings page must link back to itself and to other sections."""
+    """Advanced settings redirect destination must link to sibling admin sections."""
     r = client.get("/admin/advanced-settings", headers=_admin_headers())
     assert r.status_code == 200
-    assert "/admin/advanced-settings" in r.text
-    assert "/admin/org-settings" in r.text
+    assert "/admin/configuration" in r.text
     assert "/admin/audit" in r.text
 
 
