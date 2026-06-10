@@ -332,36 +332,6 @@
 </div>
 {% endif %}
 
-{# ── Collapsible: Scan Metadata ── #}
-<div class="collapse-section">
-  <button class="collapse-trigger" aria-expanded="false"
-          onclick="toggleCollapse(this, 'meta-body')">
-    <span>Scan Metadata</span>
-    <span class="ct-icon">▼</span>
-  </button>
-  <div class="collapse-body" id="meta-body">
-    <dl class="dl-two-col">
-      <dt>Repo</dt>
-      <dd>{{ scan.repo_url }}</dd>
-      <dt>Provider</dt>
-      <dd>{{ scan.provider or "—" }}</dd>
-      <dt>Model</dt>
-      <dd class="mono" style="font-size:0.82rem;">{{ scan.model or "—" }}</dd>
-      <dt>Started</dt>
-      <dd>{{ scan.started_at.strftime("%Y-%m-%d %H:%M UTC") if scan.started_at else "—" }}</dd>
-      <dt>Finished</dt>
-      <dd>{{ scan.finished_at.strftime("%Y-%m-%d %H:%M UTC") if scan.finished_at else "—" }}</dd>
-      <dt>Scan ID</dt>
-      <dd class="mono" style="font-size:0.78rem;">{{ scan.scan_id }}</dd>
-      <dt>Status</dt>
-      <dd>
-        {% if scan.status == "ok" %}<span class="pill pill-ok">ok</span>
-        {% else %}<span class="pill pill-fail">{{ scan.status }}</span>{% endif %}
-      </dd>
-    </dl>
-  </div>
-</div>
-
 {# ── Collapsible: LLM Usage ── #}
 {% if usage %}
 <div class="collapse-section">
@@ -441,6 +411,18 @@
   </div>
 </div>
 {% endif %}
+
+<div class="security-contact">
+  <div class="sc-icon">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    </svg>
+  </div>
+  <div>
+    <div class="sc-title">Need help with this report?</div>
+    <div class="sc-body">Contact the security team at <a href="mailto:security@phrase.com">security@phrase.com</a> or reach out on Slack <code>#security</code>.</div>
+  </div>
+</div>
 
 <script>
 function toggleCollapse(btn, bodyId) {
