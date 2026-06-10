@@ -1020,7 +1020,10 @@ def _finding_card(
     parts += [
         "</summary>",
         f"<p>{escape(f.description)}</p>",
-        f'<div class="risk-callout">{escape(f.exploit_scenario)}</div>',
+        '<div class="impact-callout">'
+        '<span class="impact-callout-label">Impact</span>'
+        f"{escape(f.exploit_scenario)}"
+        "</div>",
         _ai_prompt_block(_synthesize_ai_prompt(f), header="Paste this into your AI editor"),
     ]
     # Render upload context panel when present (upload findings).
@@ -1146,10 +1149,12 @@ def _synthesize_group_prompt(group: list[VulnerabilityFinding]) -> str:
 
 def _ai_prompt_block(prompt_text: str, *, header: str) -> str:
     return (
+        '<details class="code-toggle" style="border:none;background:transparent;padding:0 0 0.3em;">'
+        f'<summary style="font-size:0.82em;font-weight:600;color:var(--accent);padding:0.3em 0;border:none;">📋 {escape(header)}</summary>'
         '<div class="ai-prompt">'
-        f'<span class="ai-prompt-header">📋 {escape(header)}</span>'
         f"{escape(prompt_text)}"
         "</div>"
+        "</details>"
     )
 
 
