@@ -39,6 +39,10 @@ from security_scanner.tokens.auth import PhraseUser, require_admin
 from security_scanner.tokens.crypto import decrypt_report
 from security_scanner.tokens.db import get_session_factory
 from security_scanner.tokens.models import (
+    APP_PERMISSIONS,
+    AppGroup,
+    AppGroupMember,
+    AppGroupPermission,
     AuditEvent,
     AuditEventType,
     CiScanRecord,
@@ -809,6 +813,341 @@ async def admin_demote_user(
 
     log.info("admin demoted user from admin", actor_email=admin.email, target_email=email)
     return await admin_users(request, admin, page=1, q=email)
+
+
+# ---------------------------------------------------------------------------
+# Group-based RBAC (/admin/groups)
+# ---------------------------------------------------------------------------
+
+
+async def _load_groups_page(request: Request, admin: PhraseUser) -> HTMLResponse:
+    """Render the groups list page, shared by GET and POST handlers."""
+    factory = get_session_factory()
+    async with factory() as session:
+        groups_rows = (
+            await session.execute(select(AppGroup).order_by(AppGroup.name))
+        ).scalars().all()
+
+        # For each group fetch member count and permissions.
+        groups = []
+        for g in groups_rows:
+            members_count = (
+                await session.execute(
+                    select(func.count()).where(AppGroupMember.group_id == g.id)
+                )
+            ).scalar_one()
+            perms_rows = (
+                await session.execute(
+                    select(AppGroupPermission.permission).where(
+                        AppGroupPermission.group_id == g.id
+                    )
+                )
+            ).scalars().all()
+            groups.append(
+                {
+                    "id": str(g.id),
+                    "name": g.name,
+                    "description": g.description,
+                    "created_at": g.created_at,
+                    "created_by": g.created_by,
+                    "member_count": members_count,
+                    "permissions": sorted(perms_rows),
+                }
+            )
+
+        # Active users for the add-member dropdown.
+        users_list = (
+            await session.execute(
+                select(User.email, User.display_name)
+                .where(User.is_active.is_(True))
+                .order_by(User.email)
+            )
+        ).all()
+
+    return templates.TemplateResponse(
+        request,
+        "admin_groups.html",
+        {
+            "user": admin,
+            "groups": groups,
+            "users": users_list,
+            "all_permissions": APP_PERMISSIONS,
+            "flash": None,
+        },
+        headers=_NO_STORE_HEADERS,
+    )
+
+
+@router.get("/groups", response_class=HTMLResponse)
+async def admin_groups_get(request: Request, admin: _AdminDep) -> HTMLResponse:
+    return await _load_groups_page(request, admin)
+
+
+@router.post("/groups/create", response_class=HTMLResponse)
+async def admin_group_create(
+    request: Request,
+    admin: _AdminDep,
+    name: str = Form(...),
+    description: str = Form(""),
+) -> HTMLResponse:
+    name = name.strip()
+    if not name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Group name required.")
+    factory = get_session_factory()
+    async with factory() as session:
+        existing = (
+            await session.execute(select(AppGroup).where(AppGroup.name == name))
+        ).scalar_one_or_none()
+        if existing:
+            raise HTTPException(  # noqa: TRY301
+                status_code=status.HTTP_409_CONFLICT, detail="Group name already exists."
+            )
+        group = AppGroup(
+            id=_uuid.uuid4(),
+            name=name,
+            description=description.strip() or None,
+            created_at=datetime.now(UTC),
+            created_by=admin.email,
+        )
+        session.add(group)
+        await token_audit.record(
+            session,
+            event_type=AuditEventType.group_created,
+            user_email=admin.email,
+            actor_email=admin.email,
+        )
+        await session.commit()
+    log.info("admin created group", actor_email=admin.email, group_name=name)
+    return await _load_groups_page(request, admin)
+
+
+@router.post("/groups/{group_id}/delete", response_class=HTMLResponse)
+async def admin_group_delete(
+    request: Request,
+    admin: _AdminDep,
+    group_id: str,
+) -> HTMLResponse:
+    try:
+        gid = _uuid.UUID(group_id)
+    except ValueError as _exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")  # noqa: B904
+    factory = get_session_factory()
+    async with factory() as session:
+        group = await session.get(AppGroup, gid)
+        if group is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")
+        await session.delete(group)
+        await token_audit.record(
+            session,
+            event_type=AuditEventType.group_deleted,
+            user_email=admin.email,
+            actor_email=admin.email,
+        )
+        await session.commit()
+    log.info("admin deleted group", actor_email=admin.email, group_id=group_id)
+    return await _load_groups_page(request, admin)
+
+
+@router.post("/groups/{group_id}/members/add", response_class=HTMLResponse)
+async def admin_group_add_member(
+    request: Request,
+    admin: _AdminDep,
+    group_id: str,
+    email: str = Form(...),
+) -> HTMLResponse:
+    try:
+        gid = _uuid.UUID(group_id)
+    except ValueError as _exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")  # noqa: B904
+    email = email.strip().lower()
+    factory = get_session_factory()
+    async with factory() as session:
+        group = await session.get(AppGroup, gid)
+        if group is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")
+        user_row = await session.get(User, email)
+        if user_row is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+        existing = await session.get(AppGroupMember, (gid, email))
+        if existing is None:
+            member = AppGroupMember(
+                group_id=gid,
+                user_email=email,
+                added_at=datetime.now(UTC),
+                added_by=admin.email,
+            )
+            session.add(member)
+            await token_audit.record(
+                session,
+                event_type=AuditEventType.group_member_added,
+                user_email=email,
+                actor_email=admin.email,
+            )
+            await session.commit()
+    log.info("admin added group member", actor_email=admin.email, group_id=group_id, member=email)
+    return await _load_groups_page(request, admin)
+
+
+@router.post("/groups/{group_id}/members/{email}/remove", response_class=HTMLResponse)
+async def admin_group_remove_member(
+    request: Request,
+    admin: _AdminDep,
+    group_id: str,
+    email: str,
+) -> HTMLResponse:
+    try:
+        gid = _uuid.UUID(group_id)
+    except ValueError as _exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")  # noqa: B904
+    factory = get_session_factory()
+    async with factory() as session:
+        member = await session.get(AppGroupMember, (gid, email))
+        if member is not None:
+            await session.delete(member)
+            await token_audit.record(
+                session,
+                event_type=AuditEventType.group_member_removed,
+                user_email=email,
+                actor_email=admin.email,
+            )
+            await session.commit()
+    log.info("admin removed group member", actor_email=admin.email, group_id=group_id, member=email)
+    return await _load_groups_page(request, admin)
+
+
+@router.post("/groups/{group_id}/permissions/add", response_class=HTMLResponse)
+async def admin_group_add_permission(
+    request: Request,
+    admin: _AdminDep,
+    group_id: str,
+    permission: str = Form(...),
+) -> HTMLResponse:
+    try:
+        gid = _uuid.UUID(group_id)
+    except ValueError as _exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")  # noqa: B904
+    if permission not in APP_PERMISSIONS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown permission.")
+    factory = get_session_factory()
+    async with factory() as session:
+        group = await session.get(AppGroup, gid)
+        if group is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")
+        existing = await session.get(AppGroupPermission, (gid, permission))
+        if existing is None:
+            perm_row = AppGroupPermission(group_id=gid, permission=permission)
+            session.add(perm_row)
+            await token_audit.record(
+                session,
+                event_type=AuditEventType.group_permission_added,
+                user_email=admin.email,
+                actor_email=admin.email,
+            )
+            await session.commit()
+    log.info(
+        "admin added group permission",
+        actor_email=admin.email,
+        group_id=group_id,
+        permission=permission,
+    )
+    return await _load_groups_page(request, admin)
+
+
+@router.post("/groups/{group_id}/permissions/{permission}/remove", response_class=HTMLResponse)
+async def admin_group_remove_permission(
+    request: Request,
+    admin: _AdminDep,
+    group_id: str,
+    permission: str,
+) -> HTMLResponse:
+    try:
+        gid = _uuid.UUID(group_id)
+    except ValueError as _exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")  # noqa: B904
+    factory = get_session_factory()
+    async with factory() as session:
+        perm_row = await session.get(AppGroupPermission, (gid, permission))
+        if perm_row is not None:
+            await session.delete(perm_row)
+            await token_audit.record(
+                session,
+                event_type=AuditEventType.group_permission_removed,
+                user_email=admin.email,
+                actor_email=admin.email,
+            )
+            await session.commit()
+    log.info(
+        "admin removed group permission",
+        actor_email=admin.email,
+        group_id=group_id,
+        permission=permission,
+    )
+    return await _load_groups_page(request, admin)
+
+
+@router.get("/groups/{group_id}/members", response_class=HTMLResponse)
+async def admin_group_members(
+    request: Request,
+    admin: _AdminDep,
+    group_id: str,
+) -> HTMLResponse:
+    """Detail view: members and permissions for a single group."""
+    try:
+        gid = _uuid.UUID(group_id)
+    except ValueError as _exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")  # noqa: B904
+    factory = get_session_factory()
+    async with factory() as session:
+        group = await session.get(AppGroup, gid)
+        if group is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")
+        members_rows = (
+            await session.execute(
+                select(AppGroupMember, User.display_name)
+                .join(User, AppGroupMember.user_email == User.email)
+                .where(AppGroupMember.group_id == gid)
+                .order_by(AppGroupMember.user_email)
+            )
+        ).all()
+        perms_rows = (
+            await session.execute(
+                select(AppGroupPermission.permission).where(
+                    AppGroupPermission.group_id == gid
+                )
+            )
+        ).scalars().all()
+        all_users = (
+            await session.execute(
+                select(User.email, User.display_name)
+                .where(User.is_active.is_(True))
+                .order_by(User.email)
+            )
+        ).all()
+
+    member_emails = {m.AppGroupMember.user_email for m in members_rows}
+    available_users = [u for u in all_users if u.email not in member_emails]
+
+    return templates.TemplateResponse(
+        request,
+        "admin_group_detail.html",
+        {
+            "user": admin,
+            "group": group,
+            "members": [
+                {
+                    "email": m.AppGroupMember.user_email,
+                    "display_name": m.display_name,
+                    "added_at": m.AppGroupMember.added_at,
+                    "added_by": m.AppGroupMember.added_by,
+                }
+                for m in members_rows
+            ],
+            "permissions": sorted(perms_rows),
+            "all_permissions": APP_PERMISSIONS,
+            "available_users": available_users,
+        },
+        headers=_NO_STORE_HEADERS,
+    )
 
 
 # ---------------------------------------------------------------------------

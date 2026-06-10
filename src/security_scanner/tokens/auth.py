@@ -25,18 +25,20 @@ import base64
 import binascii
 import json
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from urllib.parse import quote
 
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import HTTPException, Request, status
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from security_scanner.shared.config import get_settings
 from security_scanner.shared.logging_util import get_logger
 from security_scanner.tokens.db import get_session_factory
-from security_scanner.tokens.models import User, UserRole
+from security_scanner.tokens.models import AppGroupMember, AppGroupPermission, User, UserRole
 
 # ---------------------------------------------------------------------------
 # Portal session cookie (local-auth path, complements Okta X-Userinfo).
@@ -369,6 +371,12 @@ async def require_phrase_user(request: Request) -> PhraseUser:
     return user
 
 
+def _protected_emails() -> frozenset[str]:
+    return frozenset(
+        e.strip() for e in get_settings().PROTECTED_ADMIN_EMAILS.split(",") if e.strip()
+    )
+
+
 async def require_admin(request: Request) -> PhraseUser:
     """Same as :func:`require_phrase_user` plus a DB role check.
 
@@ -405,3 +413,61 @@ async def require_admin(request: Request) -> PhraseUser:
             detail="Admin role required.",
         )
     return user
+
+
+def require_permission(permission: str) -> Callable:
+    """FastAPI dependency factory for group-based permission checks.
+
+    Protected admins (PROTECTED_ADMIN_EMAILS) always pass.
+    Other users must be a member of at least one AppGroup that holds the
+    requested permission.  Falls back to UserRole.admin in DB for the
+    special "admin_access" permission so the existing role system still works.
+
+    Usage::
+
+        @router.get("/portal/reports")
+        async def reports(user = Depends(require_permission("reports_access"))):
+            ...
+    """
+
+    async def _dep(request: Request) -> PhraseUser:
+        user = await require_phrase_user(request)
+
+        if get_settings().ADMIN_LOCAL_BYPASS:
+            return user
+        if user.email in _protected_emails():
+            return user
+
+        factory = get_session_factory()
+        async with factory() as session:
+            # Check group membership with the requested permission.
+            stmt = (
+                select(AppGroupMember)
+                .join(
+                    AppGroupPermission,
+                    AppGroupMember.group_id == AppGroupPermission.group_id,
+                )
+                .where(AppGroupMember.user_email == user.email)
+                .where(AppGroupPermission.permission == permission)
+                .limit(1)
+            )
+            has_perm = (await session.execute(stmt)).first() is not None
+
+            if not has_perm and permission == "admin_access":
+                # Fallback: DB role=admin also grants admin_access.
+                row = await session.get(User, user.email)
+                has_perm = row is not None and row.role == UserRole.admin
+
+        if not has_perm:
+            log.info(
+                "group permission denied",
+                user_email=user.email,
+                permission=permission,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission '{permission}' required.",
+            )
+        return user
+
+    return _dep

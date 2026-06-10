@@ -63,6 +63,12 @@ class AuditEventType(enum.StrEnum):
     user_password_changed = "user_password_changed"  # noqa: S105
     user_okta_login = "user_okta_login"
     user_local_login = "user_local_login"
+    group_created = "group_created"
+    group_deleted = "group_deleted"
+    group_member_added = "group_member_added"
+    group_member_removed = "group_member_removed"
+    group_permission_added = "group_permission_added"
+    group_permission_removed = "group_permission_removed"
 
 
 class UserRole(enum.StrEnum):
@@ -417,3 +423,58 @@ class CIToken(Base):
     created_by_email: Mapped[str] = mapped_column(String(320), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_by_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+
+
+# ---------------------------------------------------------------------------
+# Group-based RBAC (app-managed, independent of Okta groups)
+# ---------------------------------------------------------------------------
+
+#: Available permission keys. Each controls access to a specific area of the app.
+#: "admin_access"   — /admin/* panel (additive to the existing role=admin check)
+#: "reports_access" — /portal/reports and /portal/reports/*
+#: "usage_access"   — /portal/usage
+#: "portal_access"  — /portal/* catch-all (basic portal entry)
+APP_PERMISSIONS: tuple[str, ...] = (
+    "admin_access",
+    "reports_access",
+    "usage_access",
+    "portal_access",
+)
+
+
+class AppGroup(Base):
+    """Admin-managed access group. Users in a group inherit its permissions."""
+
+    __tablename__ = "app_groups"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    description: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(320), nullable=False)
+
+
+class AppGroupMember(Base):
+    """Many-to-many: users ↔ app_groups."""
+
+    __tablename__ = "app_group_members"
+
+    group_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(), ForeignKey("app_groups.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_email: Mapped[str] = mapped_column(
+        String(320), ForeignKey("users.email", ondelete="CASCADE"), primary_key=True
+    )
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    added_by: Mapped[str] = mapped_column(String(320), nullable=False)
+
+
+class AppGroupPermission(Base):
+    """Permissions granted to a group. Each row is one (group, permission) pair."""
+
+    __tablename__ = "app_group_permissions"
+
+    group_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(), ForeignKey("app_groups.id", ondelete="CASCADE"), primary_key=True
+    )
+    permission: Mapped[str] = mapped_column(String(64), primary_key=True)

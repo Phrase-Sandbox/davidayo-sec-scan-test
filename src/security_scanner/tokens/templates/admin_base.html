@@ -222,7 +222,7 @@
 
       {# Users #}
       <a href="/admin/users"
-         class="{{ 'active' if cp.startswith('/admin/users') else '' }}">
+         class="{{ 'active' if cp == '/admin/users' or (cp.startswith('/admin/users') and not cp.startswith('/admin/users/')) else '' }}">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
@@ -231,6 +231,19 @@
           <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
         </svg>
         Users
+      </a>
+
+      {# Groups #}
+      <a href="/admin/groups"
+         class="{{ 'active' if cp.startswith('/admin/groups') else '' }}">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          <path d="M21 21v-2a4 4 0 0 0-3-3.87"/>
+        </svg>
+        Groups
       </a>
 
       {# Access Tokens #}
