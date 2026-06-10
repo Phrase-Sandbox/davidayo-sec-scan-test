@@ -62,6 +62,10 @@
   .expand-toggle:hover { border-color: var(--border-strong); color: var(--fg); background: var(--bg-inset); }
   .repo-scan-history { display: none; border-top: 1px solid var(--border); }
   .repo-scan-history.open { display: block; }
+  /* Blocked / advisory repo cards get a left rail accent */
+  .repo-block.repo-blocked { border-left: 3px solid var(--gate-blocked); background: rgba(220,38,38,0.015); }
+  .repo-block.repo-advisory { border-left: 3px solid var(--gate-advisory); }
+  [data-theme="dark"] .repo-block.repo-blocked { background: rgba(220,38,38,0.055); }
   /* Scan history items inside repo block */
   .scan-history-row {
     display: flex;
@@ -168,7 +172,7 @@
     {% set gate_label = latest.status | upper %}
   {% endif %}
 
-  <div class="repo-block">
+  <div class="repo-block{{ ' repo-blocked' if gate_cls == 'gate-blocked' else (' repo-advisory' if gate_cls == 'gate-advisory' else '') }}">
     <div class="repo-block-header">
       {# Gate dot #}
       <div class="rr-gate {{ gate_cls }}" title="{{ gate_label }}" style="flex-shrink:0; margin-top:0;"></div>

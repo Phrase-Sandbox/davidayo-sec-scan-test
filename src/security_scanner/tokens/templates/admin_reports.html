@@ -65,7 +65,7 @@
     {% elif row.status == 'ok' %}{% set gcls = 'gate-pass' %}
     {% else %}{% set gcls = 'gate-none' %}{% endif %}
 
-    <div class="risk-row">
+    <div class="risk-row{{ ' rr-blocked' if gcls == 'gate-blocked' else (' rr-advisory' if gcls == 'gate-advisory' else '') }}">
       {# Gate dot #}
       <div class="rr-gate {{ gcls }}" style="flex-shrink:0; margin:0;"></div>
       {# Center info #}

@@ -150,13 +150,13 @@
       flex-wrap: wrap;
     }
     header h1 {
-      font-size: 1.1rem;
-      font-weight: 600;
-      letter-spacing: -0.01em;
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
       margin: 0;
       display: flex;
       align-items: center;
-      gap: 0.45rem;
+      gap: 0.5rem;
     }
     /* Shield mark next to app title */
     header h1::before {
@@ -502,11 +502,15 @@
     .section-divider { border: none; border-top: 1px solid var(--border); margin: 1.25rem 0; }
 
     /* ── Page title helpers ── */
-    .page-title { font-size: var(--text-2xl); font-weight: 700; letter-spacing: -0.03em; line-height: 1.2; margin: 0 0 0.25rem; color: var(--fg); }
+    .page-title { font-size: var(--text-2xl); font-weight: 800; letter-spacing: -0.04em; line-height: 1.15; margin: 0 0 0.25rem; color: var(--fg); }
     .page-subtitle { font-size: var(--text-sm); color: var(--muted); margin: 0 0 1.5rem; }
     .page-header { margin-bottom: 1.5rem; }
 
     /* ── Posture strip (summary stat bar above list pages) ── */
+    @keyframes stat-reveal {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
     .posture-strip {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
@@ -523,12 +527,18 @@
       border-right: 1px solid var(--border);
       text-align: left;
       position: relative;
+      animation: stat-reveal 0.4s ease both;
     }
+    .posture-stat:nth-child(1) { animation-delay: 0ms; }
+    .posture-stat:nth-child(2) { animation-delay: 60ms; }
+    .posture-stat:nth-child(3) { animation-delay: 120ms; }
+    .posture-stat:nth-child(4) { animation-delay: 180ms; }
+    .posture-stat:nth-child(5) { animation-delay: 240ms; }
     .posture-stat:last-child { border-right: none; }
     .posture-stat .ps-num {
-      font-size: var(--text-2xl);
-      font-weight: 700;
-      letter-spacing: -0.04em;
+      font-size: var(--text-3xl);
+      font-weight: 800;
+      letter-spacing: -0.05em;
       line-height: 1;
       margin-bottom: 0.3rem;
       font-variant-numeric: tabular-nums;
@@ -540,9 +550,11 @@
       letter-spacing: 0.06em;
       font-weight: 500;
     }
+    .posture-stat.ps-blocked { background: rgba(220,38,38,0.03); }
     .posture-stat.ps-blocked .ps-num { color: var(--gate-blocked); }
     .posture-stat.ps-critical .ps-num { color: var(--critical-fg); }
     .posture-stat.ps-ok .ps-num { color: var(--gate-pass); }
+    [data-theme="dark"] .posture-stat.ps-blocked { background: rgba(220,38,38,0.07); }
 
     /* ── Filter bar ── */
     .filter-bar {
@@ -579,18 +591,26 @@
     /* Left rail: gate status dot */
     .risk-row .rr-gate {
       flex-shrink: 0;
-      width: 10px;
-      height: 10px;
+      width: 12px;
+      height: 12px;
       border-radius: 50%;
-      margin-top: 2px;
       align-self: flex-start;
-      margin-top: 5px;
+      margin-top: 4px;
     }
-    .rr-gate.gate-blocked  { background: var(--gate-blocked); box-shadow: 0 0 0 3px rgba(220,38,38,0.15); }
+    .rr-gate.gate-blocked  { background: var(--gate-blocked); box-shadow: 0 0 0 4px rgba(220,38,38,0.18); }
     .rr-gate.gate-pass     { background: var(--gate-pass);    box-shadow: 0 0 0 3px rgba(22,163,74,0.15); }
     .rr-gate.gate-advisory { background: var(--gate-advisory); box-shadow: 0 0 0 3px rgba(217,119,6,0.15); }
     .rr-gate.gate-bypassed { background: var(--gate-bypassed); box-shadow: 0 0 0 3px rgba(124,58,237,0.15); }
     .rr-gate.gate-none, .rr-gate.gate-pending { background: var(--border-strong); }
+    /* Persistent left-rail accent on rows with known risk state */
+    .risk-row.rr-blocked {
+      box-shadow: inset 3px 0 0 var(--gate-blocked);
+      background: rgba(220,38,38,0.022);
+    }
+    .risk-row.rr-blocked:hover { background: rgba(220,38,38,0.042); }
+    [data-theme="dark"] .risk-row.rr-blocked { background: rgba(220,38,38,0.07); }
+    [data-theme="dark"] .risk-row.rr-blocked:hover { background: rgba(220,38,38,0.11); }
+    .risk-row.rr-advisory { box-shadow: inset 3px 0 0 var(--gate-advisory); }
     /* Center block */
     .risk-row .rr-center { flex: 1; min-width: 0; }
     .rr-repo {
