@@ -630,7 +630,15 @@ def _metadata_section(result: ScanResult) -> str:
         ("Triggered by", escape(result.triggered_by)),
     ]
     items = "\n".join(f"<dt>{escape(label)}</dt><dd>{value}</dd>" for label, value in rows)
-    return f'<section class="metadata">\n<h2>Scan metadata</h2>\n<dl>\n{items}\n</dl>\n</section>'
+    inner = f'<section class="metadata" style="margin-top:0.75em;">\n<dl>\n{items}\n</dl>\n</section>'
+    return (
+        '<details style="margin:2.5em 0 1em;">'
+        '<summary style="cursor:pointer;list-style:none;font-size:0.88em;font-weight:600;'
+        'color:var(--muted);padding:0.5em 0;border-top:1px solid var(--border);">'
+        "▸ Scan metadata</summary>"
+        f"{inner}"
+        "</details>"
+    )
 
 
 def _gather_warnings(result: ScanResult) -> list[str]:
