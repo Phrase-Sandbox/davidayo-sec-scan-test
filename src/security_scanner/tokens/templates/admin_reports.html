@@ -96,7 +96,7 @@
           {% endif %}
         </div>
       </div>
-      {# Actions — primary: View Report; overflow: Open HTML (portal rows only) #}
+      {# Actions — primary: View Report; overflow: Open HTML + Delete #}
       <div class="rr-right">
         {% if row.has_report %}
           {% if row.source == "portal" %}
@@ -105,12 +105,55 @@
               <button class="overflow-trigger" type="button" aria-label="More actions">···</button>
               <div class="overflow-menu">
                 <a href="/admin/reports/{{ row.scan_id }}/html" target="_blank" rel="noopener">Open HTML ↗</a>
+                <hr style="border:none; border-top:1px solid var(--border); margin:0.2rem 0;">
+                <span class="confirm-delete-wrap" style="display:block;">
+                  <a href="#" class="confirm-trigger" style="color:var(--danger);">Delete report</a>
+                  <span class="confirm-delete-row" style="padding:0.4rem 0.75rem; gap:0.3rem;">
+                    <span style="font-size:0.78rem; color:var(--danger);">Delete?</span>
+                    <form method="post" action="/admin/reports/{{ row.scan_id }}/delete">
+                      <button type="submit" class="btn btn-sm btn-danger">Yes</button>
+                    </form>
+                    <button type="button" class="confirm-cancel btn btn-sm">No</button>
+                  </span>
+                </span>
               </div>
             </div>
           {% else %}
             <a href="/admin/reports/{{ row.scan_id }}/html" target="_blank" rel="noopener"
                class="btn btn-sm btn-primary" style="margin-right:0; white-space:nowrap;">View ↗</a>
+            <div class="overflow-anchor">
+              <button class="overflow-trigger" type="button" aria-label="More actions">···</button>
+              <div class="overflow-menu">
+                <span class="confirm-delete-wrap" style="display:block;">
+                  <a href="#" class="confirm-trigger" style="color:var(--danger);">Delete report</a>
+                  <span class="confirm-delete-row" style="padding:0.4rem 0.75rem; gap:0.3rem;">
+                    <span style="font-size:0.78rem; color:var(--danger);">Delete?</span>
+                    <form method="post" action="/admin/reports/{{ row.scan_id }}/delete">
+                      <button type="submit" class="btn btn-sm btn-danger">Yes</button>
+                    </form>
+                    <button type="button" class="confirm-cancel btn btn-sm">No</button>
+                  </span>
+                </span>
+              </div>
+            </div>
           {% endif %}
+        {% else %}
+          {# No report yet — just offer delete #}
+          <div class="overflow-anchor">
+            <button class="overflow-trigger" type="button" aria-label="More actions">···</button>
+            <div class="overflow-menu">
+              <span class="confirm-delete-wrap" style="display:block;">
+                <a href="#" class="confirm-trigger" style="color:var(--danger);">Delete record</a>
+                <span class="confirm-delete-row" style="padding:0.4rem 0.75rem; gap:0.3rem;">
+                  <span style="font-size:0.78rem; color:var(--danger);">Delete?</span>
+                  <form method="post" action="/admin/reports/{{ row.scan_id }}/delete">
+                    <button type="submit" class="btn btn-sm btn-danger">Yes</button>
+                  </form>
+                  <button type="button" class="confirm-cancel btn btn-sm">No</button>
+                </span>
+              </span>
+            </div>
+          </div>
         {% endif %}
       </div>
     </div>
@@ -137,6 +180,11 @@
   </div>
   {% endif %}
 
+</div>
+
+<div class="info-banner" style="margin-top:1.25rem;">
+  To bulk-delete reports, configure retention, or purge all scan data — go to
+  <a href="/admin/configuration/maintenance">Maintenance</a>.
 </div>
 
 {% endblock admin_content %}
