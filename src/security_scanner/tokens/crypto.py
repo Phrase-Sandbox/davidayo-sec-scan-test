@@ -135,7 +135,7 @@ def decrypt_report(ciphertext: str | None, *, settings: Settings | None = None) 
             "SCANNER_ENCRYPTION_KEY is not set but the database contains "
             "encrypted report rows. Restore the key and restart."
         )
-    fernet = _fernet_for(s.SCANNER_ENCRYPTION_KEY)
+    fernet = _fernet_for(s.SCANNER_ENCRYPTION_KEY.get_secret_value())
     return fernet.decrypt(ciphertext.encode("ascii")).decode("utf-8")
 
 
