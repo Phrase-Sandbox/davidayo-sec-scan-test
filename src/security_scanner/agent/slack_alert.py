@@ -63,7 +63,8 @@ async def _post_to_slack(
     ``SLACK_WEBHOOK_URL`` environment variable.  DB value takes precedence
     so the admin portal can override infra config without a restart.
     """
-    webhook = webhook_url or get_settings().SLACK_WEBHOOK_URL
+    _wh_secret = get_settings().SLACK_WEBHOOK_URL
+    webhook = webhook_url or (_wh_secret.get_secret_value() if _wh_secret else None)
     if webhook is None:
         log.warning("slack webhook not configured — alert skipped", kind=kind)
         return False

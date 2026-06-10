@@ -9,6 +9,7 @@ fail fast *before* any client is constructed.
 import types
 
 import pytest
+from pydantic import SecretStr
 
 from security_scanner.shared.claude.client import ClaudeClient
 from security_scanner.shared.llm import factory as factory_mod
@@ -16,11 +17,17 @@ from security_scanner.shared.llm.base import LLMConfigError
 
 
 def _settings(**kw):
-    base = {
-        "ANTHROPIC_API_KEY": "sk-ant-test",
+    base: dict = {
+        "ANTHROPIC_API_KEY": SecretStr("sk-ant-test"),
         "GOOGLE_API_KEY": None,
     }
     base.update(kw)
+    # Wrap string values for the key fields in SecretStr so the factory's
+    # .get_secret_value() calls work correctly.
+    if isinstance(base.get("ANTHROPIC_API_KEY"), str):
+        base["ANTHROPIC_API_KEY"] = SecretStr(base["ANTHROPIC_API_KEY"])
+    if isinstance(base.get("GOOGLE_API_KEY"), str):
+        base["GOOGLE_API_KEY"] = SecretStr(base["GOOGLE_API_KEY"])
     return types.SimpleNamespace(**base)
 
 

@@ -9,63 +9,100 @@
 
 {% block extra_styles %}
 <style>
-  /* Widen the page for admin content */
   main { max-width: 1200px; }
 
-  /* Two-column grid: sidebar + content */
   .admin-layout {
     display: grid;
-    grid-template-columns: 196px 1fr;
-    gap: 1.5rem;
+    grid-template-columns: 210px 1fr;
+    gap: 1.75rem;
     align-items: start;
   }
 
-  /* Sidebar */
   .admin-sidebar {
     position: sticky;
     top: 1.5rem;
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 0.65rem 0.4rem;
+    border-radius: var(--radius);
+    padding: 0;
+    box-shadow: var(--shadow-s);
+    overflow: hidden;
   }
-  .admin-sidebar-label {
-    display: block;
-    font-size: 0.7rem;
+
+  /* Admin brand header */
+  .admin-sidebar-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .admin-sidebar-header-icon {
+    width: 20px;
+    height: 22px;
+    background: var(--accent);
+    clip-path: polygon(50% 0%, 100% 18%, 100% 60%, 50% 100%, 0% 60%, 0% 18%);
+    opacity: 0.9;
+    flex-shrink: 0;
+  }
+  .admin-sidebar-header span {
+    font-size: 0.72rem;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.09em;
     color: var(--muted);
-    padding: 0.15rem 0.75rem 0.55rem;
   }
+
+  .admin-sidebar-nav { padding: 0.4rem 0; }
+  .admin-sidebar-section {
+    padding: 0.5rem 0.65rem 0.15rem;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    opacity: 0.65;
+  }
+
   .admin-sidebar a {
     display: flex;
     align-items: center;
     gap: 0.55rem;
-    padding: 0.46rem 0.75rem;
-    border-radius: 6px;
+    padding: 0.44rem 1rem;
     text-decoration: none;
     color: var(--muted);
     font-size: 0.875rem;
     transition: background 0.1s, color 0.1s;
     white-space: nowrap;
+    position: relative;
   }
   .admin-sidebar a:hover { background: var(--bg); color: var(--fg); text-decoration: none; }
   .admin-sidebar a.active {
-    background: rgba(37,99,235,0.09);
     color: var(--accent);
     font-weight: 600;
+    background: var(--accent-subtle);
+  }
+  /* Accent left rail on active item */
+  .admin-sidebar a.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--accent);
+    border-radius: 0 2px 2px 0;
   }
   .admin-sidebar hr {
     border: none;
     border-top: 1px solid var(--border);
-    margin: 0.45rem 0.4rem;
+    margin: 0.35rem 0;
   }
-  .admin-sidebar svg { flex-shrink: 0; opacity: 0.75; }
+  .admin-sidebar svg { flex-shrink: 0; opacity: 0.65; }
   .admin-sidebar a.active svg { opacity: 1; }
 
-  /* Collapse to single column on narrow viewports */
-  @media (max-width: 740px) {
+  @media (max-width: 800px) {
     .admin-layout { grid-template-columns: 1fr; }
     .admin-sidebar { position: static; }
   }
@@ -78,7 +115,11 @@
 
     {# ── Sidebar navigation ───────────────────────────────────────────── #}
     <nav class="admin-sidebar">
-      <span class="admin-sidebar-label">Admin Panel</span>
+      <div class="admin-sidebar-header">
+        <div class="admin-sidebar-header-icon"></div>
+        <span>Admin Panel</span>
+      </div>
+      <div class="admin-sidebar-nav">
 
       {# Users #}
       <a href="/admin/users"
@@ -193,6 +234,8 @@
         </svg>
         Portal
       </a>
+
+      </div>{# /admin-sidebar-nav #}
     </nav>
 
     {# ── Page content ── #}

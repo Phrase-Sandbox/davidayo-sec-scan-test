@@ -38,8 +38,10 @@ from security_scanner.tokens.models import (
 
 def _make_settings(key: str | None):
     """Return a minimal settings-like mock with SCANNER_ENCRYPTION_KEY set."""
+    from pydantic import SecretStr  # noqa: PLC0415
+
     s = MagicMock()
-    s.SCANNER_ENCRYPTION_KEY = key
+    s.SCANNER_ENCRYPTION_KEY = SecretStr(key) if key else None
     return s
 
 

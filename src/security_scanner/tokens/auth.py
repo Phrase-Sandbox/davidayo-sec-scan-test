@@ -47,10 +47,10 @@ _SESSION_TTL = 8 * 3600  # 8 hours
 
 def _get_fernet() -> Fernet:
     """Return a Fernet cipher using SCANNER_ENCRYPTION_KEY."""
-    key = get_settings().SCANNER_ENCRYPTION_KEY
-    if not key:
+    key_secret = get_settings().SCANNER_ENCRYPTION_KEY
+    if not key_secret:
         raise RuntimeError("SCANNER_ENCRYPTION_KEY is required for portal session cookies")
-    return Fernet(key.encode() if isinstance(key, str) else key)
+    return Fernet(key_secret.get_secret_value().encode())
 
 
 def sign_portal_session(email: str, name: str, auth_provider: str = "local") -> str:
