@@ -57,27 +57,49 @@
   }
 
   .admin-sidebar-nav { padding: 0.5rem 0; }
-  .admin-sidebar-section {
-    padding: 0.6rem 0.9rem 0.2rem;
-    font-size: 0.62rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--muted);
-    opacity: 0.55;
+
+  /* Collapsible nav group (Configuration) */
+  .nav-expand-row {
+    display: flex;
+    align-items: stretch;
   }
-  .admin-sidebar-section a {
-    font-size: 0.62rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
+  .nav-expand-row > a {
+    flex: 1;
+    min-width: 0;
+  }
+  .nav-expand-btn {
+    width: 30px;
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
     color: var(--muted);
-    opacity: 0.55;
+    opacity: 0.45;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     padding: 0;
-    background: none !important;
+    transition: opacity 0.1s, background 0.1s;
   }
-  .admin-sidebar-section a:hover { opacity: 0.85; }
-  .admin-sidebar-section a::before { display: none !important; }
+  .nav-expand-btn:hover { opacity: 0.9; background: var(--bg-inset); }
+  .nav-expand-btn svg { transition: transform 0.18s ease; }
+  .nav-expand-open .nav-expand-btn svg { transform: rotate(180deg); }
+  .nav-expand-body { display: none; }
+  .nav-expand-open .nav-expand-body { display: block; }
+  /* Parent tinted when on a config sub-page (not hub itself) */
+  .nav-expand-open .nav-expand-row > a.config-parent {
+    color: var(--accent);
+    opacity: 0.8;
+  }
+  .nav-expand-open .nav-expand-row > a.config-parent::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--accent);
+    border-radius: 0 2px 2px 0;
+    opacity: 0.4;
+  }
 
   .admin-sidebar a {
     display: flex;
@@ -261,73 +283,88 @@
 
       <hr>
 
-      {# Configuration group #}
-      <div class="admin-sidebar-section">
-        <a href="/admin/configuration">Configuration</a>
+      {# Configuration — collapsible top-level nav item #}
+      {% set config_open = cp.startswith('/admin/configuration') %}
+      <div class="nav-expand {{ 'nav-expand-open' if config_open else '' }}" id="config-nav">
+        <div class="nav-expand-row">
+          <a href="/admin/configuration"
+             class="{{ 'active' if cp == '/admin/configuration' else ('config-parent' if config_open else '') }}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            Configuration
+          </a>
+          <button class="nav-expand-btn" type="button" onclick="toggleConfigNav()" aria-label="Toggle Configuration menu">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+        </div>
+        <div class="nav-expand-body">
+
+          <a href="/admin/configuration/org-settings" class="sub-link
+             {{ 'active' if cp == '/admin/configuration/org-settings' else '' }}">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            Organization Settings
+          </a>
+
+          <a href="/admin/configuration/ci-token" class="sub-link
+             {{ 'active' if cp.startswith('/admin/configuration/ci-token') else '' }}">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="16 18 22 12 16 6"/>
+              <polyline points="8 6 2 12 8 18"/>
+            </svg>
+            CI Token
+          </a>
+
+          <a href="/admin/configuration/gate-policy" class="sub-link
+             {{ 'active' if cp == '/admin/configuration/gate-policy' else '' }}">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            Gate Policy
+          </a>
+
+          <a href="/admin/configuration/scanner" class="sub-link
+             {{ 'active' if cp == '/admin/configuration/scanner' else '' }}">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="4"  y1="21" x2="4"  y2="14"/>
+              <line x1="4"  y1="10" x2="4"  y2="3"/>
+              <line x1="12" y1="21" x2="12" y2="12"/>
+              <line x1="12" y1="8"  x2="12" y2="3"/>
+              <line x1="20" y1="21" x2="20" y2="16"/>
+              <line x1="20" y1="12" x2="20" y2="3"/>
+              <line x1="1"  y1="14" x2="7"  y2="14"/>
+              <line x1="9"  y1="8"  x2="15" y2="8"/>
+              <line x1="17" y1="16" x2="23" y2="16"/>
+            </svg>
+            Scanner Configuration
+          </a>
+
+          <a href="/admin/configuration/maintenance" class="sub-link sub-danger
+             {{ 'active' if cp == '/admin/configuration/maintenance' else '' }}">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+              <path d="M10 11v6M14 11v6"/>
+              <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+            </svg>
+            Maintenance
+          </a>
+
+        </div>
       </div>
-
-      {# Org Settings sub-link #}
-      <a href="/admin/configuration/org-settings" class="sub-link
-         {{ 'active' if cp == '/admin/configuration/org-settings' else '' }}">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="3"/>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-        </svg>
-        Organization Settings
-      </a>
-
-      {# CI Token sub-link #}
-      <a href="/admin/configuration/ci-token" class="sub-link
-         {{ 'active' if cp.startswith('/admin/configuration/ci-token') else '' }}">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="16 18 22 12 16 6"/>
-          <polyline points="8 6 2 12 8 18"/>
-        </svg>
-        CI Token
-      </a>
-
-      {# Gate Policy sub-link #}
-      <a href="/admin/configuration/gate-policy" class="sub-link
-         {{ 'active' if cp == '/admin/configuration/gate-policy' else '' }}">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-        </svg>
-        Gate Policy
-      </a>
-
-      {# Scanner Configuration sub-link #}
-      <a href="/admin/configuration/scanner" class="sub-link
-         {{ 'active' if cp == '/admin/configuration/scanner' else '' }}">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="4"  y1="21" x2="4"  y2="14"/>
-          <line x1="4"  y1="10" x2="4"  y2="3"/>
-          <line x1="12" y1="21" x2="12" y2="12"/>
-          <line x1="12" y1="8"  x2="12" y2="3"/>
-          <line x1="20" y1="21" x2="20" y2="16"/>
-          <line x1="20" y1="12" x2="20" y2="3"/>
-          <line x1="1"  y1="14" x2="7"  y2="14"/>
-          <line x1="9"  y1="8"  x2="15" y2="8"/>
-          <line x1="17" y1="16" x2="23" y2="16"/>
-        </svg>
-        Scanner Configuration
-      </a>
-
-      {# Maintenance sub-link #}
-      <a href="/admin/configuration/maintenance" class="sub-link sub-danger
-         {{ 'active' if cp == '/admin/configuration/maintenance' else '' }}">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="3 6 5 6 21 6"/>
-          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-          <path d="M10 11v6M14 11v6"/>
-          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-        </svg>
-        Maintenance
-      </a>
 
       <hr>
 
@@ -342,6 +379,11 @@
 
       </div>{# /admin-sidebar-nav #}
     </nav>
+    <script>
+    function toggleConfigNav() {
+      document.getElementById('config-nav')?.classList.toggle('nav-expand-open');
+    }
+    </script>
 
     {# ── Page content ── #}
     <div class="admin-main">

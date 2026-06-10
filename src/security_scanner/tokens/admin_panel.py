@@ -48,6 +48,7 @@ from security_scanner.tokens.models import (
     OrgSettings,
     ScannerSettings,
     ScanRecord,
+    ScanStatus,
     User,
     UserRole,
 )
