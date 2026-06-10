@@ -1,13 +1,13 @@
 """HTML report generator (spec §2.2 step 6, §6.1, §6.2, BR-008).
 
 Self-contained HTML — all CSS inlined, no JS — so a CI artifact opens
-offline. Findings are split into three severity buckets ("Urgent",
-"Cleanup", "Advisory"); Cleanup findings sharing the same
-(vulnerability_id, severity) collapse into one group card with a combined
-paste-prompt covering every location. Each card carries a synthesized
-"PASTE THIS INTO YOUR AI EDITOR" block and a nested "Show vulnerable code"
-toggle that reveals the actual lines from the scanned file when the caller
-supplies the original file content.
+offline. Findings are split into three severity buckets ("Urgent Findings",
+"High Priority Findings", "Additional Findings"); medium/low findings sharing
+the same (vulnerability_id, severity) collapse into one group card with a
+combined paste-prompt covering every location. Each card carries an AI fix
+prompt toggle and a "Show vulnerable code" toggle that reveals the actual
+lines from the scanned file when the caller supplies the original file
+content.
 
 Every user-controlled string is funnelled through ``html.escape`` to
 prevent XSS in a rendered report.
