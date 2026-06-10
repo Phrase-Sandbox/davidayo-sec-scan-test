@@ -4,141 +4,147 @@
 {% block extra_styles %}
 {{ super() }}
 <style>
-  main { max-width: 1100px; }
-  .source-badge {
-    display: inline-block;
-    font-family: var(--ff-mono);
-    font-size: 0.72rem;
-    border-radius: 4px;
-    padding: 0.18em 0.45em;
-    white-space: nowrap;
-  }
-  .source-portal { background: rgba(37,99,235,0.08); border: 1px solid rgba(37,99,235,0.25); color: #1e3a8a; }
-  .source-ci     { background: rgba(5,150,105,0.07);  border: 1px solid rgba(5,150,105,0.25);  color: #065f46; }
-  [data-theme="dark"] .source-portal { color: #93c5fd; }
-  [data-theme="dark"] .source-ci     { color: #34d399; }
-  .email-cell { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.82rem; }
+  main { max-width: 1200px; }
 </style>
 {% endblock %}
 
 {% block admin_content %}
-<div class="card">
-  <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.6rem; margin-bottom:0.6rem;">
-    <h2 style="margin:0;">Scan Reports</h2>
-    <span class="muted" style="font-size:0.82rem;">{{ portal_count }} portal &nbsp;·&nbsp; {{ ci_count }} CI</span>
+
+{# ── Page header ── #}
+<div class="admin-page-header">
+  <div>
+    <h2 class="page-title">Scan Reports</h2>
+    <p class="page-subtitle">All portal and CI scans across the organisation — {{ portal_count }} portal · {{ ci_count }} CI</p>
   </div>
-  <p class="muted" style="margin:0; font-size:0.83rem;">
-    Combined view of all portal and CI scans across the organisation.
-  </p>
 </div>
 
-<form method="post" id="bulk-form">
-<div class="card card-no-pad">
+{# ── Posture strip ── #}
+{% set ns = namespace(blocked=0, critical_total=0) %}
+{% for row in rows %}
+  {% if row.critical and row.critical > 0 %}{% set ns.blocked = ns.blocked + 1 %}{% endif %}
+  {% set ns.critical_total = ns.critical_total + (row.critical or 0) %}
+{% endfor %}
 
-  <div style="padding:0.6rem 1rem; border-bottom:1px solid var(--border); display:flex; gap:0.4rem; flex-wrap:wrap; align-items:center;">
+<div class="posture-strip" style="margin-bottom:1.25rem;">
+  <div class="posture-stat">
+    <div class="ps-num">{{ portal_count + ci_count }}</div>
+    <div class="ps-label">Total scans</div>
+  </div>
+  <div class="posture-stat ps-blocked">
+    <div class="ps-num">{{ ns.blocked }}</div>
+    <div class="ps-label">Blocked (page)</div>
+  </div>
+  <div class="posture-stat ps-critical">
+    <div class="ps-num">{{ ns.critical_total }}</div>
+    <div class="ps-label">Critical (page)</div>
+  </div>
+  <div class="posture-stat">
+    <div class="ps-num">{{ portal_count }}</div>
+    <div class="ps-label">Portal scans</div>
+  </div>
+  <div class="posture-stat">
+    <div class="ps-num">{{ ci_count }}</div>
+    <div class="ps-label">CI scans</div>
+  </div>
+</div>
+
+{# ── Bulk toolbar (appears when rows are checked) ── #}
+<form method="post" id="bulk-form" class="bulk-form">
+
+<div class="admin-list-card">
+
+  {# Bulk toolbar — hidden until checkboxes selected #}
+  <div class="bulk-toolbar" id="bulk-toolbar">
+    <span class="bt-count">0 selected</span>
     <button type="submit" formaction="/admin/reports/bulk-delete" class="btn btn-danger btn-sm"
-            onclick="return document.querySelectorAll('input[name=scan_ids]:checked').length > 0 || (alert('Select at least one row.'), false)">
-      Delete Selected
-    </button>
-    <button type="submit" formaction="/admin/reports/purge-all" class="btn btn-danger btn-sm"
-            onclick="return confirm('Delete ALL scan records? This cannot be undone.')">
-      Purge All
-    </button>
-    <label style="margin-left:auto; font-size:0.82rem; color:var(--muted); cursor:pointer;">
-      <input type="checkbox" id="select-all" style="margin-right:0.3rem;"
-             onchange="document.querySelectorAll('input[name=scan_ids]').forEach(c => c.checked = this.checked)">
+            onclick="return document.querySelectorAll('input[name=scan_ids]:checked').length > 0 || (alert('Select at least one row.'), false)"
+            style="margin-right:0;">Delete selected</button>
+    <label style="margin-left:auto; font-size:var(--text-xs); color:var(--muted); cursor:pointer; display:flex; align-items:center; gap:0.3rem;">
+      <input type="checkbox" class="bulk-cb-all" id="select-all">
       Select all
     </label>
   </div>
 
   {% if rows %}
-  <div style="overflow-x:auto;">
-    <table style="min-width:800px;">
-      <thead>
-        <tr>
-          <th style="width:32px;"></th>
-          <th style="width:70px;">Type</th>
-          <th style="width:130px;">Started</th>
-          <th>User / Actor</th>
-          <th>Repo</th>
-          <th style="width:90px;">Provider</th>
-          <th style="width:60px;">Status</th>
-          <th style="text-align:center; width:32px;"><abbr title="Critical" style="text-decoration:none; border-bottom:1px dotted var(--muted); cursor:help;">C</abbr></th>
-          <th style="text-align:center; width:32px;"><abbr title="High"     style="text-decoration:none; border-bottom:1px dotted var(--muted); cursor:help;">H</abbr></th>
-          <th style="text-align:center; width:32px;"><abbr title="Medium"   style="text-decoration:none; border-bottom:1px dotted var(--muted); cursor:help;">M</abbr></th>
-          <th style="text-align:center; width:32px;"><abbr title="Low"      style="text-decoration:none; border-bottom:1px dotted var(--muted); cursor:help;">L</abbr></th>
-          <th style="width:140px;">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in rows %}
-        <tr>
-          <td style="text-align:center;">
-            <input type="checkbox" name="scan_ids" value="{{ row.source }}:{{ row.scan_id }}">
-          </td>
-          <td>
-            {% if row.source == "portal" %}
-              <span class="source-badge source-portal">portal</span>
-            {% else %}
-              <span class="source-badge source-ci">CI</span>
-            {% endif %}
-          </td>
-          <td class="mono" style="font-size:0.8rem; white-space:nowrap; color:var(--muted);">
-            {{ row.started_at.strftime("%Y-%m-%d") }}<br>
-            <span style="font-size:0.74rem;">{{ row.started_at.strftime("%H:%M") }}</span>
-          </td>
-          <td>
-            <span class="email-cell" title="{{ row.actor }}">{{ row.actor }}</span>
-          </td>
-          <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:0.85rem;">
-            <span title="{{ row.repo_url }}">{{ row.repo_url | replace("https://github.com/", "") or "—" }}</span>
-          </td>
-          <td class="muted" style="font-size:0.82rem;">{{ row.provider or "—" }}</td>
-          <td>
-            {% if row.status == "ok" %}
-              <span class="pill pill-ok">ok</span>
-            {% else %}
-              <span class="pill pill-fail">{{ row.status }}</span>
-            {% endif %}
-          </td>
-          <td style="text-align:center;">
-            {% if row.critical %}<span class="sev sev-C">{{ row.critical }}</span>{% else %}<span class="muted">0</span>{% endif %}
-          </td>
-          <td style="text-align:center;">
-            {% if row.high %}<span class="sev sev-H">{{ row.high }}</span>{% else %}<span class="muted">0</span>{% endif %}
-          </td>
-          <td style="text-align:center;">
-            {% if row.medium %}<span class="sev sev-M">{{ row.medium }}</span>{% else %}<span class="muted">0</span>{% endif %}
-          </td>
-          <td style="text-align:center;">
-            {% if row.low %}<span class="sev sev-L">{{ row.low }}</span>{% else %}<span class="muted">0</span>{% endif %}
-          </td>
-          <td style="white-space:nowrap;">
+
+  {# ── Risk rows ── #}
+  <div class="risk-list">
+    {% for row in rows %}
+    {% set c = row.critical or 0 %}
+    {% set h = row.high or 0 %}
+    {% set m = row.medium or 0 %}
+    {% set l = row.low or 0 %}
+    {% set total = c + h + m + l %}
+    {% if c > 0 %}{% set gcls = 'gate-blocked' %}
+    {% elif h > 0 %}{% set gcls = 'gate-advisory' %}
+    {% elif row.status == 'ok' %}{% set gcls = 'gate-pass' %}
+    {% else %}{% set gcls = 'gate-none' %}{% endif %}
+
+    <div class="risk-row" style="padding-left:0.85rem;">
+      {# Checkbox #}
+      <input type="checkbox" name="scan_ids" value="{{ row.source }}:{{ row.scan_id }}"
+             class="bulk-cb" style="flex-shrink:0;">
+      {# Gate dot #}
+      <div class="rr-gate {{ gcls }}" style="flex-shrink:0; margin:0;"></div>
+      {# Center info #}
+      <div class="rr-center" style="flex:1; min-width:0;">
+        <div class="rr-repo" title="{{ row.repo_url }}">
+          {% if row.source == "portal" %}
+            <span class="source-badge source-portal" style="margin-right:0.4rem; vertical-align:middle; font-size:0.68rem;">portal</span>
+          {% else %}
+            <span class="source-badge source-ci" style="margin-right:0.4rem; vertical-align:middle; font-size:0.68rem;">CI</span>
+          {% endif %}
+          {{ row.repo_url | replace("https://github.com/", "") | replace("https://gitlab.com/", "") or "—" }}
+        </div>
+        <div class="rr-meta">
+          <span class="rr-age">{{ row.started_at.strftime("%d %b %Y %H:%M") if row.started_at else "—" }}</span>
+          <span style="color:var(--border-strong);">·</span>
+          <span style="font-size:var(--text-xs); color:var(--muted);">{{ row.actor }}</span>
+          <span style="color:var(--border-strong);">·</span>
+          <span style="font-size:var(--text-xs); color:var(--muted);">{{ row.provider or "—" }}</span>
+          {% if total > 0 %}
+          <div class="sev-chips" style="margin-left:0.2rem;">
+            {% if c > 0 %}<span class="sev-chip sev-chip-C">C·{{ c }}</span>{% endif %}
+            {% if h > 0 %}<span class="sev-chip sev-chip-H">H·{{ h }}</span>{% endif %}
+            {% if m > 0 %}<span class="sev-chip sev-chip-M">M·{{ m }}</span>{% endif %}
+            {% if l > 0 %}<span class="sev-chip sev-chip-L">L·{{ l }}</span>{% endif %}
+          </div>
+          {% else %}
+          <span class="pill pill-ok" style="font-size:0.7rem; margin-left:0.2rem;">Clean</span>
+          {% endif %}
+        </div>
+      </div>
+      {# Actions #}
+      <div class="rr-right">
+        {% if row.has_report %}
+          {% if row.source == "portal" %}
+            <a href="/portal/reports/{{ row.scan_id }}" class="btn btn-sm btn-primary" style="margin-right:0; white-space:nowrap;">View Report</a>
+          {% else %}
+            <a href="/admin/reports/{{ row.scan_id }}/html" target="_blank" rel="noopener"
+               class="btn btn-sm btn-primary" style="margin-right:0; white-space:nowrap;">View ↗</a>
+          {% endif %}
+        {% endif %}
+        <div class="overflow-anchor">
+          <button class="overflow-trigger" type="button" aria-label="More actions">···</button>
+          <div class="overflow-menu">
             {% if row.has_report %}
-              <a href="/admin/reports/{{ row.scan_id }}/html" target="_blank" rel="noopener"
-                 style="font-size:0.8rem; margin-right:0.5rem;">View ↗</a>
-            {% else %}
-              <span class="muted" style="font-size:0.8rem; margin-right:0.5rem;">—</span>
+            <a href="/admin/reports/{{ row.scan_id }}/html" target="_blank" rel="noopener">Open HTML</a>
             {% endif %}
-            <span class="confirm-delete-wrap">
-              <button type="button" class="btn btn-danger btn-sm confirm-trigger">Delete</button>
-              <span class="confirm-delete-row">
-                <span style="font-size:0.8rem; color:var(--danger); margin-right:0.2rem;">Sure?</span>
-                <form method="post" action="/admin/reports/{{ row.scan_id }}/delete" style="display:inline;">
-                  <button type="submit" class="btn btn-danger btn-sm">Yes</button>
-                </form>
-                <button type="button" class="confirm-cancel btn btn-sm">No</button>
-              </span>
-            </span>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+            <hr>
+            <form method="post" action="/admin/reports/{{ row.scan_id }}/delete" style="display:block;"
+                  onsubmit="return confirm('Delete this scan record? This cannot be undone.');">
+              <button type="submit" class="om-danger">Delete</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
   </div>
 
+  {# Pagination #}
   <div class="pagination-bar">
-    <span class="muted" style="font-size:0.81rem;">Page {{ page }}</span>
+    <span class="muted" style="font-size:var(--text-sm);">Page {{ page }}</span>
     <div style="display:flex; gap:0.3rem;">
       {% if page > 1 %}
         <a href="/admin/reports?page={{ page - 1 }}" class="btn btn-sm">← Prev</a>
@@ -152,9 +158,25 @@
   {% else %}
   <div class="empty-state">
     <p class="empty-state-title">No scan records found</p>
+    <p class="empty-state-hint">Scans will appear here once users or CI pipelines run the scanner.</p>
   </div>
   {% endif %}
 
 </div>
 </form>
+
+{# ── Danger zone: Purge All ── #}
+<div class="danger-zone">
+  <div class="danger-zone-header">
+    <h3>Danger Zone</h3>
+  </div>
+  <div class="danger-zone-body">
+    <p>Permanently delete all scan records from all users and CI pipelines. This cannot be undone.</p>
+    <form method="post" action="/admin/reports/purge-all"
+          onsubmit="return confirm('Delete ALL scan records for all users? This cannot be undone.')">
+      <button type="submit" class="btn btn-danger btn-sm">Purge All Scans</button>
+    </form>
+  </div>
+</div>
+
 {% endblock admin_content %}
