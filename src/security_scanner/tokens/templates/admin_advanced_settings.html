@@ -1,356 +1,325 @@
 {% extends "admin_base.html" %}
-{% block title %}Admin &mdash; Advanced Settings{% endblock %}
+{% block title %}Admin — Advanced Settings{% endblock %}
+
+{% block extra_styles %}
+{{ super() }}
+<style>
+  /* Scanner card-checkbox */
+  .scanner-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: border-color 0.1s, background 0.1s;
+    margin-bottom: 0.6rem;
+  }
+  .scanner-toggle:last-child { margin-bottom: 0; }
+  .scanner-toggle:hover { border-color: var(--border-strong); background: var(--bg-inset); }
+  .scanner-toggle input[type="checkbox"] { margin-top: 0.15rem; flex-shrink: 0; accent-color: var(--accent); }
+  .scanner-toggle .st-name { font-weight: 600; font-size: var(--text-sm); display: block; margin-bottom: 0.1rem; }
+  .scanner-toggle .st-desc { font-size: var(--text-xs); color: var(--muted); }
+
+  /* Plain-English radio options */
+  .radio-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    padding: 0.65rem 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    margin-bottom: 0.5rem;
+    transition: border-color 0.1s, background 0.1s;
+  }
+  .radio-option:last-child { margin-bottom: 0; }
+  .radio-option:hover { border-color: var(--accent); background: var(--accent-subtle); }
+  .radio-option input[type="radio"] { margin-top: 0.15rem; flex-shrink: 0; accent-color: var(--accent); }
+  .radio-option .ro-label { font-weight: 600; font-size: var(--text-sm); }
+  .radio-option .ro-desc { font-size: var(--text-xs); color: var(--muted); margin-top: 0.1rem; }
+
+  /* Checkbox row */
+  .check-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+  }
+  .check-row:last-child { border-bottom: none; }
+  .check-row input[type="checkbox"] { margin-top: 0.15rem; flex-shrink: 0; accent-color: var(--accent); }
+  .check-row .cr-name { font-weight: 600; font-size: var(--text-sm); display: flex; align-items: center; gap: 0.4rem; }
+  .check-row .cr-desc { font-size: var(--text-xs); color: var(--muted); margin-top: 0.15rem; }
+</style>
+{% endblock %}
 
 {% block admin_content %}
-<div class="card">
-  <h2>Advanced Settings</h2>
-  <p class="muted">
-    Fine-tune how the scanner decides what counts as a real issue.
-    Changes take effect on the very next scan — no restart or deployment needed.
-    Each setting below explains what it does in plain English so you know
-    exactly what you are changing before you save.
-  </p>
-</div>
 
-<div class="card">
-  <h2>Current configuration</h2>
+<div class="admin-page-header">
+  <div>
+    <h2 class="page-title">Advanced Settings</h2>
+    <p class="page-subtitle">Fine-tune scan accuracy and behaviour. Changes take effect on the next scan — no restart needed.</p>
+  </div>
   {% if sc %}
-  <dl>
-    <dt>Blocking findings threshold</dt>
-    <dd>
-      {% if sc.keep_confidences == "high" %}High confidence only
-      {% elif sc.keep_confidences == "high,medium" %}High + Medium confidence
-      {% elif sc.keep_confidences == "high,medium,low" %}High + Medium + Low confidence
-      {% else %}<code>{{ sc.keep_confidences }}</code>{% endif %}
-    </dd>
-    <dt>Advisory (warning) findings threshold</dt>
-    <dd>
-      {% if sc.advisory_confidences == "low" %}Low confidence only
-      {% elif sc.advisory_confidences == "medium,low" %}Medium + Low confidence
-      {% elif sc.advisory_confidences == "" %}None
-      {% else %}<code>{{ sc.advisory_confidences }}</code>{% endif %}
-    </dd>
-    <dt>Parallel checks</dt>
-    <dd>{{ sc.vuln_verifier_parallelism }} worker{{ "s" if sc.vuln_verifier_parallelism != 1 else "" }}</dd>
-    <dt>Consolidation verifier</dt>
-    <dd>{% if sc.enable_consolidation_verifier %}Enabled{% else %}<span class="muted">Disabled</span>{% endif %}</dd>
-    <dt>Fix quality gate</dt>
-    <dd>{% if sc.enable_quality_gate %}Enabled{% else %}<span class="muted">Disabled (default)</span>{% endif %}</dd>
-    <dt>Report retention</dt>
-    <dd>{% if sc.report_retention_days %}Auto-purge after <strong>{{ sc.report_retention_days }}</strong> days{% else %}<span class="muted">Disabled — records kept indefinitely</span>{% endif %}</dd>
-    <dt>Active scanners</dt>
-    <dd>
-      {% set active = [] %}
-      {% if sc.enable_semgrep %}{% set _ = active.append("Semgrep") %}{% endif %}
-      {% if sc.enable_bandit %}{% set _ = active.append("Bandit") %}{% endif %}
-      {% if sc.enable_gosec %}{% set _ = active.append("gosec") %}{% endif %}
-      {% if sc.enable_eslint %}{% set _ = active.append("ESLint Security") %}{% endif %}
-      {% if active %}{{ active | join(", ") }}{% else %}<span class="muted">None (all disabled)</span>{% endif %}
-    </dd>
-    {% if sc.enable_semgrep %}
-    <dt>Semgrep rule packs</dt>
-    <dd>
-      {% set packs = [] %}
-      {% if sc.semgrep_owasp %}{% set _ = packs.append("OWASP Top Ten") %}{% endif %}
-      {% if sc.semgrep_audit %}{% set _ = packs.append("Security Audit") %}{% endif %}
-      {% if sc.semgrep_upload %}{% set _ = packs.append("File Upload Security") %}{% endif %}
-      {% if packs %}{{ packs | join(", ") }}{% else %}<span class="muted">None</span>{% endif %}
-    </dd>
-    {% endif %}
-    <dt>Sensitive folder list</dt>
-    <dd>
-      {% if sc.high_risk_paths and sc.high_risk_paths.strip() %}
-        <code style="white-space:pre-wrap;">{{ sc.high_risk_paths.strip() }}</code>
-        <span class="muted" style="font-size:0.83rem;">(custom)</span>
-      {% else %}
-        <span class="muted">Built-in defaults (auth/, payments/, admin/, etc.)</span>
-      {% endif %}
-    </dd>
-    <dt>Last saved by</dt>
-    <dd class="muted" style="font-size:0.83rem;">{{ sc.updated_by_email }} &mdash; {{ sc.updated_at.strftime('%Y-%m-%d %H:%M') }} UTC</dd>
-  </dl>
-  {% else %}
-  <p class="muted">No settings saved yet. The scanner is using its built-in defaults. Save the form below to set your own configuration.</p>
+  <div style="font-size:var(--text-xs); color:var(--muted); text-align:right;">
+    Last saved by {{ sc.updated_by_email }}<br>
+    {{ sc.updated_at.strftime('%d %b %Y %H:%M') }} UTC
+  </div>
   {% endif %}
 </div>
 
-<div class="card">
-  <h2>Update advanced settings</h2>
-  <p class="muted" style="font-size:0.88rem;">
-    Saving creates a new versioned row — all previous configurations are preserved for audit.
-  </p>
-  <form method="post" action="/admin/advanced-settings" autocomplete="off">
+<div class="info-banner" style="margin-bottom:1.25rem;">
+  Recommended defaults are shown. Only change settings if you understand their impact on scan accuracy and cost.
+</div>
 
-    <fieldset style="border:1px solid var(--border); border-radius:var(--radius); padding:1rem; margin:0 0 1.25rem;">
-      <legend style="font-weight:600; padding:0 0.4rem;">Confidence thresholds</legend>
+<form method="post" action="/admin/advanced-settings" autocomplete="off">
 
-      <div style="margin-bottom:1rem;">
-        <label class="form-label" for="keep_confidences">
-          Which findings should block a deployment?
+  {# ── Gate Thresholds ── #}
+  <div class="settings-section">
+    <div class="settings-section-header">
+      <h3>Gate Thresholds <span class="badge-impact">Security impact</span></h3>
+      <p>Control which findings block a deployment versus appear as warnings.</p>
+    </div>
+    <div class="settings-section-body">
+
+      <div style="margin-bottom:1.25rem;">
+        <label class="form-label">Block deployments when findings have confidence:</label>
+        <p class="form-hint" style="margin-bottom:0.75rem;">Lower = catches more issues, but may generate more false positives. Raise only if you see too many false alarms.</p>
+
+        {% set cur_keep = sc.keep_confidences if sc else 'high,medium' %}
+        <label class="radio-option">
+          <input type="radio" name="keep_confidences" value="high" {{ 'checked' if cur_keep == 'high' }}>
+          <div>
+            <div class="ro-label">High confidence only <span class="badge-recommended">Recommended</span></div>
+            <div class="ro-desc">Blocks only when the AI is nearly certain. Lowest false-positive rate.</div>
+          </div>
         </label>
-        <p class="form-hint">
-          High-confidence findings are nearly certain security issues. Medium adds findings where the scanner
-          is fairly sure but not certain. Only raise this threshold if you are seeing too many false alarms.
-        </p>
-        <select name="keep_confidences" id="keep_confidences"
-                style="width:100%; max-width:400px;">
-          {% for value, label in keep_conf_options.items() %}
-          <option value="{{ value }}"
-            {{ 'selected' if sc and sc.keep_confidences == value else ('selected' if not sc and value == 'high,medium' else '') }}>
-            {{ label }}
-          </option>
-          {% endfor %}
-        </select>
+        <label class="radio-option">
+          <input type="radio" name="keep_confidences" value="high,medium" {{ 'checked' if cur_keep == 'high,medium' }}>
+          <div>
+            <div class="ro-label">High + Medium confidence</div>
+            <div class="ro-desc">Catches more issues at the cost of occasional false positives.</div>
+          </div>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="keep_confidences" value="high,medium,low" {{ 'checked' if cur_keep == 'high,medium,low' }}>
+          <div>
+            <div class="ro-label">All findings regardless of confidence</div>
+            <div class="ro-desc">Most sensitive. Expect more false alarms — only for high-security environments.</div>
+          </div>
+        </label>
       </div>
+
+      <hr class="section-divider">
 
       <div>
-        <label class="form-label" for="advisory_confidences">
-          Which findings should appear as warnings only (non-blocking)?
+        <label class="form-label">Treat as advisory warning (non-blocking) when findings have confidence:</label>
+        <p class="form-hint" style="margin-bottom:0.75rem;">Advisory findings appear in the report but do not stop deployment. Useful for tracking issues to fix later.</p>
+
+        {% set cur_adv = sc.advisory_confidences if sc else 'low' %}
+        <label class="radio-option">
+          <input type="radio" name="advisory_confidences" value="low" {{ 'checked' if cur_adv == 'low' }}>
+          <div>
+            <div class="ro-label">Low confidence findings <span class="badge-recommended">Recommended</span></div>
+            <div class="ro-desc">Surface uncertain findings as warnings without blocking the pipeline.</div>
+          </div>
         </label>
-        <p class="form-hint">
-          Warning findings are shown in the scan report but do not stop the deployment.
-          They are useful for tracking issues you intend to fix later.
-        </p>
-        <select name="advisory_confidences" id="advisory_confidences"
-                style="width:100%; max-width:400px;">
-          {% for value, label in advisory_conf_options.items() %}
-          <option value="{{ value }}"
-            {{ 'selected' if sc and sc.advisory_confidences == value else ('selected' if not sc and value == 'low' else '') }}>
-            {{ label }}
-          </option>
-          {% endfor %}
-        </select>
-      </div>
-    </fieldset>
-
-    <fieldset style="border:1px solid var(--border); border-radius:var(--radius); padding:1rem; margin:0 0 1.25rem;">
-      <legend style="font-weight:600; padding:0 0.4rem;">Speed tuning</legend>
-
-      <div>
-        <label class="form-label" for="vuln_verifier_parallelism">
-          How many verification checks should run at the same time?
+        <label class="radio-option">
+          <input type="radio" name="advisory_confidences" value="medium,low" {{ 'checked' if cur_adv == 'medium,low' }}>
+          <div>
+            <div class="ro-label">Medium + Low confidence</div>
+            <div class="ro-desc">Advisory warnings for any finding not caught by the blocking threshold.</div>
+          </div>
         </label>
-        <p class="form-hint">
-          A higher number makes scans faster on large repos but uses more memory.
-          <strong>2</strong> is the safe default. Maximum is 16.
-        </p>
-        <input type="number" name="vuln_verifier_parallelism" id="vuln_verifier_parallelism"
-               min="1" max="16" value="{{ sc.vuln_verifier_parallelism if sc else 2 }}"
-               style="width:80px;">
-      </div>
-
-      <div style="margin-top:1rem;">
-        <label style="display:flex; align-items:flex-start; gap:0.6rem; cursor:pointer;">
-          <input type="checkbox" name="enable_consolidation_verifier" value="on"
-                 {{ 'checked' if sc and sc.enable_consolidation_verifier else '' }}
-                 style="margin-top:0.2rem; flex-shrink:0;">
-          <span>
-            <strong>Consolidation verifier</strong>
-            <span class="muted" style="font-size:0.84rem; display:block;">
-              After individual checks complete, run one final AI pass reviewing all confirmed
-              findings together. Detects combined-risk attack chains (e.g. auth bypass + SQL
-              injection = unauthenticated SQLi) and can promote severity to Critical.
-              One extra API call per scan. Most useful when scans produce 5&ndash;30 findings.
-            </span>
-          </span>
+        <label class="radio-option">
+          <input type="radio" name="advisory_confidences" value="" {{ 'checked' if cur_adv == '' }}>
+          <div>
+            <div class="ro-label">None</div>
+            <div class="ro-desc">No advisory warnings — findings either block or are silenced entirely.</div>
+          </div>
         </label>
       </div>
+    </div>
+    <div class="settings-section-footer">
+      <span class="muted" style="font-size:var(--text-xs); flex:1;">Change takes effect on the next scan.</span>
+    </div>
+  </div>
 
-      <div style="margin-top:1rem;">
-        <label style="display:flex; align-items:flex-start; gap:0.6rem; cursor:pointer;">
-          <input type="checkbox" name="enable_partial_scan" value="on"
-                 {{ 'checked' if not sc or sc.enable_partial_scan else '' }}
-                 style="margin-top:0.2rem; flex-shrink:0;">
-          <span>
-            <strong>Partial scan on token limit</strong>
-            <span class="muted" style="font-size:0.84rem; display:block;">
-              When a repository is too large to scan in full (&gt;150&thinsp;000 tokens), scan the
-              highest-risk files that fit &mdash; auth, payments, admin, API routes &mdash; instead of
-              returning zero findings. Skipped files are listed in the scan report.
-              Disable to enforce all-or-nothing behaviour (the previous default).
-            </span>
-          </span>
-        </label>
-      </div>
+  {# ── Performance ── #}
+  <div class="settings-section">
+    <div class="settings-section-header">
+      <h3>Performance</h3>
+      <p>Tune scan speed and API usage. Higher parallelism makes scans faster but costs more.</p>
+    </div>
+    <div class="settings-section-body">
 
-      <div style="margin-top:1rem;">
-        <label style="display:flex; align-items:flex-start; gap:0.6rem; cursor:pointer;">
-          <input type="checkbox" name="enable_zero_findings_retry" value="on"
-                 {{ 'checked' if not sc or sc.enable_zero_findings_retry else '' }}
-                 style="margin-top:0.2rem; flex-shrink:0;">
-          <span>
-            <strong>Retry on empty first pass</strong>
-            <span class="muted" style="font-size:0.84rem; display:block;">
-              When the AI returns no findings on a non-trivial codebase (&gt;500 source lines),
-              run a second analysis pass with an explicit re-examine instruction. Adds one AI
-              call on zero-finding repositories. Disable for cost-constrained environments.
-            </span>
-          </span>
-        </label>
-      </div>
-
-      <div style="margin-top:1rem;">
-        <label style="display:flex; align-items:flex-start; gap:0.6rem; cursor:pointer;">
-          <input type="checkbox" name="enable_quality_gate" value="on"
-                 {{ 'checked' if sc and sc.enable_quality_gate else '' }}
-                 style="margin-top:0.2rem; flex-shrink:0;">
-          <span>
-            <strong>Fix quality gate</strong>
-            <span class="muted" style="font-size:0.84rem; display:block;">
-              After verification, re-generate <code>suggested_fix</code> and
-              <code>exploit_scenario</code> for any verified finding whose fix lacks a code
-              example. Adds up to one AI call per 5 such findings. Disable for
-              cost-sensitive environments. Default: off.
-            </span>
-          </span>
-        </label>
-      </div>
-    </fieldset>
-
-    <fieldset style="border:1px solid var(--border); border-radius:var(--radius); padding:1rem; margin:0 0 1.25rem;">
-      <legend style="font-weight:600; padding:0 0.4rem;">Which security tools should run?</legend>
-      <p class="muted" style="font-size:0.84rem; margin:0 0 0.8rem;">
-        Each tool scans for different types of problems. Disable a tool if it is producing
-        too many false positives for your codebase. Disabling all tools falls back to
-        AI-only analysis.
-      </p>
-
-      <label style="display:flex; align-items:flex-start; gap:0.6rem; margin-bottom:0.75rem; cursor:pointer;" id="semgrep-label">
-        <input type="checkbox" name="enable_semgrep" value="on" id="enable_semgrep"
-               {{ 'checked' if not sc or sc.enable_semgrep else '' }}
-               style="margin-top:0.2rem; flex-shrink:0;">
-        <span>
-          <strong>Semgrep</strong>
-          <span class="muted" style="font-size:0.84rem; display:block;">
-            Finds common security patterns across all languages — SQL injection, XSS, path traversal, and more.
-          </span>
-        </span>
-      </label>
-
-      <fieldset id="semgrep-rules" style="border:1px solid var(--border); border-radius:6px;
-                padding:0.75rem 1rem; margin:0 0 0.75rem 1.8rem;
-                {{ 'display:none' if sc and not sc.enable_semgrep else '' }}">
-        <legend style="font-size:0.85rem; font-weight:600; padding:0 0.3rem; color:var(--muted);">
-          Which Semgrep rule packs should run?
-        </legend>
-        <p class="muted" style="font-size:0.82rem; margin:0 0 0.6rem;">
-          Deselect a pack only if its rules are causing too many false positives for your project.
-        </p>
-        <label style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.4rem; cursor:pointer;">
-          <input type="checkbox" name="semgrep_owasp" value="on"
-                 {{ 'checked' if not sc or sc.semgrep_owasp else '' }}>
-          <span><strong>OWASP Top Ten</strong> <span class="muted" style="font-size:0.83rem;">— the most critical web security risks</span></span>
-        </label>
-        <label style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.4rem; cursor:pointer;">
-          <input type="checkbox" name="semgrep_audit" value="on"
-                 {{ 'checked' if not sc or sc.semgrep_audit else '' }}>
-          <span><strong>Security Audit</strong> <span class="muted" style="font-size:0.83rem;">— general secure-coding checks</span></span>
-        </label>
-        <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
-          <input type="checkbox" name="semgrep_upload" value="on"
-                 {{ 'checked' if not sc or sc.semgrep_upload else '' }}>
-          <span><strong>File Upload Security</strong> <span class="muted" style="font-size:0.83rem;">— file upload and storage issues</span></span>
-        </label>
-      </fieldset>
-
-      <label style="display:flex; align-items:flex-start; gap:0.6rem; margin-bottom:0.75rem; cursor:pointer;">
-        <input type="checkbox" name="enable_bandit" value="on"
-               {{ 'checked' if not sc or sc.enable_bandit else '' }}
-               style="margin-top:0.2rem; flex-shrink:0;">
-        <span>
-          <strong>Bandit</strong>
-          <span class="muted" style="font-size:0.84rem; display:block;">
-            Finds security issues in <strong>Python</strong> code — hardcoded passwords, unsafe functions, weak cryptography.
-          </span>
-        </span>
-      </label>
-
-      <label style="display:flex; align-items:flex-start; gap:0.6rem; margin-bottom:0.75rem; cursor:pointer;">
-        <input type="checkbox" name="enable_gosec" value="on"
-               {{ 'checked' if not sc or sc.enable_gosec else '' }}
-               style="margin-top:0.2rem; flex-shrink:0;">
-        <span>
-          <strong>gosec</strong>
-          <span class="muted" style="font-size:0.84rem; display:block;">
-            Finds security issues in <strong>Go</strong> code — SQL injection, command injection, unsafe file operations.
-          </span>
-        </span>
-      </label>
-
-      <label style="display:flex; align-items:flex-start; gap:0.6rem; cursor:pointer;">
-        <input type="checkbox" name="enable_eslint" value="on"
-               {{ 'checked' if not sc or sc.enable_eslint else '' }}
-               style="margin-top:0.2rem; flex-shrink:0;">
-        <span>
-          <strong>ESLint Security</strong>
-          <span class="muted" style="font-size:0.84rem; display:block;">
-            Finds security issues in <strong>JavaScript / TypeScript</strong> code — eval injection, prototype pollution, regex DoS.
-          </span>
-        </span>
-      </label>
-    </fieldset>
-
-    <fieldset style="border:1px solid var(--border); border-radius:var(--radius); padding:1rem; margin:0 0 1.25rem;">
-      <legend style="font-weight:600; padding:0 0.4rem;">Report retention</legend>
-
-      <div>
-        <label class="form-label" for="report_retention_days">
-          Auto-purge scan records older than how many days?
-        </label>
-        <p class="form-hint">
-          When set, the scanner deletes entire <strong>scan_records</strong> and
-          <strong>ci_scan_records</strong> rows (including any stored HTML report) that are
-          older than this threshold. The purge runs at startup and once every 24 hours.
-          Leave blank to keep all records indefinitely. You can also manually delete or purge
-          records from the <a href="/admin/reports">Reports</a> page at any time.
-        </p>
-        <div style="display:flex; align-items:center; gap:0.5rem;">
-          <input type="number" name="report_retention_days" id="report_retention_days"
-                 min="1" max="3650" placeholder="blank = keep forever"
-                 value="{{ sc.report_retention_days if sc and sc.report_retention_days else '' }}"
-                 style="width:160px;">
-          <span class="muted" style="font-size:0.85rem;">days (e.g. 90 = keep 3 months)</span>
+      <div style="margin-bottom:1.25rem;">
+        <label class="form-label" for="vuln_verifier_parallelism">Parallel verification workers</label>
+        <p class="form-hint" style="margin-bottom:0.5rem;">Runs this many verification checks simultaneously. Higher = faster scans, higher memory and API usage. <strong>2 is the safe default.</strong> Max: 16.</p>
+        <div style="display:flex; align-items:center; gap:0.75rem;">
+          <input type="number" name="vuln_verifier_parallelism" id="vuln_verifier_parallelism"
+                 min="1" max="16" value="{{ sc.vuln_verifier_parallelism if sc else 2 }}"
+                 style="width:80px;">
+          <span class="badge-recommended">Recommended: 2</span>
         </div>
       </div>
-    </fieldset>
 
-    <fieldset style="border:1px solid var(--border); border-radius:var(--radius); padding:1rem; margin:0 0 1.25rem;">
-      <legend style="font-weight:600; padding:0 0.4rem;">Sensitive folder list</legend>
+      <hr class="section-divider">
+
+      <label class="check-row">
+        <input type="checkbox" name="enable_consolidation_verifier" value="on"
+               {{ 'checked' if sc and sc.enable_consolidation_verifier else '' }}>
+        <div>
+          <div class="cr-name">Consolidation verifier</div>
+          <div class="cr-desc">After individual checks complete, run a final AI pass reviewing all confirmed findings together. Detects combined-risk attack chains and can promote severity to Critical. One extra API call per scan.</div>
+        </div>
+      </label>
+      <label class="check-row">
+        <input type="checkbox" name="enable_partial_scan" value="on"
+               {{ 'checked' if not sc or sc.enable_partial_scan else '' }}>
+        <div>
+          <div class="cr-name">Partial scan on token limit <span class="badge-recommended">Recommended: on</span></div>
+          <div class="cr-desc">When a repo is too large to scan fully, scan the highest-risk files (auth, payments, admin, API routes) instead of returning zero findings.</div>
+        </div>
+      </label>
+      <label class="check-row">
+        <input type="checkbox" name="enable_zero_findings_retry" value="on"
+               {{ 'checked' if not sc or sc.enable_zero_findings_retry else '' }}>
+        <div>
+          <div class="cr-name">Retry on empty first pass <span class="badge-recommended">Recommended: on</span></div>
+          <div class="cr-desc">When the AI returns no findings on a non-trivial codebase, run a second pass with an explicit re-examine instruction. Adds one AI call on zero-finding repos.</div>
+        </div>
+      </label>
+      <label class="check-row">
+        <input type="checkbox" name="enable_quality_gate" value="on"
+               {{ 'checked' if sc and sc.enable_quality_gate else '' }}>
+        <div>
+          <div class="cr-name">Fix quality gate</div>
+          <div class="cr-desc">Re-generate fix suggestions for verified findings that lack code examples. Adds up to one AI call per 5 such findings. Default: off.</div>
+        </div>
+      </label>
+
+    </div>
+  </div>
+
+  {# ── Active Scanners ── #}
+  <div class="settings-section">
+    <div class="settings-section-header">
+      <h3>Active Scanners</h3>
+      <p>Each tool detects different vulnerability types. Disable only if a tool produces too many false positives for your codebase. Disabling all falls back to AI-only analysis.</p>
+    </div>
+    <div class="settings-section-body">
+
+      <label class="scanner-toggle" id="semgrep-label">
+        <input type="checkbox" name="enable_semgrep" value="on" id="enable_semgrep"
+               {{ 'checked' if not sc or sc.enable_semgrep else '' }}>
+        <div>
+          <span class="st-name">Semgrep</span>
+          <span class="st-desc">Finds common security patterns across all languages — SQL injection, XSS, path traversal, and more.</span>
+        </div>
+      </label>
+
+      <div id="semgrep-rules" style="margin: -0.1rem 0 0.6rem 2rem; padding: 0.75rem 1rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-inset); {{ 'display:none' if sc and not sc.enable_semgrep else '' }}">
+        <p class="form-label" style="margin-bottom:0.5rem; color:var(--muted); font-weight:600; font-size:var(--text-xs); text-transform:uppercase; letter-spacing:0.06em;">Semgrep rule packs</p>
+        <label class="check-row">
+          <input type="checkbox" name="semgrep_owasp" value="on" {{ 'checked' if not sc or sc.semgrep_owasp else '' }}>
+          <div>
+            <div class="cr-name">OWASP Top Ten <span class="badge-recommended">Recommended</span></div>
+            <div class="cr-desc">The most critical web application security risks.</div>
+          </div>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" name="semgrep_audit" value="on" {{ 'checked' if not sc or sc.semgrep_audit else '' }}>
+          <div>
+            <div class="cr-name">Security Audit <span class="badge-recommended">Recommended</span></div>
+            <div class="cr-desc">General secure-coding checks across languages.</div>
+          </div>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" name="semgrep_upload" value="on" {{ 'checked' if not sc or sc.semgrep_upload else '' }}>
+          <div>
+            <div class="cr-name">File Upload Security</div>
+            <div class="cr-desc">File upload and storage vulnerability patterns.</div>
+          </div>
+        </label>
+      </div>
+
+      <label class="scanner-toggle">
+        <input type="checkbox" name="enable_bandit" value="on"
+               {{ 'checked' if not sc or sc.enable_bandit else '' }}>
+        <div>
+          <span class="st-name">Bandit</span>
+          <span class="st-desc">Finds security issues in <strong>Python</strong> — hardcoded passwords, unsafe functions, weak cryptography.</span>
+        </div>
+      </label>
+      <label class="scanner-toggle">
+        <input type="checkbox" name="enable_gosec" value="on"
+               {{ 'checked' if not sc or sc.enable_gosec else '' }}>
+        <div>
+          <span class="st-name">gosec</span>
+          <span class="st-desc">Finds security issues in <strong>Go</strong> — SQL injection, command injection, unsafe file operations.</span>
+        </div>
+      </label>
+      <label class="scanner-toggle">
+        <input type="checkbox" name="enable_eslint" value="on"
+               {{ 'checked' if not sc or sc.enable_eslint else '' }}>
+        <div>
+          <span class="st-name">ESLint Security</span>
+          <span class="st-desc">Finds security issues in <strong>JavaScript / TypeScript</strong> — eval injection, prototype pollution, regex DoS.</span>
+        </div>
+      </label>
+
+    </div>
+  </div>
+
+  {# ── File Handling ── #}
+  <div class="settings-section">
+    <div class="settings-section-header">
+      <h3>File Handling</h3>
+      <p>Control which paths receive extra scrutiny and how long scan records are retained.</p>
+    </div>
+    <div class="settings-section-body">
+
+      <div style="margin-bottom:1.25rem;">
+        <label class="form-label" for="high_risk_paths">Sensitive folder list</label>
+        <p class="form-hint" style="margin-bottom:0.5rem;">Findings inside these folders are treated as more serious — a medium-confidence issue here becomes a blocking finding instead of an advisory warning. One folder path prefix per line. Leave blank for built-in defaults (auth/, payments/, admin/, etc.).</p>
+        <textarea name="high_risk_paths" id="high_risk_paths" rows="5"
+                  class="input-mono"
+                  placeholder="Leave blank for built-in defaults&#10;Examples:&#10;auth/&#10;payments/&#10;admin/"
+                  style="width:100%; max-width:420px; resize:vertical;">{{ sc.high_risk_paths if sc else '' }}</textarea>
+      </div>
+
+      <hr class="section-divider">
 
       <div>
-        <label class="form-label" for="high_risk_paths">
-          Which folders contain sensitive code that needs extra scrutiny?
-        </label>
-        <p class="form-hint">
-          Findings inside these folders are treated as more serious — a medium-confidence issue
-          in a folder on this list becomes a blocking finding instead of an advisory warning.
-          Enter one folder path prefix per line (e.g. <code>auth/</code>, <code>payments/</code>).
-          Leave blank to use the built-in defaults.
-        </p>
-        <textarea name="high_risk_paths" id="high_risk_paths" rows="6"
-                  class="input-mono"
-                  placeholder="Leave blank to use built-in defaults&#10;Example:&#10;auth/&#10;payments/&#10;admin/"
-                  style="width:100%; max-width:480px; resize:vertical;">{{ sc.high_risk_paths if sc else '' }}</textarea>
+        <label class="form-label" for="report_retention_days">Auto-purge records older than</label>
+        <p class="form-hint" style="margin-bottom:0.5rem;">Deletes scan_records rows (including stored HTML reports) older than this threshold. Runs at startup and every 24 hours. Leave blank to keep records indefinitely.</p>
+        <div style="display:flex; align-items:center; gap:0.6rem;">
+          <input type="number" name="report_retention_days" id="report_retention_days"
+                 min="1" max="3650" placeholder="∞"
+                 value="{{ sc.report_retention_days if sc and sc.report_retention_days else '' }}"
+                 style="width:90px;">
+          <span class="muted" style="font-size:var(--text-sm);">days &nbsp;·&nbsp; e.g. 90 = keep 3 months</span>
+        </div>
       </div>
-    </fieldset>
 
-    <button type="submit" class="btn btn-primary">Save advanced settings</button>
-    <p class="muted" style="margin-top:0.75rem; font-size:0.85rem;">
-      Saving creates a new versioned row. All previous configurations are kept for audit.
-      The very next scan will use these settings — no restart needed.
-    </p>
-  </form>
-</div>
+    </div>
+    <div class="settings-section-footer">
+      <button type="submit" class="btn btn-primary" style="margin-right:0;">Save settings</button>
+    </div>
+  </div>
+
+</form>
 
 <script>
 (function () {
   var semgrepCb = document.getElementById('enable_semgrep');
   var rulesBox  = document.getElementById('semgrep-rules');
   if (!semgrepCb || !rulesBox) return;
-
-  function toggle() {
-    rulesBox.style.display = semgrepCb.checked ? '' : 'none';
-  }
+  function toggle() { rulesBox.style.display = semgrepCb.checked ? '' : 'none'; }
   semgrepCb.addEventListener('change', toggle);
   toggle();
 })();

@@ -1,170 +1,322 @@
 {% extends "admin_base.html" %}
 {% block title %}Admin — Usage Analytics{% endblock %}
 
+{% block extra_styles %}
+{{ super() }}
+<style>
+  main { max-width: 1200px; }
+
+  /* Compact usage table */
+  .usage-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+  .usage-table th { color: var(--muted); font-weight: 600; font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.055em; background: var(--bg-inset); padding: 0.5rem 0.85rem; text-align: left; border-bottom: 1px solid var(--border); }
+  .usage-table td { padding: 0.5rem 0.85rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .usage-table tbody tr:last-child td { border-bottom: none; }
+  .usage-table tbody tr:hover td { background: rgba(0,0,0,0.015); }
+  [data-theme="dark"] .usage-table tbody tr:hover td { background: rgba(255,255,255,0.02); }
+  .usage-table .month-header td {
+    background: var(--bg-inset);
+    font-weight: 700;
+    font-size: var(--text-xs);
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0.35rem 0.85rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Section toggle */
+  .section-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.85rem 1.15rem;
+    cursor: pointer;
+    background: var(--bg-inset);
+    border: none;
+    width: 100%;
+    text-align: left;
+    font: inherit;
+    color: var(--fg-2);
+    font-size: var(--text-sm);
+    font-weight: 700;
+    transition: background 0.1s;
+    gap: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .section-toggle:hover { background: var(--bg); color: var(--fg); }
+  .section-toggle .ct-icon { font-size: 0.7rem; color: var(--muted); transition: transform 0.2s; flex-shrink: 0; }
+  .section-toggle[aria-expanded="true"] .ct-icon { transform: rotate(180deg); }
+  .section-body { border-top: 1px solid var(--border); }
+  .section-body.hidden { display: none; }
+</style>
+{% endblock %}
+
 {% block admin_content %}
-<div class="card">
-  <h2>Usage Analytics</h2>
-  <p class="muted">
-    Scan activity (last {{ lookback_days }} days) and LLM token spend (last 3 months).
-    CLI scans from <code>scan_records</code>; CI pipeline scans from <code>ci_scan_records</code>.
-  </p>
+
+{# ── Compute aggregates ── #}
+{% set ns = namespace(
+  total_ci=0, total_cli=0,
+  critical_ci=0, critical_cli=0,
+  total_input=0, total_output=0
+) %}
+{% for row in ci_scan_rows %}
+  {% set ns.total_ci = ns.total_ci + (row.total_scans or 0) %}
+  {% set ns.critical_ci = ns.critical_ci + (row.total_critical or 0) %}
+{% endfor %}
+{% for row in scan_rows %}
+  {% set ns.total_cli = ns.total_cli + (row.total_scans or 0) %}
+  {% set ns.critical_cli = ns.critical_cli + (row.total_critical or 0) %}
+{% endfor %}
+{% for row in usage_rows %}
+  {% set ns.total_input = ns.total_input + (row.input_tokens or 0) %}
+  {% set ns.total_output = ns.total_output + (row.output_tokens or 0) %}
+{% endfor %}
+
+<div class="admin-page-header">
+  <div>
+    <h2 class="page-title">Usage Analytics</h2>
+    <p class="page-subtitle">Scan activity (last {{ lookback_days }} days) and LLM token spend (last 3 months)</p>
+  </div>
 </div>
 
-<div class="card card-no-pad">
-  <div class="card-header">
-    <h2>CI pipeline scans — last {{ lookback_days }} days</h2>
+{# ── Outcomes-first posture strip ── #}
+<div class="posture-strip" style="margin-bottom:1.25rem;">
+  <div class="posture-stat ps-critical">
+    <div class="ps-num">{{ ns.critical_ci + ns.critical_cli }}</div>
+    <div class="ps-label">Critical findings</div>
   </div>
-  {% if ci_scan_rows %}
-  <div style="overflow-x:auto;">
-    <table style="min-width:580px;">
-      <thead>
-        <tr>
-          <th>GitHub actor</th>
-          <th style="text-align:right;">Scans</th>
-          <th style="text-align:right;">Critical</th>
-          <th style="text-align:right;">High</th>
-          <th style="text-align:right;">Findings</th>
-          <th style="white-space:nowrap;">Last scan</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in ci_scan_rows %}
-        <tr>
-          <td class="mono" style="font-size:0.83rem;">{{ row.triggered_by }}</td>
-          <td style="text-align:right; font-variant-numeric:tabular-nums;">{{ row.total_scans }}</td>
-          <td style="text-align:right;">
-            {% if row.total_critical %}<span class="sev sev-C">{{ row.total_critical }}</span>{% else %}<span class="muted">—</span>{% endif %}
-          </td>
-          <td style="text-align:right;">
-            {% if row.total_high %}<span class="sev sev-H">{{ row.total_high }}</span>{% else %}<span class="muted">—</span>{% endif %}
-          </td>
-          <td style="text-align:right; font-variant-numeric:tabular-nums;">{{ row.total_findings or 0 }}</td>
-          <td class="muted" style="font-size:0.83rem; white-space:nowrap;">
-            {% if row.last_scan_at %}{{ row.last_scan_at.strftime('%Y-%m-%d %H:%M') }} UTC{% else %}—{% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+  <div class="posture-stat ps-blocked">
+    <div class="ps-num">{{ ns.total_ci + ns.total_cli }}</div>
+    <div class="ps-label">Total scans</div>
   </div>
-  {% else %}
-  <div class="empty-state">
-    <p class="empty-state-title">No CI pipeline scans in the last {{ lookback_days }} days</p>
+  <div class="posture-stat">
+    <div class="ps-num">{{ ns.total_ci }}</div>
+    <div class="ps-label">CI scans</div>
   </div>
-  {% endif %}
+  <div class="posture-stat">
+    <div class="ps-num">{{ ns.total_cli }}</div>
+    <div class="ps-label">CLI scans</div>
+  </div>
+  <div class="posture-stat">
+    <div class="ps-num">{{ "{:,.0f}".format((ns.total_input + ns.total_output) / 1000) }}k</div>
+    <div class="ps-label">Total tokens</div>
+  </div>
 </div>
 
-<div class="card card-no-pad">
-  <div class="card-header">
-    <h2>CLI scans — last {{ lookback_days }} days</h2>
+{# ── Charts ── #}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<div class="chart-row">
+  <div class="chart-card">
+    <h4>Scan activity by actor (CI)</h4>
+    <canvas id="ciChart"></canvas>
   </div>
-  {% if scan_rows %}
-  <div style="overflow-x:auto;">
-    <table style="min-width:580px;">
-      <thead>
-        <tr>
-          <th>User</th>
-          <th style="text-align:right;">Scans</th>
-          <th style="text-align:right;">Critical</th>
-          <th style="text-align:right;">High</th>
-          <th style="text-align:right;">Findings</th>
-          <th style="white-space:nowrap;">Last scan</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in scan_rows %}
-        <tr>
-          <td class="mono" style="font-size:0.83rem;">{{ row.user_email }}</td>
-          <td style="text-align:right; font-variant-numeric:tabular-nums;">{{ row.total_scans }}</td>
-          <td style="text-align:right;">
-            {% if row.total_critical %}<span class="sev sev-C">{{ row.total_critical }}</span>{% else %}<span class="muted">—</span>{% endif %}
-          </td>
-          <td style="text-align:right;">
-            {% if row.total_high %}<span class="sev sev-H">{{ row.total_high }}</span>{% else %}<span class="muted">—</span>{% endif %}
-          </td>
-          <td style="text-align:right; font-variant-numeric:tabular-nums;">{{ row.total_findings or 0 }}</td>
-          <td class="muted" style="font-size:0.83rem; white-space:nowrap;">
-            {% if row.last_scan_at %}{{ row.last_scan_at.strftime('%Y-%m-%d %H:%M') }} UTC{% else %}—{% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+  <div class="chart-card">
+    <h4>Scan activity by user (CLI)</h4>
+    <canvas id="cliChart"></canvas>
   </div>
-  {% else %}
-  <div class="empty-state">
-    <p class="empty-state-title">No CLI scans in the last {{ lookback_days }} days</p>
-  </div>
-  {% endif %}
 </div>
+<script>
+(function() {
+  var isDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+    (!document.documentElement.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  var gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)';
+  var textColor = isDark ? '#7a8499' : '#64748b';
 
-<div class="card card-no-pad">
-  <div class="card-header">
-    <h2>LLM token spend — last 3 months</h2>
-  </div>
-  {% if usage_rows %}
-  <div style="overflow-x:auto;">
-    <table style="min-width:900px;">
-      <thead>
-        <tr>
-          <th>User</th>
-          <th>Month</th>
-          <th>Provider</th>
-          <th>Model</th>
-          <th style="text-align:right;">Scans</th>
-          <th style="text-align:right;">Input&nbsp;tokens</th>
-          <th style="text-align:right;">Output&nbsp;tokens</th>
-          <th style="text-align:right;">Cache&nbsp;read</th>
-          <th style="text-align:right;">Cache&nbsp;write</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% set ns = namespace(prev_month="") %}
-        {% for row in usage_rows %}
-          {% if row.year_month != ns.prev_month %}
-            <tr>
-              <td colspan="9"
-                  style="background:var(--bg); font-weight:700; font-size:0.79rem;
-                         color:var(--muted); padding:0.35rem 0.9rem;
-                         border-bottom:1px solid var(--border);">
-                {{ row.year_month }}
-              </td>
-            </tr>
-            {% set ns.prev_month = row.year_month %}
-          {% endif %}
+  var ciLabels = [{% for row in ci_scan_rows %}"{{ row.triggered_by | replace('"', '') }}"{% if not loop.last %},{% endif %}{% endfor %}];
+  var ciData   = [{% for row in ci_scan_rows %}{{ row.total_scans or 0 }}{% if not loop.last %},{% endif %}{% endfor %}];
+  var ciCrit   = [{% for row in ci_scan_rows %}{{ row.total_critical or 0 }}{% if not loop.last %},{% endif %}{% endfor %}];
+
+  var cliLabels = [{% for row in scan_rows %}"{{ row.user_email.split('@')[0] | replace('"', '') }}"{% if not loop.last %},{% endif %}{% endfor %}];
+  var cliData   = [{% for row in scan_rows %}{{ row.total_scans or 0 }}{% if not loop.last %},{% endif %}{% endfor %}];
+  var cliCrit   = [{% for row in scan_rows %}{{ row.total_critical or 0 }}{% if not loop.last %},{% endif %}{% endfor %}];
+
+  var opts = function(labels, data, crit) {
+    return {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          { label: 'Scans', data: data, backgroundColor: 'rgba(37,88,232,0.6)', borderRadius: 4 },
+          { label: 'Critical', data: crit, backgroundColor: 'rgba(220,38,38,0.7)', borderRadius: 4 }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: { legend: { labels: { color: textColor, font: { size: 11 } } } },
+        scales: {
+          x: { ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor } },
+          y: { ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor }, beginAtZero: true }
+        }
+      }
+    };
+  };
+
+  if (ciLabels.length > 0) {
+    new Chart(document.getElementById('ciChart'), opts(ciLabels, ciData, ciCrit));
+  } else {
+    document.getElementById('ciChart').closest('.chart-card').querySelector('h4').insertAdjacentHTML(
+      'afterend', '<p style="font-size:0.8rem;color:var(--muted);margin-top:2rem;text-align:center;">No CI scans</p>');
+  }
+  if (cliLabels.length > 0) {
+    new Chart(document.getElementById('cliChart'), opts(cliLabels, cliData, cliCrit));
+  } else {
+    document.getElementById('cliChart').closest('.chart-card').querySelector('h4').insertAdjacentHTML(
+      'afterend', '<p style="font-size:0.8rem;color:var(--muted);margin-top:2rem;text-align:center;">No CLI scans</p>');
+  }
+})();
+</script>
+
+{# ── CI scans section ── #}
+<div class="admin-list-card">
+  <button class="section-toggle" aria-expanded="true" onclick="toggleSection(this,'ci-body')">
+    <span>CI Pipeline Activity — last {{ lookback_days }} days</span>
+    <span class="ct-icon">▼</span>
+  </button>
+  <div class="section-body" id="ci-body">
+    {% if ci_scan_rows %}
+    <div style="overflow-x:auto;">
+      <table class="usage-table">
+        <thead>
           <tr>
-            <td class="mono" style="font-size:0.82rem;">{{ row.user_email }}</td>
-            <td class="muted" style="font-size:0.82rem; white-space:nowrap;">{{ row.year_month }}</td>
-            <td style="white-space:nowrap;">{{ row.provider }}</td>
-            <td class="mono" style="font-size:0.8rem; white-space:nowrap;">{{ row.model or "—" }}</td>
+            <th>GitHub Actor</th>
+            <th style="text-align:right;">Scans</th>
+            <th style="text-align:right;">Critical</th>
+            <th style="text-align:right;">High</th>
+            <th style="text-align:right;">Findings</th>
+            <th>Last scan</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in ci_scan_rows %}
+          <tr>
+            <td class="mono" style="font-size:0.82rem;">{{ row.triggered_by }}</td>
+            <td style="text-align:right; font-variant-numeric:tabular-nums;">{{ row.total_scans }}</td>
+            <td style="text-align:right;">{% if row.total_critical %}<span class="sev-chip sev-chip-C">{{ row.total_critical }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+            <td style="text-align:right;">{% if row.total_high %}<span class="sev-chip sev-chip-H">{{ row.total_high }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+            <td style="text-align:right; font-variant-numeric:tabular-nums;">{{ row.total_findings or 0 }}</td>
+            <td class="muted" style="font-size:0.82rem; white-space:nowrap;">{% if row.last_scan_at %}{{ row.last_scan_at.strftime('%d %b %Y %H:%M') }} UTC{% else %}—{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state"><p class="empty-state-title">No CI scans in the last {{ lookback_days }} days</p></div>
+    {% endif %}
+  </div>
+</div>
+
+{# ── CLI scans section ── #}
+<div class="admin-list-card">
+  <button class="section-toggle" aria-expanded="true" onclick="toggleSection(this,'cli-body')">
+    <span>CLI Activity — last {{ lookback_days }} days</span>
+    <span class="ct-icon">▼</span>
+  </button>
+  <div class="section-body" id="cli-body">
+    {% if scan_rows %}
+    <div style="overflow-x:auto;">
+      <table class="usage-table">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th style="text-align:right;">Scans</th>
+            <th style="text-align:right;">Critical</th>
+            <th style="text-align:right;">High</th>
+            <th style="text-align:right;">Findings</th>
+            <th>Last scan</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in scan_rows %}
+          <tr>
+            <td style="font-size:0.82rem;">{{ row.user_email }}</td>
+            <td style="text-align:right; font-variant-numeric:tabular-nums;">{{ row.total_scans }}</td>
+            <td style="text-align:right;">{% if row.total_critical %}<span class="sev-chip sev-chip-C">{{ row.total_critical }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+            <td style="text-align:right;">{% if row.total_high %}<span class="sev-chip sev-chip-H">{{ row.total_high }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+            <td style="text-align:right; font-variant-numeric:tabular-nums;">{{ row.total_findings or 0 }}</td>
+            <td class="muted" style="font-size:0.82rem; white-space:nowrap;">{% if row.last_scan_at %}{{ row.last_scan_at.strftime('%d %b %Y %H:%M') }} UTC{% else %}—{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state"><p class="empty-state-title">No CLI scans in the last {{ lookback_days }} days</p></div>
+    {% endif %}
+  </div>
+</div>
+
+{# ── LLM token spend section ── #}
+<div class="admin-list-card">
+  <button class="section-toggle" aria-expanded="false" onclick="toggleSection(this,'llm-body')">
+    <span>LLM Token Spend — last 3 months</span>
+    <span class="ct-icon">▼</span>
+  </button>
+  <div class="section-body hidden" id="llm-body">
+    {% if usage_rows %}
+    <div style="overflow-x:auto;">
+      <table class="usage-table" style="min-width:800px;">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Provider</th>
+            <th>Model</th>
+            <th style="text-align:right;">Scans</th>
+            <th style="text-align:right;">Input</th>
+            <th style="text-align:right;">Output</th>
+            <th style="text-align:right;">Cache read</th>
+            <th style="text-align:right;">Cache write</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set ns2 = namespace(prev_month="") %}
+          {% for row in usage_rows %}
+          {% if row.year_month != ns2.prev_month %}
+          <tr class="month-header"><td colspan="8">{{ row.year_month }}</td></tr>
+          {% set ns2.prev_month = row.year_month %}{% endif %}
+          <tr>
+            <td style="font-size:0.82rem;">{{ row.user_email }}</td>
+            <td style="white-space:nowrap; font-size:0.82rem;">{{ row.provider }}</td>
+            <td class="mono" style="font-size:0.78rem; white-space:nowrap;">{{ row.model or "—" }}</td>
             <td style="text-align:right; font-variant-numeric:tabular-nums;">{{ row.scan_count }}</td>
             <td style="text-align:right; font-variant-numeric:tabular-nums;">{{ "{:,}".format(row.input_tokens) }}</td>
             <td style="text-align:right; font-variant-numeric:tabular-nums;">{{ "{:,}".format(row.output_tokens) }}</td>
             <td style="text-align:right; font-variant-numeric:tabular-nums;">{{ "{:,}".format(row.cache_read_input_tokens) }}</td>
             <td style="text-align:right; font-variant-numeric:tabular-nums;">{{ "{:,}".format(row.cache_creation_input_tokens) }}</td>
           </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state"><p class="empty-state-title">No LLM usage data for this period</p></div>
+    {% endif %}
   </div>
-  {% else %}
-  <div class="empty-state">
-    <p class="empty-state-title">No LLM usage data for {% for m in months %}{{ m }}{% if not loop.last %}, {% endif %}{% endfor %}</p>
-  </div>
-  {% endif %}
 </div>
 
-<div style="position:fixed; bottom:1rem; right:1.2rem; font-size:0.75rem;
-            color:var(--muted); background:var(--bg); border:1px solid var(--border);
-            border-radius:6px; padding:0.3rem 0.7rem; z-index:100; box-shadow:var(--shadow-s);"
+{# ── Auto-refresh chip ── #}
+<div style="position:fixed; bottom:1rem; right:1.2rem; font-size:var(--text-xs);
+            color:var(--muted); background:var(--card); border:1px solid var(--border);
+            border-radius:var(--radius-s); padding:0.3rem 0.75rem; z-index:100;
+            box-shadow:var(--shadow-s); display:flex; align-items:center; gap:0.4rem;"
      id="usage-refresh-chip">
-  Updated <span id="usage-updated-at"></span> &middot; refreshing in <span id="usage-countdown">60</span>s
+  <span style="width:6px; height:6px; border-radius:50%; background:var(--ok); display:inline-block; animation:ps-pulse 2.4s ease-in-out infinite;"></span>
+  Updated <span id="usage-updated-at"></span> · <span id="usage-countdown">60</span>s
 </div>
+
 <script>
+function toggleSection(btn, bodyId) {
+  var body = document.getElementById(bodyId);
+  if (!body) return;
+  var isOpen = !body.classList.contains('hidden');
+  body.classList.toggle('hidden', isOpen);
+  btn.setAttribute('aria-expanded', !isOpen);
+}
 (function () {
   var loadedAt = new Date();
-  document.getElementById('usage-updated-at').textContent =
-    loadedAt.toTimeString().slice(0, 8);
+  document.getElementById('usage-updated-at').textContent = loadedAt.toTimeString().slice(0, 5);
   var secs = 60;
   var interval = setInterval(function () {
     secs -= 1;

@@ -1,199 +1,174 @@
 {% extends "admin_base.html" %}
-{% block title %}Admin &mdash; Org settings{% endblock %}
+{% block title %}Admin — Org Settings{% endblock %}
+
 {% block admin_content %}
-<div class="card">
-  <h2>Org Settings</h2>
-  <p class="muted">
-    LLM keys and models saved here are encrypted at rest and loaded on every scan request.
-    Changes take effect immediately — no restart required.
-  </p>
+
+<div class="admin-page-header">
+  <div>
+    <h2 class="page-title">Organisation Settings</h2>
+    <p class="page-subtitle">LLM providers, API keys, and notification settings. Changes take effect immediately.</p>
+  </div>
 </div>
 
-<div class="card">
-  <h2>Current configuration</h2>
-  <dl>
-    <dt>Default provider (CI)</dt><dd>{{ current_provider }}</dd>
-    <dt>Anthropic model</dt><dd><code>{{ current_anthropic_model or "(provider default)" }}</code></dd>
-    <dt>Google model</dt><dd><code>{{ current_google_model or "(provider default)" }}</code></dd>
-    <dt>Anthropic key</dt>
-    <dd>
-      {% if masked_anthropic %}<span class="mono" style="font-size:0.82rem;">{{ masked_anthropic }}</span> <span class="ok">✓ set</span>
-      {% else %}<span class="muted">not set</span>{% endif %}
-    </dd>
-    <dt>Google key</dt>
-    <dd>
-      {% if masked_google %}<span class="mono" style="font-size:0.82rem;">{{ masked_google }}</span> <span class="ok">✓ set</span>
-      {% else %}<span class="muted">not set</span>{% endif %}
-    </dd>
-    <dt>Slack webhook</dt>
-    <dd>
-      {% if masked_slack %}<span class="mono" style="font-size:0.82rem;">{{ masked_slack }}</span> <span class="ok">✓ set</span>
-      {% else %}<span class="muted">not set</span>{% endif %}
-    </dd>
-    <dt>Bypass Slack notifications</dt>
-    <dd>
-      {% if current_bypass_slack_mode == 'dev_only' %}
-        Developer bypasses only <span class="muted">(admin bypasses suppressed)</span>
-      {% elif current_bypass_slack_mode == 'none' %}
-        <span class="muted">Disabled</span>
-      {% else %}
-        All bypasses
-      {% endif %}
-    </dd>
-  </dl>
-</div>
+{# ── LLM Provider section ── #}
+<form method="post" action="/admin/org-settings" autocomplete="off" id="llm-form">
+<div class="settings-section">
+  <div class="settings-section-header">
+    <h3>LLM Provider</h3>
+    <p>API keys and models used for all scans — both CLI and CI pipeline. Keys are encrypted at rest.</p>
+  </div>
+  <div class="settings-section-body">
 
-<div class="card">
-  <h2>Update settings</h2>
-  <p class="muted" style="font-size: 0.88rem;">
-    Models set here apply to <strong>all</strong> scans — both CLI users and CI.
-    Blank = provider uses its own default.
-  </p>
-  <form method="post" action="/admin/org-settings" autocomplete="off">
+    {# Default provider radios #}
+    <div style="margin-bottom:1.25rem;">
+      <label class="form-label">Default provider for CI scans</label>
+      <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.4rem;">
+        <label style="display:flex; align-items:center; gap:0.5rem; padding:0.55rem 1rem; border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; flex:1; min-width:140px; transition:border-color 0.1s, background 0.1s;"
+               onclick="this.style.borderColor='var(--accent)'; this.style.background='var(--accent-subtle)';">
+          <input type="radio" name="default_provider" value="anthropic"
+                 {{ 'checked' if current_provider == 'anthropic' else '' }}
+                 style="accent-color:var(--accent);">
+          <span style="font-weight:600; font-size:var(--text-sm);">Anthropic (Claude)</span>
+        </label>
+        <label style="display:flex; align-items:center; gap:0.5rem; padding:0.55rem 1rem; border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; flex:1; min-width:140px; transition:border-color 0.1s, background 0.1s;">
+          <input type="radio" name="default_provider" value="google"
+                 {{ 'checked' if current_provider == 'google' else '' }}
+                 style="accent-color:var(--accent);">
+          <span style="font-weight:600; font-size:var(--text-sm);">Google (Gemini)</span>
+        </label>
+      </div>
+    </div>
 
-    <fieldset style="border: none; padding: 0; margin: 0 0 0.75rem;">
-      <legend class="form-label">Default provider for CI scans</legend>
-      <label style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; cursor: pointer;">
-        <input type="radio" name="default_provider" value="anthropic"
-               {{ 'checked' if current_provider == 'anthropic' else '' }}>
-        Anthropic (Claude)
-      </label>
-      <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-        <input type="radio" name="default_provider" value="google"
-               {{ 'checked' if current_provider == 'google' else '' }}>
-        Google (Gemini)
-      </label>
-    </fieldset>
+    <hr class="section-divider">
 
-    <div style="margin-bottom: 1rem;">
-      <label class="form-label" for="anthropic_model">
-        Anthropic model <span class="muted" style="font-weight: normal;">(blank = provider default)</span>
-      </label>
-      <input type="text"
-             name="anthropic_model"
-             id="anthropic_model"
+    {# Anthropic #}
+    <div style="margin-bottom:1.25rem;">
+      <label class="form-label" for="anthropic_model">Anthropic model</label>
+      <input type="text" name="anthropic_model" id="anthropic_model"
              list="anthropic-model-list"
              value="{{ current_anthropic_model or '' }}"
              placeholder="(provider default)"
              autocomplete="off"
-             style="width: 100%; max-width: 340px;">
+             style="width:100%; max-width:340px; display:block; margin-bottom:0.3rem;">
       <datalist id="anthropic-model-list">
-        {% for m in known_models.get("anthropic", []) %}
-          <option value="{{ m }}"></option>
-        {% endfor %}
+        {% for m in known_models.get("anthropic", []) %}<option value="{{ m }}">{% endfor %}
       </datalist>
-      <p class="form-hint">
-        Suggested: {% for m in known_models.get("anthropic", []) %}{{ m }}{% if loop.first %} (recommended){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
-      </p>
+      <p class="form-hint">Suggested: {% for m in known_models.get("anthropic", []) %}{{ m }}{% if loop.first %} (recommended){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</p>
     </div>
 
-    <div style="margin-bottom: 1.5rem;">
-      <label class="form-label" for="google_model">
-        Google model <span class="muted" style="font-weight: normal;">(blank = provider default)</span>
+    <div style="margin-bottom:1.25rem;">
+      <label class="form-label" for="anthropic_key">
+        Anthropic API Key
+        {% if masked_anthropic %}
+          — <span class="mono" style="font-size:0.78rem; color:var(--ok);">{{ masked_anthropic }} ✓</span>
+        {% endif %}
       </label>
-      <input type="text"
-             name="google_model"
-             id="google_model"
+      <input type="password" name="anthropic_key" id="anthropic_key"
+             autocomplete="new-password" class="input-mono"
+             placeholder="{{ 'Leave blank to keep existing key' if masked_anthropic else 'sk-ant-…' }}"
+             style="width:100%; max-width:440px;">
+    </div>
+
+    <hr class="section-divider">
+
+    {# Google #}
+    <div style="margin-bottom:1.25rem;">
+      <label class="form-label" for="google_model">Google model</label>
+      <input type="text" name="google_model" id="google_model"
              list="google-model-list"
              value="{{ current_google_model or '' }}"
              placeholder="(provider default)"
              autocomplete="off"
-             style="width: 100%; max-width: 340px;">
+             style="width:100%; max-width:340px; display:block; margin-bottom:0.3rem;">
       <datalist id="google-model-list">
-        {% for m in known_models.get("google", []) %}
-          <option value="{{ m }}"></option>
-        {% endfor %}
+        {% for m in known_models.get("google", []) %}<option value="{{ m }}">{% endfor %}
       </datalist>
-      <p class="form-hint">
-        Suggested: {% for m in known_models.get("google", []) %}{{ m }}{% if loop.first %} (recommended){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
-      </p>
+      <p class="form-hint">Suggested: {% for m in known_models.get("google", []) %}{{ m }}{% if loop.first %} (recommended){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</p>
     </div>
 
-    <div style="margin-bottom: 1rem;">
-      <label class="form-label" for="anthropic_key">
-        Anthropic API Key
-        {% if masked_anthropic %}
-          <span class="muted" style="font-weight: normal; font-size: 0.85rem;">(current: {{ masked_anthropic }})</span>
-        {% endif %}
-      </label>
-      <input type="password" name="anthropic_key" id="anthropic_key"
-             autocomplete="new-password"
-             class="input-mono"
-             placeholder="{{ 'Leave blank to keep existing key' if masked_anthropic else 'sk-ant-…' }}"
-             style="width: 100%; max-width: 480px;">
-    </div>
-
-    <div style="margin-bottom: 1.5rem;">
+    <div>
       <label class="form-label" for="google_key">
         Google API Key
         {% if masked_google %}
-          <span class="muted" style="font-weight: normal; font-size: 0.85rem;">(current: {{ masked_google }})</span>
+          — <span class="mono" style="font-size:0.78rem; color:var(--ok);">{{ masked_google }} ✓</span>
         {% endif %}
       </label>
       <input type="password" name="google_key" id="google_key"
-             autocomplete="new-password"
-             class="input-mono"
+             autocomplete="new-password" class="input-mono"
              placeholder="{{ 'Leave blank to keep existing key' if masked_google else 'AI…' }}"
-             style="width: 100%; max-width: 480px;">
+             style="width:100%; max-width:440px;">
     </div>
 
-    <div style="margin-bottom: 1.5rem;">
+  </div>
+  <div class="settings-section-footer">
+    <button type="submit" class="btn btn-primary" style="margin-right:0;">Save LLM settings</button>
+  </div>
+</div>
+</form>
+
+{# ── Notifications section ── #}
+<form method="post" action="/admin/org-settings" autocomplete="off" id="notify-form">
+{# Hidden fields to carry existing LLM values (so partial save doesn't wipe them) #}
+<input type="hidden" name="default_provider" value="{{ current_provider }}">
+<input type="hidden" name="anthropic_model" value="{{ current_anthropic_model or '' }}">
+<input type="hidden" name="google_model" value="{{ current_google_model or '' }}">
+
+<div class="settings-section">
+  <div class="settings-section-header">
+    <h3>Notifications</h3>
+    <p>Slack alerts for bypass events and scanner failures.</p>
+  </div>
+  <div class="settings-section-body">
+
+    <div style="margin-bottom:1.25rem;">
       <label class="form-label" for="slack_webhook">
         Slack Webhook URL
         {% if masked_slack %}
-          <span class="muted" style="font-weight: normal; font-size: 0.85rem;">(current: {{ masked_slack }})</span>
+          — <span class="mono" style="font-size:0.78rem; color:var(--ok);">{{ masked_slack }} ✓</span>
         {% endif %}
       </label>
-      <p class="form-hint">
-        Used for bypass alerts and LLM-unavailable notifications.
-        Stored encrypted. Overrides the <code>SLACK_WEBHOOK_URL</code> env var.
-      </p>
+      <p class="form-hint" style="margin-bottom:0.5rem;">Stored encrypted. Overrides the <code>SLACK_WEBHOOK_URL</code> env var. Used for bypass alerts and LLM-unavailable notifications.</p>
       <input type="password" name="slack_webhook" id="slack_webhook"
-             autocomplete="new-password"
-             class="input-mono"
+             autocomplete="new-password" class="input-mono"
              placeholder="{{ 'Leave blank to keep existing webhook' if masked_slack else 'https://hooks.slack.com/services/T…/B…/…' }}"
-             style="width: 100%; max-width: 540px;">
+             style="width:100%; max-width:500px;">
     </div>
 
-    <div style="margin-bottom: 1.5rem;">
-      <label class="form-label" for="bypass_slack_mode">
-        Bypass Slack notifications
-      </label>
-      <p class="form-hint">
-        Controls when a Slack alert fires on scanner bypass.
-        <strong>Developer bypasses only</strong> means admin changes to the master pipeline
-        are silently logged but do not ping the team.
-      </p>
-      <select name="bypass_slack_mode" id="bypass_slack_mode"
-              style="width: 100%; max-width: 360px;">
-        <option value="dev_only" {{ 'selected' if current_bypass_slack_mode == 'dev_only' else '' }}>
-          Developer bypasses only (recommended)
-        </option>
-        <option value="all" {{ 'selected' if current_bypass_slack_mode == 'all' else '' }}>
-          All bypasses
-        </option>
-        <option value="none" {{ 'selected' if current_bypass_slack_mode == 'none' else '' }}>
-          Never notify
-        </option>
+    <div>
+      <label class="form-label" for="bypass_slack_mode">When should bypass events trigger a Slack alert?</label>
+      <p class="form-hint" style="margin-bottom:0.5rem;"><strong>Developer bypasses only</strong> silences alerts for admin pipeline changes — the change is still audit-logged.</p>
+      <select name="bypass_slack_mode" id="bypass_slack_mode" style="width:100%; max-width:360px;">
+        <option value="dev_only" {{ 'selected' if current_bypass_slack_mode == 'dev_only' else '' }}>Developer bypasses only (recommended)</option>
+        <option value="all"      {{ 'selected' if current_bypass_slack_mode == 'all' else '' }}>All bypasses</option>
+        <option value="none"     {{ 'selected' if current_bypass_slack_mode == 'none' else '' }}>Never notify</option>
       </select>
     </div>
 
-    <button type="submit" class="btn btn-primary">Save org settings</button>
-    <p class="muted" style="margin-top: 0.75rem; font-size: 0.85rem;">
-      Saving creates a new versioned row. All previous configs are preserved for audit.
-      The next scan will use the new configuration without a server restart.
-    </p>
-  </form>
+    {% if masked_slack %}
+    <div style="margin-top:1.25rem; padding-top:1rem; border-top:1px solid var(--border); display:flex; align-items:center; gap:0.75rem;">
+      <form method="post" action="/admin/org-settings/test-slack" style="display:inline;">
+        <button type="submit" class="btn btn-sm" style="margin-right:0;">Send test Slack message</button>
+      </form>
+      <span class="muted" style="font-size:var(--text-xs);">Verifies the saved webhook is working.</span>
+    </div>
+    {% endif %}
 
-  {% if masked_slack %}
-  <div class="section-divider"></div>
-  <h3 style="font-size: 0.95rem; margin: 0 0 0.5rem;">Test Slack integration</h3>
-  <p class="muted" style="font-size: 0.85rem; margin-bottom: 0.75rem;">
-    Sends a test message to verify the saved webhook is working.
-  </p>
-  <form method="post" action="/admin/org-settings/test-slack">
-    <button type="submit" class="btn">Send test message</button>
-  </form>
-  {% endif %}
+  </div>
+  <div class="settings-section-footer">
+    <button type="submit" class="btn btn-primary" style="margin-right:0;">Save notification settings</button>
+  </div>
 </div>
+</form>
+
+{# ── Security Policies placeholder ── #}
+<div class="settings-section" style="opacity:0.6;">
+  <div class="settings-section-header">
+    <h3>Security Policies <span style="font-size:var(--text-xs); font-weight:600; background:var(--bg-inset); border:1px solid var(--border); padding:0.1rem 0.4rem; border-radius:99px; color:var(--muted); margin-left:0.4rem;">Coming soon</span></h3>
+    <p>Repository-level risk thresholds, team assignments, and policy enforcement rules.</p>
+  </div>
+  <div class="settings-section-body">
+    <p class="muted" style="font-size:var(--text-sm);">Policy-based security controls will be available in a future release.</p>
+  </div>
+</div>
+
 {% endblock admin_content %}
