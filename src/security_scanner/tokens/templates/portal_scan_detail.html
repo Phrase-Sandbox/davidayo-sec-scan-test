@@ -1,49 +1,79 @@
 {% extends "base.html" %}
-{% block title %}Scan {{ scan.scan_id }} — Phrase Security Scanner{% endblock %}
+{% block title %}Scan Report — Phrase Security Scanner{% endblock %}
 
 {% block extra_styles %}
 <style>
-  /* Widen layout for scan detail — more room for response ID table */
   :root { --main-max-w: 900px; }
 
-  /* ── Scan status banner ── */
-  .scan-banner {
+  /* ── Collapsible sections ── */
+  .collapse-section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-l);
+    overflow: hidden;
+    margin-bottom: 0.75rem;
+    box-shadow: var(--shadow-s);
+  }
+  .collapse-trigger {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    padding: 1rem 1.4rem;
-    border-radius: var(--radius);
-    border: 1px solid var(--border);
-    margin-bottom: 1rem;
-    box-shadow: var(--shadow-s);
+    padding: 0.85rem 1.25rem;
+    cursor: pointer;
+    background: var(--bg-inset);
+    border: none;
+    width: 100%;
+    text-align: left;
+    font: inherit;
+    color: var(--fg-2);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    transition: background 0.1s;
+    gap: 0.5rem;
   }
-  .scan-banner-ok     { background: var(--ok-subtle);     border-color: var(--ok); }
-  .scan-banner-fail   { background: var(--danger-subtle); border-color: var(--danger); }
-  .scan-banner-warn   { background: rgba(217,119,6,0.07); border-color: var(--warn); }
-
-  .scan-banner-left   { display: flex; align-items: center; gap: 0.75rem; }
-  .scan-banner-dot {
-    width: 10px; height: 10px;
-    border-radius: 50%;
+  .collapse-trigger:hover { background: var(--bg); color: var(--fg); }
+  .collapse-trigger .ct-icon {
+    font-size: 0.7rem;
+    color: var(--muted);
+    transition: transform 0.2s;
     flex-shrink: 0;
   }
-  .scan-banner-ok   .scan-banner-dot { background: var(--ok); }
-  .scan-banner-fail .scan-banner-dot { background: var(--danger); animation: ps-pulse 2s ease-in-out infinite; }
-  .scan-banner-warn .scan-banner-dot { background: var(--warn); }
+  .collapse-trigger[aria-expanded="true"] .ct-icon { transform: rotate(180deg); }
+  .collapse-body {
+    display: none;
+    padding: 1.1rem 1.25rem;
+    border-top: 1px solid var(--border);
+  }
+  .collapse-body.open { display: block; }
 
-  .scan-banner-status { font-weight: 600; font-size: 0.95rem; }
-  .scan-banner-ok   .scan-banner-status { color: var(--ok); }
-  .scan-banner-fail .scan-banner-status { color: var(--danger); }
-  .scan-banner-warn .scan-banner-status { color: var(--warn); }
+  /* ── Report iframe / embed ── */
+  .report-embed {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-l);
+    overflow: hidden;
+    margin-bottom: 1.25rem;
+    box-shadow: var(--shadow-s);
+  }
+  .report-embed-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.85rem 1.25rem;
+    background: var(--bg-inset);
+    border-bottom: 1px solid var(--border);
+    gap: 0.5rem;
+  }
+  .report-embed-header h2 {
+    font-size: var(--text-sm);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin: 0;
+  }
 
-  .scan-banner-id { font-family: var(--ff-mono); font-size: 0.8rem; color: var(--muted); }
-
-  /* Severity summary inline */
-  .sev-row { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
-
-  /* ── Two-column summary DL ── */
+  /* ── Summary DL ── */
   @media (min-width: 600px) {
     .dl-two-col {
       display: grid;
@@ -52,49 +82,34 @@
     }
   }
 
-  /* ── Card header (shared) ── */
-  .card-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 1rem 1.4rem;
-    border-bottom: 1px solid var(--border);
-    background: var(--bg);
-    border-radius: var(--radius) var(--radius) 0 0;
-  }
-  .card-header h2 { margin: 0; font-size: 0.95rem; }
-  .card-no-pad { padding: 0; overflow: hidden; }
-
   /* ── Response ID table ── */
   .rid-table { width: 100%; border-collapse: collapse; }
-  .rid-table td {
-    padding: 0.55rem 1rem;
-    border-bottom: 1px solid var(--border);
-    vertical-align: middle;
-    font-size: 0.875rem;
-  }
+  .rid-table td { padding: 0.55rem 1rem; border-bottom: 1px solid var(--border); vertical-align: middle; font-size: var(--text-sm); }
   .rid-table tr:last-child td { border-bottom: none; }
-  .rid-table .rid-index {
-    width: 36px;
-    color: var(--muted);
-    font-size: 0.75rem;
-    font-family: var(--ff-mono);
-    text-align: center;
-  }
-  .rid-table .rid-code {
-    font-family: var(--ff-mono);
-    font-size: 0.8rem;
-    color: var(--fg-2);
-    word-break: break-all;
-  }
-  .rid-table .rid-actions {
-    width: 1%;
-    white-space: nowrap;
-    text-align: right;
-    padding-right: 1rem;
-  }
+  .rid-table .rid-index { width: 36px; color: var(--muted); font-size: 0.75rem; font-family: var(--ff-mono); text-align: center; }
+  .rid-table .rid-code { font-family: var(--ff-mono); font-size: 0.78rem; color: var(--fg-2); word-break: break-all; }
+  .rid-table .rid-actions { width: 1%; white-space: nowrap; text-align: right; }
   .rid-table tr:hover td { background: rgba(0,0,0,0.015); }
   [data-theme="dark"] .rid-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  /* Executive summary card */
+  .exec-summary {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-l);
+    padding: 1.1rem 1.35rem;
+    margin-bottom: 1rem;
+    box-shadow: var(--shadow-s);
+  }
+  .exec-risk-row { display: flex; align-items: baseline; gap: 1rem; margin-bottom: 0.6rem; flex-wrap: wrap; }
+  .exec-risk-score {
+    font-size: var(--text-4xl);
+    font-weight: 800;
+    letter-spacing: -0.05em;
+    line-height: 1;
+  }
+  .exec-risk-label { font-size: var(--text-xs); color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .exec-summary-text { font-size: var(--text-sm); color: var(--fg-2); line-height: 1.65; margin: 0; }
 </style>
 {% endblock %}
 
@@ -111,154 +126,247 @@
 {% block content %}
 
 {# ── Breadcrumb ── #}
-<p style="margin: 0 0 1rem; font-size: 0.855rem;">
+<p style="margin: 0 0 1.25rem; font-size: var(--text-sm);">
   <a href="/portal/scans">← All scans</a>
 </p>
 
-{# ── Status banner ── #}
-{% if scan.critical %}
-  {% set banner_cls = "scan-banner-fail" %}
-  {% set banner_label = scan.critical|string + " critical finding" + ("s" if scan.critical != 1 else "") %}
-{% elif scan.findings_count %}
-  {% set banner_cls = "scan-banner-warn" %}
-  {% set banner_label = scan.findings_count|string + " finding" + ("s" if scan.findings_count != 1 else "") %}
+{# ── Derive gate decision from severity counts ── #}
+{% set c = scan.critical or 0 %}
+{% set h = scan.high or 0 %}
+{% set m = scan.medium or 0 %}
+{% set l = scan.low or 0 %}
+{% set total = c + h + m + l %}
+
+{# Risk Score: weighted formula capped at 100 #}
+{% set risk_score = [100, c*15 + h*5 + m*2 + l] | min %}
+
+{% if c > 0 %}
+  {% set gate_banner_cls = 'gate-banner-blocked' %}
+  {% set verdict = 'BLOCKED' %}
+  {% set verdict_reason = 'Deployment blocked: ' ~ c ~ ' verified critical issue' ~ ('s' if c != 1 else '') ~ ' detected.' %}
+  {% set fix_mins = c * 5 + h * 2 + m %}
+  {% set fix_effort = (fix_mins | string) ~ '–' ~ ((fix_mins * 2) | string) ~ ' min estimated' %}
+{% elif h > 0 %}
+  {% set gate_banner_cls = 'gate-banner-advisory' %}
+  {% set verdict = 'ADVISORY' %}
+  {% set verdict_reason = 'Deployment allowed with warnings: ' ~ h ~ ' high-severity issue' ~ ('s' if h != 1 else '') ~ ' require attention.' %}
+  {% set fix_effort = (h * 2 + m) | string ~ '–' ~ ((h * 4 + m * 2) | string) ~ ' min estimated' %}
+{% elif scan.status == 'ok' %}
+  {% set gate_banner_cls = 'gate-banner-pass' %}
+  {% set verdict = 'PASSED' %}
+  {% set verdict_reason = 'No blocking issues detected. This scan is clear to deploy.' %}
+  {% set fix_effort = none %}
 {% else %}
-  {% set banner_cls = "scan-banner-ok" %}
-  {% set banner_label = "No findings — scan passed clean" %}
+  {% set gate_banner_cls = 'gate-banner-failed' %}
+  {% set verdict = 'SCAN ERROR' %}
+  {% set verdict_reason = 'The scan did not complete successfully. Review the logs below.' %}
+  {% set fix_effort = none %}
 {% endif %}
 
-<div class="scan-banner {{ banner_cls }}">
-  <div class="scan-banner-left">
-    <div class="scan-banner-dot"></div>
+{# ── Gate banner ── #}
+<div class="gate-banner {{ gate_banner_cls }}">
+  <div class="gb-verdict">{{ verdict }}</div>
+  <div class="gb-counts">
+    {% if c > 0 %}<span class="gb-count-item gb-count-C">{{ c }} Critical</span>{% endif %}
+    {% if h > 0 %}<span class="gb-count-item gb-count-H">{{ h }} High</span>{% endif %}
+    {% if m > 0 %}<span class="gb-count-item gb-count-M">{{ m }} Medium</span>{% endif %}
+    {% if l > 0 %}<span class="gb-count-item gb-count-L">{{ l }} Low</span>{% endif %}
+    {% if total == 0 %}<span class="gb-count-item" style="background:var(--ok-subtle); color:var(--ok);">No findings</span>{% endif %}
+  </div>
+  <div class="gb-reason">{{ verdict_reason }}{% if fix_effort %} <span style="font-weight:600; color:var(--fg);">{{ fix_effort }}.</span>{% endif %}</div>
+  <div class="gb-top-risks">
+    <span style="font-size:var(--text-xs); color:var(--muted); margin-right:0.2rem; text-transform:uppercase; letter-spacing:0.06em; font-weight:600;">Repo</span>
+    <span class="gb-risk-chip">{{ scan.repo_url | replace("https://github.com/", "") | replace("https://gitlab.com/", "") }}</span>
+    {% if scan.provider %}
+    <span class="gb-risk-chip">{{ scan.provider | title }}</span>
+    {% endif %}
+    {% if scan.started_at %}
+    <span class="gb-risk-chip">{{ scan.started_at.strftime("%d %b %Y %H:%M") }} UTC</span>
+    {% endif %}
+  </div>
+</div>
+
+{# ── Executive summary ── #}
+{% if total > 0 %}
+<div class="exec-summary">
+  <div class="exec-risk-row">
     <div>
-      <div class="scan-banner-status">{{ banner_label }}</div>
-      <div class="scan-banner-id">{{ scan.scan_id }}</div>
+      <div class="exec-risk-score" style="color: {{ 'var(--gate-blocked)' if c > 0 else ('var(--gate-advisory)' if h > 0 else 'var(--gate-pass)') }};">{{ risk_score }}<span style="font-size:var(--text-xl); font-weight:600; opacity:0.5;">/100</span></div>
+      <div class="exec-risk-label">Risk Score</div>
     </div>
-  </div>
-  <div class="sev-row">
-    {% if scan.critical %}<span class="sev sev-C">{{ scan.critical }}C</span>{% endif %}
-    {% if scan.high %}<span class="sev sev-H">{{ scan.high }}H</span>{% endif %}
-    {% if scan.medium %}<span class="sev sev-M">{{ scan.medium }}M</span>{% endif %}
-    {% if scan.low %}<span class="sev sev-L">{{ scan.low }}L</span>{% endif %}
-    {% if not scan.findings_count %}
-      <span class="pill pill-ok">ok</span>
-    {% endif %}
-  </div>
-</div>
-
-{# ── Scan summary card ── #}
-<div class="card">
-  <h2 style="margin-bottom: 1rem;">Scan Summary</h2>
-  <dl class="dl-two-col">
-    <dt>Repo</dt>
-    <dd>{{ scan.repo_url }}</dd>
-    <dt>Provider</dt>
-    <dd>{{ scan.provider or "—" }}</dd>
-    <dt>Started</dt>
-    <dd>{{ scan.started_at.strftime("%Y-%m-%d %H:%M UTC") if scan.started_at else "—" }}</dd>
-    <dt>Model</dt>
-    <dd>{{ scan.model or "—" }}</dd>
-    <dt>Finished</dt>
-    <dd>{{ scan.finished_at.strftime("%Y-%m-%d %H:%M UTC") if scan.finished_at else "—" }}</dd>
-    <dt>Status</dt>
-    <dd>
-      {% if scan.status == "ok" %}<span class="pill pill-ok">ok</span>
-      {% else %}<span class="pill pill-fail">{{ scan.status }}</span>{% endif %}
-    </dd>
-  </dl>
-</div>
-
-{# ── LLM usage ── #}
-{% if usage %}
-<div class="card">
-  <h2>LLM Usage</h2>
-  <p class="muted" style="margin-bottom: 1rem;">
-    Directly from the provider SDK response.
-    Cross-reference with your provider console using the response IDs below.
-  </p>
-  <div class="stat-grid">
-    <div class="stat-card">
-      <div class="stat-num">{{ "{:,}".format(usage.n_llm_calls) }}</div>
-      <div class="stat-label">LLM calls</div>
+    <div style="flex:1; min-width: 180px;">
+      <p class="exec-summary-text">
+        {% if c > 0 %}
+          {{ total }} finding{{ 's' if total != 1 else '' }} detected — {{ c }} critical{% if h > 0 %}, {{ h }} high{% endif %}.
+          {% if c > 0 %}Critical issues must be resolved before deployment.{% endif %}
+        {% elif h > 0 %}
+          {{ total }} finding{{ 's' if total != 1 else '' }} detected — {{ h }} high{% if m > 0 %}, {{ m }} medium{% endif %}.
+          Review and remediate high-severity issues before the next release.
+        {% else %}
+          {{ total }} low-severity finding{{ 's' if total != 1 else '' }} detected. No blocking issues.
+          Address these during routine maintenance.
+        {% endif %}
+      </p>
     </div>
-    <div class="stat-card">
-      <div class="stat-num">{{ "{:,}".format(usage.input_tokens) }}</div>
-      <div class="stat-label">Input tokens</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-num">{{ "{:,}".format(usage.output_tokens) }}</div>
-      <div class="stat-label">Output tokens</div>
-    </div>
-    {% if usage.cache_read_input_tokens %}
-    <div class="stat-card">
-      <div class="stat-num">{{ "{:,}".format(usage.cache_read_input_tokens) }}</div>
-      <div class="stat-label">Cache read</div>
-    </div>
-    {% endif %}
-    {% if usage.cache_creation_input_tokens %}
-    <div class="stat-card">
-      <div class="stat-num">{{ "{:,}".format(usage.cache_creation_input_tokens) }}</div>
-      <div class="stat-label">Cache write</div>
-    </div>
-    {% endif %}
   </div>
 </div>
 {% endif %}
 
-{# ── Provider response IDs ── #}
-{% if response_ids %}
-<div class="card card-no-pad">
-  <div class="card-header">
-    <h2>Provider Response IDs</h2>
-    <span style="font-size: 0.8rem; color: var(--muted);">
-      {{ response_ids|length }} API call{{ '' if response_ids|length == 1 else 's' }}
-    </span>
-  </div>
-  <p class="muted" style="padding: 0.75rem 1.4rem 0; font-size: 0.84rem;">
-    Each ID maps to one LLM API call.
-    <strong style="color: var(--fg);">Open in Console</strong>
-    to verify token counts and content against your provider's records.
-  </p>
-  <table class="rid-table">
-    <tbody>
-      {% for rid in response_ids %}
-      <tr>
-        <td class="rid-index">{{ loop.index }}</td>
-        <td class="rid-code">{{ rid }}</td>
-        <td class="rid-actions">
-          <button
-            onclick="navigator.clipboard.writeText('{{ rid }}').then(() => { this.textContent = 'Copied!'; setTimeout(() => this.textContent = 'Copy', 1500); })"
-            class="btn btn-sm">Copy</button>
-          {% if scan.provider == "anthropic" %}
-          <a href="{{ console_base }}?message={{ rid }}" target="_blank" rel="noopener"
-             class="btn btn-sm">Anthropic Console ↗</a>
-          {% else %}
-          <a href="{{ console_base }}" target="_blank" rel="noopener"
-             class="btn btn-sm">Google Cloud ↗</a>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+{# ── Action callout ── #}
+{% if c > 0 %}
+<div class="action-callout">
+  <div><strong>Recommended action:</strong> Fix all critical findings and rotate any exposed credentials before deploying. Re-scan after changes.</div>
+</div>
+{% elif h > 0 %}
+<div class="action-callout">
+  <div><strong>Recommended action:</strong> Review high-severity findings below. Address before your next production release.</div>
 </div>
 {% endif %}
 
-{# ── Full report ── #}
+{# ── Full report embed ── #}
 {% if scan.html_report %}
-<div class="card card-no-pad">
-  <div class="card-header">
-    <h2>Full Report</h2>
+<div class="report-embed">
+  <div class="report-embed-header">
+    <h2>Security Report</h2>
+    <div style="display:flex; gap:0.4rem; align-items:center;">
+      {% if scan.has_report %}
+      <a href="/portal/reports/{{ scan.scan_id }}/html?download=true" class="btn btn-sm">Download HTML</a>
+      {% endif %}
+      <span class="muted" style="font-size:var(--text-xs);">{{ total }} finding{{ 's' if total != 1 else '' }}</span>
+    </div>
   </div>
   <div style="padding: 1.5rem;">
     {{ scan.html_report | safe }}
   </div>
 </div>
 {% elif scan.markdown_report %}
-<div class="card">
-  <h2>Report</h2>
-  <pre style="font-family: var(--ff-mono); font-size: 0.84rem; line-height: 1.55; white-space: pre-wrap; word-break: break-word; margin: 0;">{{ scan.markdown_report }}</pre>
+<div class="report-embed">
+  <div class="report-embed-header">
+    <h2>Report</h2>
+  </div>
+  <div style="padding: 1.25rem 1.5rem;">
+    <pre style="font-family: var(--ff-mono); font-size: 0.84rem; line-height: 1.55; white-space: pre-wrap; word-break: break-word; margin: 0;">{{ scan.markdown_report }}</pre>
+  </div>
 </div>
 {% endif %}
 
+{# ── Collapsible: Scan Metadata ── #}
+<div class="collapse-section">
+  <button class="collapse-trigger" aria-expanded="false"
+          onclick="toggleCollapse(this, 'meta-body')">
+    <span>Scan Metadata</span>
+    <span class="ct-icon">▼</span>
+  </button>
+  <div class="collapse-body" id="meta-body">
+    <dl class="dl-two-col">
+      <dt>Repo</dt>
+      <dd>{{ scan.repo_url }}</dd>
+      <dt>Provider</dt>
+      <dd>{{ scan.provider or "—" }}</dd>
+      <dt>Model</dt>
+      <dd class="mono" style="font-size:0.82rem;">{{ scan.model or "—" }}</dd>
+      <dt>Started</dt>
+      <dd>{{ scan.started_at.strftime("%Y-%m-%d %H:%M UTC") if scan.started_at else "—" }}</dd>
+      <dt>Finished</dt>
+      <dd>{{ scan.finished_at.strftime("%Y-%m-%d %H:%M UTC") if scan.finished_at else "—" }}</dd>
+      <dt>Scan ID</dt>
+      <dd class="mono" style="font-size:0.78rem;">{{ scan.scan_id }}</dd>
+      <dt>Status</dt>
+      <dd>
+        {% if scan.status == "ok" %}<span class="pill pill-ok">ok</span>
+        {% else %}<span class="pill pill-fail">{{ scan.status }}</span>{% endif %}
+      </dd>
+    </dl>
+  </div>
+</div>
+
+{# ── Collapsible: LLM Usage ── #}
+{% if usage %}
+<div class="collapse-section">
+  <button class="collapse-trigger" aria-expanded="false"
+          onclick="toggleCollapse(this, 'usage-body')">
+    <span>LLM Usage</span>
+    <span class="ct-icon">▼</span>
+  </button>
+  <div class="collapse-body" id="usage-body">
+    <p class="muted" style="font-size:var(--text-sm); margin: 0 0 1rem;">
+      Directly from the provider SDK response. Cross-reference with your provider console using the response IDs.
+    </p>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-num">{{ "{:,}".format(usage.n_llm_calls) }}</div>
+        <div class="stat-label">LLM calls</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">{{ "{:,}".format(usage.input_tokens) }}</div>
+        <div class="stat-label">Input tokens</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">{{ "{:,}".format(usage.output_tokens) }}</div>
+        <div class="stat-label">Output tokens</div>
+      </div>
+      {% if usage.cache_read_input_tokens %}
+      <div class="stat-card">
+        <div class="stat-num">{{ "{:,}".format(usage.cache_read_input_tokens) }}</div>
+        <div class="stat-label">Cache read</div>
+      </div>
+      {% endif %}
+      {% if usage.cache_creation_input_tokens %}
+      <div class="stat-card">
+        <div class="stat-num">{{ "{:,}".format(usage.cache_creation_input_tokens) }}</div>
+        <div class="stat-label">Cache write</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ── Collapsible: Provider Response IDs ── #}
+{% if response_ids %}
+<div class="collapse-section">
+  <button class="collapse-trigger" aria-expanded="false"
+          onclick="toggleCollapse(this, 'rids-body')">
+    <span>Provider Response IDs <span style="font-weight:400; color:var(--muted);">({{ response_ids|length }})</span></span>
+    <span class="ct-icon">▼</span>
+  </button>
+  <div class="collapse-body" id="rids-body" style="padding: 0;">
+    <p class="muted" style="font-size:var(--text-sm); padding: 0.85rem 1.25rem 0;">
+      Each ID maps to one LLM API call. Open in Console to verify against your provider's records.
+    </p>
+    <table class="rid-table" style="margin-top: 0.5rem;">
+      <tbody>
+        {% for rid in response_ids %}
+        <tr>
+          <td class="rid-index">{{ loop.index }}</td>
+          <td class="rid-code">{{ rid }}</td>
+          <td class="rid-actions" style="padding-right:1rem;">
+            <button
+              onclick="navigator.clipboard.writeText('{{ rid }}').then(() => { this.textContent = 'Copied!'; setTimeout(() => this.textContent = 'Copy', 1500); })"
+              class="btn btn-sm" style="margin-right:0.25rem;">Copy</button>
+            {% if scan.provider == "anthropic" %}
+            <a href="{{ console_base }}?message={{ rid }}" target="_blank" rel="noopener"
+               class="btn btn-sm" style="margin-right:0;">Console ↗</a>
+            {% else %}
+            <a href="{{ console_base }}" target="_blank" rel="noopener"
+               class="btn btn-sm" style="margin-right:0;">Console ↗</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<script>
+function toggleCollapse(btn, bodyId) {
+  var body = document.getElementById(bodyId);
+  if (!body) return;
+  var isOpen = body.classList.contains('open');
+  body.classList.toggle('open', !isOpen);
+  btn.setAttribute('aria-expanded', !isOpen);
+}
+</script>
 {% endblock %}
