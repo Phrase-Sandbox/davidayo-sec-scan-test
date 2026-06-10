@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}New token issued{% endblock %}
+{% block title %}New token issued — Phrase Security Scanner{% endblock %}
 {% block tabs %}
 <nav class="tabs">
   <a href="/portal/" class="active">Token</a>
@@ -16,13 +16,13 @@
   </h2>
   <p class="danger"><strong>Copy it now &mdash; this is the only time it will be shown.</strong></p>
   <div class="token-box" id="token">{{ issued.full_token }}</div>
-  <p style="margin-top: 1rem;">
+  <p style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
     <button type="button" class="btn btn-primary" onclick="copyToken()">Copy to clipboard</button>
     <a href="/portal/" class="btn">I&rsquo;ve saved it &mdash; back to portal</a>
   </p>
-  <p class="muted">
-    Token ID: <code>{{ issued.token_id }}</code> &mdash; stable across rotations,
-    safe to share with the security team for audit lookups.
+  <p class="muted" style="font-size: 0.84rem; margin-top: 0.5rem;">
+    Token ID: <span class="mono" style="font-size: 0.82rem;">{{ issued.token_id }}</span>
+    &mdash; stable across rotations, safe to share with the security team for audit lookups.
   </p>
 </div>
 

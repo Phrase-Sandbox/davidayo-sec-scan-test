@@ -12,7 +12,7 @@
 {% block content %}
 <div class="card">
   <h2>LLM Provider Settings</h2>
-  <p class="muted">
+  <p class="muted" style="margin-bottom: 1.25rem;">
     Choose your LLM provider and paste your API key.
     Your key is encrypted at rest and used only to run your scans — it is
     never logged or shared. Leave the key field blank to keep the currently
@@ -20,7 +20,7 @@
   </p>
   <form method="post" action="/portal/settings" autocomplete="off">
     <fieldset style="border: none; padding: 0; margin: 0 0 1.25rem;">
-      <legend style="font-weight: 600; margin-bottom: 0.75rem;">Provider</legend>
+      <legend class="form-label">Provider</legend>
       <label style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; cursor: pointer;">
         <input type="radio" name="provider" value="anthropic"
                {{ 'checked' if current_provider == 'anthropic' else '' }}
@@ -36,29 +36,22 @@
     </fieldset>
 
     <div style="margin-bottom: 1.25rem;">
-      <label style="display: block; font-weight: 600; margin-bottom: 0.4rem;" for="api_key">
+      <label class="form-label" for="api_key">
         API Key
         {% if masked_key %}
-          <span class="muted" style="font-weight: normal; font-size: 0.85rem;">(current: {{ masked_key }})</span>
+          <span class="muted" style="font-weight: normal; font-size: 0.82rem;">(current: {{ masked_key }})</span>
         {% endif %}
       </label>
-      <input
-        type="password"
-        name="api_key"
-        id="api_key"
-        autocomplete="new-password"
-        placeholder="{{ 'Leave blank to keep existing key' if masked_key else 'sk-ant-… or AI…' }}"
-        style="font: 14px/1 ui-monospace, 'SF Mono', Menlo, monospace;
-               padding: 0.45rem 0.65rem; border: 1px solid var(--border);
-               border-radius: 6px; background: var(--card); color: var(--fg);
-               width: 100%; max-width: 480px;">
-      <p class="muted" id="key-hint" style="margin-top: 0.35rem; font-size: 0.82rem;">
+      <input type="password" name="api_key" id="api_key"
+             autocomplete="new-password"
+             class="input-mono"
+             placeholder="{{ 'Leave blank to keep existing key' if masked_key else 'sk-ant-… or AI…' }}"
+             style="width: 100%; max-width: 480px;">
+      <p class="form-hint" id="key-hint">
         {% if current_provider == "anthropic" %}
-          Find your key at
-          <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com/settings/keys</a>.
+          Find your key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com/settings/keys</a>.
         {% else %}
-          Find your key in
-          <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console → APIs &amp; Services → Credentials</a>.
+          Find your key in <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console → APIs &amp; Services → Credentials</a>.
         {% endif %}
       </p>
     </div>
@@ -68,25 +61,18 @@
 </div>
 
 <div class="card">
-  <h2 style="font-size: 0.95rem;">Model — set by your org admin</h2>
-  <p class="muted" style="font-size: 0.88rem;">
-    Your admin controls which model is used for all scans. You cannot change this.
-    Contact your security administrator to request a different model.
+  <h2>Model — set by your org admin</h2>
+  <p class="muted" style="font-size: 0.875rem; margin-bottom: 0.75rem;">
+    Your admin controls which model is used for all scans. Contact your security administrator to request a different model.
   </p>
   <dl>
-    <dt>Anthropic model</dt>
-    <dd>
-      <code>{{ anthropic_model }}</code>
-    </dd>
-    <dt>Google model</dt>
-    <dd>
-      <code>{{ google_model }}</code>
-    </dd>
+    <dt>Anthropic model</dt><dd><code>{{ anthropic_model }}</code></dd>
+    <dt>Google model</dt><dd><code>{{ google_model }}</code></dd>
   </dl>
 </div>
 
 <div class="card">
-  <h2 style="font-size: 0.95rem;">How it works</h2>
+  <h2>How it works</h2>
   <dl>
     <dt>Storage</dt><dd>Your key is encrypted with AES-256 (Fernet) before being written to the database. The plaintext is held in memory only for the duration of each scan request.</dd>
     <dt>Billing</dt><dd>All LLM calls are made with your key. The provider charges you directly. Visit <a href="/portal/usage">Usage</a> to see a breakdown and verify against your provider dashboard.</dd>
