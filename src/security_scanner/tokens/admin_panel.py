@@ -60,8 +60,7 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 @router.get("/", include_in_schema=False)
 @router.get("", include_in_schema=False)
 async def admin_root() -> RedirectResponse:
-    """Redirect bare /admin and /admin/ to the token registry."""
-    return RedirectResponse(url="/admin/tokens", status_code=302)
+    return RedirectResponse(url="/admin/dashboard", status_code=302)
 
 
 # Admin-managed model options surfaced in the /admin/org-settings dropdowns.
@@ -263,7 +262,12 @@ def _hash_ci_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-@router.get("/org-settings", response_class=HTMLResponse)
+@router.get("/org-settings", include_in_schema=False)
+async def admin_org_settings_redirect(_admin: _AdminDep) -> RedirectResponse:
+    return RedirectResponse(url="/admin/configuration/org-settings", status_code=302)
+
+
+@router.get("/_org-settings", response_class=HTMLResponse)
 async def admin_org_settings_get(request: Request, admin: _AdminDep) -> HTMLResponse:
     from security_scanner.tokens.crypto import decrypt, mask_for_display  # noqa: PLC0415
 
@@ -823,7 +827,12 @@ _ADVISORY_CONF_OPTIONS = {
 }
 
 
-@router.get("/advanced-settings", response_class=HTMLResponse)
+@router.get("/advanced-settings", include_in_schema=False)
+async def admin_advanced_settings_redirect(_admin: _AdminDep) -> RedirectResponse:
+    return RedirectResponse(url="/admin/configuration/gate-policy", status_code=302)
+
+
+@router.get("/_advanced-settings", response_class=HTMLResponse)
 async def admin_advanced_settings_get(
     request: Request,
     admin: _AdminDep,
@@ -956,7 +965,12 @@ async def admin_advanced_settings_post(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/ci-token", response_class=HTMLResponse)
+@router.get("/ci-token", include_in_schema=False)
+async def admin_ci_token_redirect(_admin: _AdminDep) -> RedirectResponse:
+    return RedirectResponse(url="/admin/configuration/ci-token", status_code=302)
+
+
+@router.get("/_ci-token", response_class=HTMLResponse)
 async def admin_ci_token_get(request: Request, admin: _AdminDep) -> HTMLResponse:
     """Show the active CI token (truncated) and a Rotate button."""
     factory = get_session_factory()
@@ -1380,3 +1394,923 @@ async def admin_report_html(
     if not html:
         raise HTTPException(status_code=404, detail="Report not found.")
     return HTMLResponse(content=html)
+
+
+# ---------------------------------------------------------------------------
+# Dashboard  (/admin/dashboard)
+# ---------------------------------------------------------------------------
+
+
+from dataclasses import dataclass as _dc  # noqa: E402
+
+
+@_dc
+class _AtRiskRepo:
+    repo_url: str
+    critical: int
+    high: int
+    medium: int
+    low: int
+    last_scanned: datetime
+
+
+@router.get("/dashboard", response_class=HTMLResponse)
+async def admin_dashboard(request: Request, admin: _AdminDep) -> HTMLResponse:
+    from sqlalchemy import union_all  # noqa: PLC0415
+
+    factory = get_session_factory()
+    async with factory() as session:
+        # --- Total scan counts ---
+        total_portal: int = (
+            await session.execute(select(func.count()).select_from(ScanRecord))
+        ).scalar_one()
+        total_ci: int = (
+            await session.execute(select(func.count()).select_from(CiScanRecord))
+        ).scalar_one()
+
+        # --- Scans with criticals (proxy for "high-risk") ---
+        critical_portal: int = (
+            await session.execute(
+                select(func.count()).select_from(ScanRecord).where(ScanRecord.critical > 0)
+            )
+        ).scalar_one()
+        critical_ci: int = (
+            await session.execute(
+                select(func.count()).select_from(CiScanRecord).where(CiScanRecord.critical > 0)
+            )
+        ).scalar_one()
+
+        # --- Total critical finding count ---
+        crit_sum_portal = (
+            await session.execute(select(func.sum(ScanRecord.critical)))
+        ).scalar_one() or 0
+        crit_sum_ci = (
+            await session.execute(select(func.sum(CiScanRecord.critical)))
+        ).scalar_one() or 0
+
+        # --- Repos at risk (distinct repos with critical or high > 0) ---
+        at_risk_portal = (
+            await session.execute(
+                select(func.count(ScanRecord.repo_url.distinct())).where(
+                    (ScanRecord.critical > 0) | (ScanRecord.high > 0)
+                )
+            )
+        ).scalar_one() or 0
+        at_risk_ci = (
+            await session.execute(
+                select(func.count(CiScanRecord.repo_url.distinct())).where(
+                    (CiScanRecord.critical > 0) | (CiScanRecord.high > 0)
+                )
+            )
+        ).scalar_one() or 0
+
+        # --- Active users / admins ---
+        active_users: int = (
+            await session.execute(
+                select(func.count()).select_from(User).where(
+                    User.is_active.is_(True), User.role == UserRole.user
+                )
+            )
+        ).scalar_one()
+        admin_count: int = (
+            await session.execute(
+                select(func.count()).select_from(User).where(
+                    User.is_active.is_(True), User.role == UserRole.admin
+                )
+            )
+        ).scalar_one()
+
+        # --- CI token health ---
+        ci_token_stmt = (
+            select(CIToken).where(CIToken.revoked_at.is_(None)).order_by(desc(CIToken.id)).limit(1)
+        )
+        active_ci_token = (await session.execute(ci_token_stmt)).scalar_one_or_none()
+
+        # --- LLM provider ---
+        org_row = (
+            await session.execute(
+                select(OrgSettings).order_by(OrgSettings.id.desc()).limit(1)
+            )
+        ).scalar_one_or_none()
+
+        # --- Last scan ---
+        last_portal = (
+            await session.execute(
+                select(ScanRecord.started_at, ScanRecord.repo_url)
+                .order_by(desc(ScanRecord.started_at))
+                .limit(1)
+            )
+        ).one_or_none()
+        last_ci = (
+            await session.execute(
+                select(CiScanRecord.started_at, CiScanRecord.repo_url)
+                .order_by(desc(CiScanRecord.started_at))
+                .limit(1)
+            )
+        ).one_or_none()
+
+        # --- Recent audit events ---
+        recent_audits = list(
+            (
+                await session.execute(
+                    select(AuditEvent).order_by(desc(AuditEvent.at)).limit(10)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        # --- Recent failed scans ---
+        failed_portal = list(
+            (
+                await session.execute(
+                    select(ScanRecord)
+                    .where(ScanRecord.status != ScanStatus.ok)
+                    .order_by(desc(ScanRecord.started_at))
+                    .limit(5)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        failed_ci = list(
+            (
+                await session.execute(
+                    select(CiScanRecord)
+                    .where(CiScanRecord.status != ScanStatus.ok)
+                    .order_by(desc(CiScanRecord.started_at))
+                    .limit(5)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        # --- Most at-risk repositories (top 10 by weighted score) ---
+        portal_sel = select(
+            ScanRecord.repo_url,
+            ScanRecord.critical,
+            ScanRecord.high,
+            ScanRecord.medium,
+            ScanRecord.low,
+            ScanRecord.started_at,
+        )
+        ci_sel = select(
+            CiScanRecord.repo_url,
+            CiScanRecord.critical,
+            CiScanRecord.high,
+            CiScanRecord.medium,
+            CiScanRecord.low,
+            CiScanRecord.started_at,
+        )
+        combined_subq = union_all(portal_sel, ci_sel).subquery()
+        repo_risk_rows = list(
+            (
+                await session.execute(
+                    select(
+                        combined_subq.c.repo_url,
+                        func.sum(combined_subq.c.critical).label("sum_c"),
+                        func.sum(combined_subq.c.high).label("sum_h"),
+                        func.sum(combined_subq.c.medium).label("sum_m"),
+                        func.sum(combined_subq.c.low).label("sum_l"),
+                        func.max(combined_subq.c.started_at).label("last_scanned"),
+                    )
+                    .group_by(combined_subq.c.repo_url)
+                    .order_by(
+                        (
+                            func.sum(combined_subq.c.critical) * 4
+                            + func.sum(combined_subq.c.high) * 3
+                            + func.sum(combined_subq.c.medium) * 2
+                            + func.sum(combined_subq.c.low)
+                        ).desc()
+                    )
+                    .limit(10)
+                )
+            ).all()
+        )
+
+    # Determine last scan
+    last_scan = None
+    if last_portal and last_ci:
+        last_scan = last_portal if last_portal[0] >= last_ci[0] else last_ci
+    elif last_portal:
+        last_scan = last_portal
+    elif last_ci:
+        last_scan = last_ci
+
+    # Merge and sort recent failures
+    recent_failed = sorted(
+        [*[(r, "portal") for r in failed_portal], *[(r, "ci") for r in failed_ci]],
+        key=lambda x: x[0].started_at,
+        reverse=True,
+    )[:5]
+
+    at_risk_repos = [
+        _AtRiskRepo(
+            repo_url=r.repo_url,
+            critical=r.sum_c or 0,
+            high=r.sum_h or 0,
+            medium=r.sum_m or 0,
+            low=r.sum_l or 0,
+            last_scanned=r.last_scanned,
+        )
+        for r in repo_risk_rows
+        if (r.sum_c or 0) + (r.sum_h or 0) + (r.sum_m or 0) + (r.sum_l or 0) > 0
+    ]
+
+    llm_provider = org_row.default_provider.value if org_row else None
+    llm_model = (
+        org_row.anthropic_model if org_row and org_row.default_provider == LLMProvider.anthropic
+        else (org_row.google_model if org_row else None)
+    ) if org_row else None
+
+    return templates.TemplateResponse(
+        request,
+        "admin_dashboard.html",
+        {
+            "user": admin,
+            "total_scans": total_portal + total_ci,
+            "critical_risk_scans": critical_portal + critical_ci,
+            "total_critical_findings": crit_sum_portal + crit_sum_ci,
+            "repos_at_risk": at_risk_portal + at_risk_ci,
+            "active_users": active_users,
+            "admin_count": admin_count,
+            "active_ci_token": active_ci_token,
+            "llm_provider": llm_provider,
+            "llm_model": llm_model,
+            "last_scan": last_scan,
+            "recent_audits": recent_audits,
+            "recent_failed": recent_failed,
+            "at_risk_repos": at_risk_repos,
+            "flash": None,
+        },
+        headers=_NO_STORE_HEADERS,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Configuration hub  (/admin/configuration)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/configuration", response_class=HTMLResponse)
+async def admin_configuration_hub(request: Request, admin: _AdminDep) -> HTMLResponse:
+    factory = get_session_factory()
+    async with factory() as session:
+        org_row = (
+            await session.execute(
+                select(OrgSettings).order_by(OrgSettings.id.desc()).limit(1)
+            )
+        ).scalar_one_or_none()
+        sc = (
+            await session.execute(
+                select(ScannerSettings).order_by(ScannerSettings.id.desc()).limit(1)
+            )
+        ).scalar_one_or_none()
+        ci_token = (
+            await session.execute(
+                select(CIToken).where(CIToken.revoked_at.is_(None)).order_by(desc(CIToken.id)).limit(1)
+            )
+        ).scalar_one_or_none()
+
+    # Status hints for cards
+    llm_configured = bool(
+        org_row and (org_row.encrypted_anthropic_key or org_row.encrypted_google_key)
+    )
+    llm_provider = org_row.default_provider.value if org_row else None
+    slack_configured = bool(org_row and org_row.encrypted_slack_webhook)
+    gate_summary = sc.keep_confidences if sc else "high,medium"
+    enabled_scanners = sum([
+        bool(sc.enable_semgrep) if sc else True,
+        bool(sc.enable_bandit) if sc else True,
+        bool(sc.enable_gosec) if sc else True,
+        bool(sc.enable_eslint) if sc else True,
+    ])
+    retention_days = sc.report_retention_days if sc else None
+
+    return templates.TemplateResponse(
+        request,
+        "admin_configuration.html",
+        {
+            "user": admin,
+            "llm_configured": llm_configured,
+            "llm_provider": llm_provider,
+            "slack_configured": slack_configured,
+            "ci_token_active": ci_token is not None,
+            "gate_summary": gate_summary,
+            "enabled_scanners": enabled_scanners,
+            "retention_days": retention_days,
+            "flash": None,
+        },
+        headers=_NO_STORE_HEADERS,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Configuration: Organization Settings  (/admin/configuration/org-settings)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/configuration/org-settings", response_class=HTMLResponse)
+async def admin_config_org_get(request: Request, admin: _AdminDep) -> HTMLResponse:
+    from security_scanner.tokens.crypto import decrypt, mask_for_display  # noqa: PLC0415
+
+    factory = get_session_factory()
+    async with factory() as session:
+        org_row = (
+            await session.execute(
+                select(OrgSettings).order_by(OrgSettings.id.desc()).limit(1)
+            )
+        ).scalar_one_or_none()
+
+    masked_anthropic = masked_google = masked_slack = None
+    current_provider = "anthropic"
+    current_anthropic_model = current_google_model = None
+
+    if org_row:
+        if org_row.encrypted_anthropic_key:
+            try:
+                masked_anthropic = mask_for_display(decrypt(org_row.encrypted_anthropic_key))
+            except Exception:  # noqa: BLE001
+                masked_anthropic = "…(decryption error)"
+        if org_row.encrypted_google_key:
+            try:
+                masked_google = mask_for_display(decrypt(org_row.encrypted_google_key))
+            except Exception:  # noqa: BLE001
+                masked_google = "…(decryption error)"
+        if org_row.encrypted_slack_webhook:
+            try:
+                masked_slack = mask_for_display(decrypt(org_row.encrypted_slack_webhook), keep=8)
+            except Exception:  # noqa: BLE001
+                masked_slack = "…(decryption error)"
+        current_provider = org_row.default_provider.value
+        current_anthropic_model = org_row.anthropic_model
+        current_google_model = org_row.google_model
+
+    current_bypass_slack_mode = (
+        getattr(org_row, "bypass_slack_mode", "dev_only") if org_row else "dev_only"
+    )
+
+    return templates.TemplateResponse(
+        request,
+        "admin_config_org.html",
+        {
+            "user": admin,
+            "masked_anthropic": masked_anthropic,
+            "masked_google": masked_google,
+            "masked_slack": masked_slack,
+            "current_provider": current_provider,
+            "current_anthropic_model": current_anthropic_model,
+            "current_google_model": current_google_model,
+            "current_bypass_slack_mode": current_bypass_slack_mode,
+            "known_models": KNOWN_MODELS,
+            "flash": None,
+        },
+        headers=_NO_STORE_HEADERS,
+    )
+
+
+@router.post("/configuration/org-settings", response_class=HTMLResponse)
+async def admin_config_org_post(
+    request: Request,
+    admin: _AdminDep,
+    default_provider: Annotated[str, Form()],
+    anthropic_model: Annotated[str, Form()] = "",
+    google_model: Annotated[str, Form()] = "",
+    anthropic_key: Annotated[str, Form()] = "",
+    google_key: Annotated[str, Form()] = "",
+    slack_webhook: Annotated[str, Form()] = "",
+    bypass_slack_mode: Annotated[str, Form()] = "dev_only",
+) -> HTMLResponse:
+    from security_scanner.tokens.crypto import decrypt, encrypt, mask_for_display  # noqa: PLC0415
+
+    default_provider = default_provider.strip().lower()
+    anthropic_model = anthropic_model.strip() or None
+    google_model = google_model.strip() or None
+    slack_webhook = slack_webhook.strip()
+    bypass_slack_mode = bypass_slack_mode.strip()
+
+    if default_provider not in ("anthropic", "google"):
+        raise HTTPException(status_code=422, detail=f"Unknown provider {default_provider!r}")
+    if bypass_slack_mode not in ("dev_only", "all", "none"):
+        raise HTTPException(status_code=422, detail=f"Unknown bypass_slack_mode {bypass_slack_mode!r}")
+
+    factory = get_session_factory()
+    async with factory() as session:
+        current = (
+            await session.execute(
+                select(OrgSettings).order_by(OrgSettings.id.desc()).limit(1)
+            )
+        ).scalar_one_or_none()
+
+        enc_anthropic = current.encrypted_anthropic_key if current else None
+        enc_google = current.encrypted_google_key if current else None
+        enc_slack = current.encrypted_slack_webhook if current else None
+
+        if anthropic_key.strip():
+            enc_anthropic = encrypt(anthropic_key.strip())
+        if google_key.strip():
+            enc_google = encrypt(google_key.strip())
+        if slack_webhook:
+            if not slack_webhook.startswith("https://"):
+                raise HTTPException(status_code=422, detail="Slack webhook URL must start with https://")
+            enc_slack = encrypt(slack_webhook)
+
+        provider_enum = LLMProvider.anthropic if default_provider == "anthropic" else LLMProvider.google
+        new_row = OrgSettings(
+            encrypted_anthropic_key=enc_anthropic,
+            encrypted_google_key=enc_google,
+            encrypted_slack_webhook=enc_slack,
+            default_provider=provider_enum,
+            anthropic_model=anthropic_model,
+            google_model=google_model,
+            bypass_slack_mode=bypass_slack_mode,
+            updated_at=datetime.now(UTC),
+            updated_by_email=admin.email,
+        )
+        session.add(new_row)
+        await token_audit.record(
+            session,
+            event_type=AuditEventType.org_config_changed,
+            actor_email=admin.email,
+            changed_fields=",".join(
+                (["anthropic_key"] if anthropic_key.strip() else [])
+                + (["google_key"] if google_key.strip() else [])
+                + (["slack_webhook"] if slack_webhook else [])
+                + ["default_provider", "anthropic_model", "google_model", "bypass_slack_mode"]
+            ),
+            default_provider=default_provider,
+        )
+        await session.commit()
+
+    masked_anthropic_out = masked_google_out = masked_slack_out = None
+    if enc_anthropic:
+        try:
+            masked_anthropic_out = mask_for_display(decrypt(enc_anthropic))
+        except Exception:  # noqa: BLE001
+            masked_anthropic_out = "…(decryption error)"
+    if enc_google:
+        try:
+            masked_google_out = mask_for_display(decrypt(enc_google))
+        except Exception:  # noqa: BLE001
+            masked_google_out = "…(decryption error)"
+    if enc_slack:
+        try:
+            masked_slack_out = mask_for_display(decrypt(enc_slack), keep=8)
+        except Exception:  # noqa: BLE001
+            masked_slack_out = "…(decryption error)"
+
+    log.info("admin config org saved", actor_email=admin.email, default_provider=default_provider)
+    return templates.TemplateResponse(
+        request,
+        "admin_config_org.html",
+        {
+            "user": admin,
+            "masked_anthropic": masked_anthropic_out,
+            "masked_google": masked_google_out,
+            "masked_slack": masked_slack_out,
+            "current_provider": default_provider,
+            "current_anthropic_model": anthropic_model,
+            "current_google_model": google_model,
+            "current_bypass_slack_mode": bypass_slack_mode,
+            "known_models": KNOWN_MODELS,
+            "flash": "ok:Settings saved. Changes take effect on the next scan.",
+        },
+        headers=_NO_STORE_HEADERS,
+    )
+
+
+@router.post("/configuration/org-settings/test-slack", response_class=HTMLResponse)
+async def admin_config_org_test_slack(request: Request, admin: _AdminDep) -> HTMLResponse:
+    from security_scanner.agent.slack_alert import _post_to_slack  # noqa: PLC0415
+    from security_scanner.shared.config import get_settings as _gs  # noqa: PLC0415
+    from security_scanner.tokens.crypto import decrypt, mask_for_display  # noqa: PLC0415
+
+    factory = get_session_factory()
+    async with factory() as session:
+        org_row = (
+            await session.execute(
+                select(OrgSettings).order_by(OrgSettings.id.desc()).limit(1)
+            )
+        ).scalar_one_or_none()
+
+    webhook_url = None
+    masked_anthropic = masked_google = masked_slack = None
+    current_provider = "anthropic"
+    current_anthropic_model = current_google_model = None
+
+    if org_row:
+        if org_row.encrypted_anthropic_key:
+            try:
+                masked_anthropic = mask_for_display(decrypt(org_row.encrypted_anthropic_key))
+            except Exception:  # noqa: BLE001
+                masked_anthropic = "…(decryption error)"
+        if org_row.encrypted_google_key:
+            try:
+                masked_google = mask_for_display(decrypt(org_row.encrypted_google_key))
+            except Exception:  # noqa: BLE001
+                masked_google = "…(decryption error)"
+        if org_row.encrypted_slack_webhook:
+            try:
+                webhook_url = decrypt(org_row.encrypted_slack_webhook)
+                masked_slack = mask_for_display(webhook_url, keep=8)
+            except Exception:  # noqa: BLE001
+                masked_slack = "…(decryption error)"
+        current_provider = org_row.default_provider.value
+        current_anthropic_model = org_row.anthropic_model
+        current_google_model = org_row.google_model
+
+    current_bypass_slack_mode = (
+        getattr(org_row, "bypass_slack_mode", "dev_only") if org_row else "dev_only"
+    )
+
+    if not webhook_url:
+        webhook_url = _gs().SLACK_WEBHOOK_URL
+
+    ctx = {
+        "user": admin,
+        "masked_anthropic": masked_anthropic,
+        "masked_google": masked_google,
+        "masked_slack": masked_slack,
+        "current_provider": current_provider,
+        "current_anthropic_model": current_anthropic_model,
+        "current_google_model": current_google_model,
+        "current_bypass_slack_mode": current_bypass_slack_mode,
+        "known_models": KNOWN_MODELS,
+    }
+
+    if not webhook_url:
+        return templates.TemplateResponse(
+            request, "admin_config_org.html",
+            {**ctx, "flash": "error:No Slack webhook configured. Save a webhook URL first."},
+            headers=_NO_STORE_HEADERS,
+        )
+
+    text = (
+        f":white_check_mark: *Test message from Phrase Security Scanner*\n"
+        f"• Sent by: {admin.email}\n"
+        f"• If you see this, your Slack webhook is working correctly."
+    )
+    delivered = await _post_to_slack(text, kind="admin-test", http_client=None, webhook_url=webhook_url)
+    flash = "ok:Test message sent to Slack successfully." if delivered else (
+        "error:Slack did not deliver the message. "
+        "The webhook URL may be invalid or the channel no longer exists."
+    )
+    log.info("admin config org test slack", actor_email=admin.email, delivered=delivered)
+    return templates.TemplateResponse(
+        request, "admin_config_org.html", {**ctx, "flash": flash},
+        headers=_NO_STORE_HEADERS,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Configuration: CI Token  (/admin/configuration/ci-token)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/configuration/ci-token", response_class=HTMLResponse)
+async def admin_config_ci_token_get(request: Request, admin: _AdminDep) -> HTMLResponse:
+    factory = get_session_factory()
+    async with factory() as session:
+        active = (
+            await session.execute(
+                select(CIToken).where(CIToken.revoked_at.is_(None)).order_by(desc(CIToken.id)).limit(1)
+            )
+        ).scalar_one_or_none()
+
+    return templates.TemplateResponse(
+        request,
+        "admin_config_ci_token.html",
+        {"user": admin, "active": active, "new_token": None, "flash": None},
+        headers=_NO_STORE_HEADERS,
+    )
+
+
+@router.post("/configuration/ci-token/rotate", response_class=HTMLResponse)
+async def admin_config_ci_token_rotate(request: Request, admin: _AdminDep) -> HTMLResponse:
+    suffix = secrets.token_urlsafe(32)
+    new_plaintext = f"{_CI_TOKEN_PREFIX}{suffix}"
+    new_hash = _hash_ci_token(new_plaintext)
+    now = datetime.now(UTC)
+
+    factory = get_session_factory()
+    async with factory() as session:
+        current = (
+            await session.execute(
+                select(CIToken).where(CIToken.revoked_at.is_(None)).order_by(desc(CIToken.id)).limit(1)
+            )
+        ).scalar_one_or_none()
+        if current is not None:
+            current.revoked_at = now
+            current.revoked_by_email = admin.email
+            await session.flush()
+
+        new_row = CIToken(token_hash=new_hash, created_at=now, created_by_email=admin.email)
+        session.add(new_row)
+        await token_audit.record(
+            session,
+            event_type=AuditEventType.ci_token_rotated,
+            actor_email=admin.email,
+            previous_id=current.id if current else None,
+        )
+        await session.commit()
+
+    log.info("admin config ci token rotated", actor_email=admin.email)
+    return templates.TemplateResponse(
+        request,
+        "admin_config_ci_token.html",
+        {
+            "user": admin,
+            "active": new_row,
+            "new_token": new_plaintext,
+            "flash": (
+                "ok:CI token rotated. Copy the token below and update "
+                "SCANNER_API_TOKEN in your GitHub Actions workflow immediately."
+            ),
+        },
+        headers=_NO_STORE_HEADERS,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Configuration: Gate Policy  (/admin/configuration/gate-policy)
+# ---------------------------------------------------------------------------
+
+
+def _load_scanner_fields(sc: ScannerSettings | None) -> dict:
+    """Return a dict of all ScannerSettings fields from the current row (or defaults)."""
+    return {
+        "keep_confidences": sc.keep_confidences if sc else "high,medium",
+        "advisory_confidences": sc.advisory_confidences if sc else "low",
+        "enable_semgrep": sc.enable_semgrep if sc else True,
+        "enable_bandit": sc.enable_bandit if sc else True,
+        "enable_gosec": sc.enable_gosec if sc else True,
+        "enable_eslint": sc.enable_eslint if sc else True,
+        "semgrep_owasp": sc.semgrep_owasp if sc else True,
+        "semgrep_audit": sc.semgrep_audit if sc else True,
+        "semgrep_upload": sc.semgrep_upload if sc else True,
+        "vuln_verifier_parallelism": sc.vuln_verifier_parallelism if sc else 2,
+        "enable_consolidation_verifier": sc.enable_consolidation_verifier if sc else False,
+        "enable_partial_scan": sc.enable_partial_scan if sc else True,
+        "enable_zero_findings_retry": sc.enable_zero_findings_retry if sc else True,
+        "enable_quality_gate": sc.enable_quality_gate if sc else False,
+        "high_risk_paths": sc.high_risk_paths if sc else "",
+        "report_retention_days": sc.report_retention_days if sc else None,
+        "updated_at": sc.updated_at if sc else None,
+        "updated_by_email": sc.updated_by_email if sc else None,
+    }
+
+
+@router.get("/configuration/gate-policy", response_class=HTMLResponse)
+async def admin_config_gate_get(request: Request, admin: _AdminDep) -> HTMLResponse:
+    factory = get_session_factory()
+    async with factory() as session:
+        sc = (
+            await session.execute(
+                select(ScannerSettings).order_by(ScannerSettings.id.desc()).limit(1)
+            )
+        ).scalar_one_or_none()
+
+    return templates.TemplateResponse(
+        request,
+        "admin_config_gate.html",
+        {
+            "user": admin,
+            "sc": sc,
+            "keep_conf_options": _KEEP_CONF_OPTIONS,
+            "advisory_conf_options": _ADVISORY_CONF_OPTIONS,
+            "flash": None,
+        },
+        headers=_NO_STORE_HEADERS,
+    )
+
+
+@router.post("/configuration/gate-policy", response_class=HTMLResponse)
+async def admin_config_gate_post(
+    request: Request,
+    admin: _AdminDep,
+    keep_confidences: Annotated[str, Form()],
+    advisory_confidences: Annotated[str, Form()] = "",
+) -> HTMLResponse:
+    if keep_confidences not in _KEEP_CONF_OPTIONS:
+        raise HTTPException(status_code=422, detail=f"Invalid keep_confidences: {keep_confidences!r}")
+
+    factory = get_session_factory()
+    async with factory() as session:
+        current = (
+            await session.execute(
+                select(ScannerSettings).order_by(ScannerSettings.id.desc()).limit(1)
+            )
+        ).scalar_one_or_none()
+        fields = _load_scanner_fields(current)
+        fields.update(
+            keep_confidences=keep_confidences,
+            advisory_confidences=advisory_confidences,
+        )
+        new_sc = ScannerSettings(
+            **{k: v for k, v in fields.items() if k not in ("updated_at", "updated_by_email")},
+            updated_at=datetime.now(UTC),
+            updated_by_email=admin.email,
+        )
+        session.add(new_sc)
+        await token_audit.record(
+            session,
+            event_type=AuditEventType.org_config_changed,
+            actor_email=admin.email,
+            section="gate_policy",
+            keep_confidences=keep_confidences,
+            advisory_confidences=advisory_confidences,
+        )
+        await session.commit()
+
+    log.info("admin config gate policy saved", actor_email=admin.email, keep_confidences=keep_confidences)
+    return templates.TemplateResponse(
+        request,
+        "admin_config_gate.html",
+        {
+            "user": admin,
+            "sc": new_sc,
+            "keep_conf_options": _KEEP_CONF_OPTIONS,
+            "advisory_conf_options": _ADVISORY_CONF_OPTIONS,
+            "flash": "ok:Gate policy saved. Takes effect on the next scan.",
+        },
+        headers=_NO_STORE_HEADERS,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Configuration: Scanner  (/admin/configuration/scanner)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/configuration/scanner", response_class=HTMLResponse)
+async def admin_config_scanner_get(request: Request, admin: _AdminDep) -> HTMLResponse:
+    factory = get_session_factory()
+    async with factory() as session:
+        sc = (
+            await session.execute(
+                select(ScannerSettings).order_by(ScannerSettings.id.desc()).limit(1)
+            )
+        ).scalar_one_or_none()
+
+    return templates.TemplateResponse(
+        request,
+        "admin_config_scanner.html",
+        {"user": admin, "sc": sc, "flash": None},
+        headers=_NO_STORE_HEADERS,
+    )
+
+
+@router.post("/configuration/scanner", response_class=HTMLResponse)
+async def admin_config_scanner_post(
+    request: Request,
+    admin: _AdminDep,
+    vuln_verifier_parallelism: Annotated[int, Form()] = 2,
+    high_risk_paths: Annotated[str, Form()] = "",
+    enable_consolidation_verifier: Annotated[str, Form()] = "",
+    enable_partial_scan: Annotated[str, Form()] = "",
+    enable_zero_findings_retry: Annotated[str, Form()] = "",
+    enable_quality_gate: Annotated[str, Form()] = "",
+    enable_semgrep: Annotated[str, Form()] = "",
+    enable_bandit: Annotated[str, Form()] = "",
+    enable_gosec: Annotated[str, Form()] = "",
+    enable_eslint: Annotated[str, Form()] = "",
+    semgrep_owasp: Annotated[str, Form()] = "",
+    semgrep_audit: Annotated[str, Form()] = "",
+    semgrep_upload: Annotated[str, Form()] = "",
+) -> HTMLResponse:
+    parallelism = max(1, min(16, vuln_verifier_parallelism))
+
+    factory = get_session_factory()
+    async with factory() as session:
+        current = (
+            await session.execute(
+                select(ScannerSettings).order_by(ScannerSettings.id.desc()).limit(1)
+            )
+        ).scalar_one_or_none()
+        fields = _load_scanner_fields(current)
+        fields.update(
+            vuln_verifier_parallelism=parallelism,
+            high_risk_paths=high_risk_paths.strip(),
+            enable_consolidation_verifier=bool(enable_consolidation_verifier),
+            enable_partial_scan=bool(enable_partial_scan),
+            enable_zero_findings_retry=bool(enable_zero_findings_retry),
+            enable_quality_gate=bool(enable_quality_gate),
+            enable_semgrep=bool(enable_semgrep),
+            enable_bandit=bool(enable_bandit),
+            enable_gosec=bool(enable_gosec),
+            enable_eslint=bool(enable_eslint),
+            semgrep_owasp=bool(semgrep_owasp),
+            semgrep_audit=bool(semgrep_audit),
+            semgrep_upload=bool(semgrep_upload),
+        )
+        new_sc = ScannerSettings(
+            **{k: v for k, v in fields.items() if k not in ("updated_at", "updated_by_email")},
+            updated_at=datetime.now(UTC),
+            updated_by_email=admin.email,
+        )
+        session.add(new_sc)
+        await token_audit.record(
+            session,
+            event_type=AuditEventType.org_config_changed,
+            actor_email=admin.email,
+            section="scanner_config",
+            parallelism=parallelism,
+            enable_semgrep=bool(enable_semgrep),
+            enable_bandit=bool(enable_bandit),
+            enable_gosec=bool(enable_gosec),
+            enable_eslint=bool(enable_eslint),
+        )
+        await session.commit()
+
+    log.info("admin config scanner saved", actor_email=admin.email, parallelism=parallelism)
+    return templates.TemplateResponse(
+        request,
+        "admin_config_scanner.html",
+        {"user": admin, "sc": new_sc, "flash": "ok:Scanner configuration saved. Takes effect on the next scan."},
+        headers=_NO_STORE_HEADERS,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Configuration: Maintenance  (/admin/configuration/maintenance)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/configuration/maintenance", response_class=HTMLResponse)
+async def admin_config_maintenance_get(
+    request: Request,
+    admin: _AdminDep,
+) -> HTMLResponse:
+    factory = get_session_factory()
+    async with factory() as session:
+        sc = (
+            await session.execute(
+                select(ScannerSettings).order_by(ScannerSettings.id.desc()).limit(1)
+            )
+        ).scalar_one_or_none()
+        cleanup_rows = await _fetch_report_rows(session)
+
+    return templates.TemplateResponse(
+        request,
+        "admin_config_maintenance.html",
+        {
+            "user": admin,
+            "sc": sc,
+            "cleanup_rows": cleanup_rows,
+            "flash": None,
+        },
+        headers=_NO_STORE_HEADERS,
+    )
+
+
+@router.post("/configuration/maintenance", response_class=HTMLResponse)
+async def admin_config_maintenance_post(
+    request: Request,
+    admin: _AdminDep,
+    report_retention_days: Annotated[str, Form()] = "",
+) -> HTMLResponse:
+    """Save the report_retention_days setting, preserving all other scanner fields."""
+    retention = int(report_retention_days) if report_retention_days.strip().isdigit() else None
+
+    factory = get_session_factory()
+    async with factory() as session:
+        current = (
+            await session.execute(
+                select(ScannerSettings).order_by(ScannerSettings.id.desc()).limit(1)
+            )
+        ).scalar_one_or_none()
+        fields = _load_scanner_fields(current)
+        fields.update(report_retention_days=retention)
+        new_sc = ScannerSettings(
+            **{k: v for k, v in fields.items() if k not in ("updated_at", "updated_by_email")},
+            updated_at=datetime.now(UTC),
+            updated_by_email=admin.email,
+        )
+        session.add(new_sc)
+        await token_audit.record(
+            session,
+            event_type=AuditEventType.org_config_changed,
+            actor_email=admin.email,
+            section="maintenance",
+            report_retention_days=retention,
+        )
+        await session.commit()
+        cleanup_rows = await _fetch_report_rows(session)
+
+    retention_msg = (
+        f"Retention policy set to {retention} days." if retention
+        else "Retention disabled — records kept indefinitely."
+    )
+    log.info("admin config maintenance saved", actor_email=admin.email, retention_days=retention)
+    return templates.TemplateResponse(
+        request,
+        "admin_config_maintenance.html",
+        {
+            "user": admin,
+            "sc": new_sc,
+            "cleanup_rows": cleanup_rows,
+            "flash": f"ok:{retention_msg}",
+        },
+        headers=_NO_STORE_HEADERS,
+    )

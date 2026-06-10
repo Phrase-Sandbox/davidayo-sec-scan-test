@@ -1,0 +1,452 @@
+{% extends "admin_base.html" %}
+{% block title %}Admin — Dashboard{% endblock %}
+
+{% block extra_styles %}
+{{ super() }}
+<style>
+  /* System health strip */
+  .health-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+  }
+  .health-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-l);
+    padding: 0.9rem 1.1rem;
+    box-shadow: var(--shadow-s);
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+  .health-card.health-critical {
+    border-color: rgba(196,26,26,0.35);
+    background: rgba(196,26,26,0.04);
+  }
+  .health-card-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+  .health-card-status {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--fg);
+  }
+  .health-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .health-dot-ok   { background: var(--ok); box-shadow: 0 0 0 3px rgba(22,163,74,0.2); animation: pulse-ok 2s ease-in-out infinite; }
+  .health-dot-warn { background: var(--warn); }
+  .health-dot-bad  { background: var(--danger); box-shadow: 0 0 0 3px rgba(196,26,26,0.2); animation: pulse-bad 1.4s ease-in-out infinite; }
+  @keyframes pulse-ok  { 0%,100%{box-shadow:0 0 0 2px rgba(22,163,74,0.2)} 50%{box-shadow:0 0 0 5px rgba(22,163,74,0.1)} }
+  @keyframes pulse-bad { 0%,100%{box-shadow:0 0 0 2px rgba(196,26,26,0.3)} 50%{box-shadow:0 0 0 6px rgba(196,26,26,0.1)} }
+  .health-card-sub {
+    font-size: 0.76rem;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+  .health-card-action {
+    margin-top: 0.25rem;
+  }
+  .health-card-action a {
+    font-size: 0.76rem;
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 500;
+  }
+  .health-card-action a:hover { text-decoration: underline; }
+
+  /* Outcome metrics */
+  .outcome-strip {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-l);
+    box-shadow: var(--shadow-s);
+    margin-bottom: 1.25rem;
+    overflow: hidden;
+  }
+  .outcome-stat {
+    padding: 1rem 1.1rem;
+    border-right: 1px solid var(--border);
+    text-align: center;
+  }
+  .outcome-stat:last-child { border-right: none; }
+  .os-num {
+    font-size: 1.65rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    color: var(--fg);
+    line-height: 1.1;
+  }
+  .os-num.os-red    { color: var(--danger); }
+  .os-num.os-amber  { color: var(--warn); }
+  .os-label {
+    font-size: 0.7rem;
+    color: var(--muted);
+    font-weight: 500;
+    margin-top: 0.2rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  /* At-risk repos table */
+  .risk-table-wrap {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-l);
+    overflow: hidden;
+    box-shadow: var(--shadow-s);
+    margin-bottom: 1.25rem;
+  }
+  .risk-table-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 0.85rem 1.1rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-inset);
+  }
+  .risk-table-header h3 { margin: 0; font-size: 0.9rem; }
+
+  /* Activity two-col */
+  .activity-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+  }
+  @media (max-width: 700px) {
+    .activity-grid { grid-template-columns: 1fr; }
+    .outcome-strip { grid-template-columns: repeat(3, 1fr); }
+  }
+  .activity-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-l);
+    box-shadow: var(--shadow-s);
+    overflow: hidden;
+  }
+  .activity-panel-header {
+    padding: 0.75rem 1.1rem 0.65rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-inset);
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--fg-2);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+  }
+  .activity-list { padding: 0; margin: 0; list-style: none; }
+  .activity-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    padding: 0.6rem 1.1rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.82rem;
+  }
+  .activity-item:last-child { border-bottom: none; }
+  .activity-icon {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    margin-top: 0.05rem;
+  }
+  .activity-text { flex: 1; min-width: 0; }
+  .activity-actor { font-weight: 500; color: var(--fg); }
+  .activity-event { color: var(--fg-2); }
+  .activity-time  { font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
+  .activity-empty {
+    padding: 1.5rem 1.1rem;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.82rem;
+  }
+
+  /* Quick nav */
+  .quick-nav {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .quick-nav a {
+    padding: 0.45rem 0.9rem;
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.82rem;
+    color: var(--fg-2);
+    text-decoration: none;
+    transition: border-color 0.1s, color 0.1s;
+  }
+  .quick-nav a:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+{% endblock %}
+
+{% block admin_content %}
+
+<div class="admin-page-header">
+  <div>
+    <h2 class="page-title">Dashboard</h2>
+    <p class="page-subtitle">Organisation security posture and system health.</p>
+  </div>
+</div>
+
+{# ── System Health ── #}
+<div class="health-strip">
+
+  {# CI Token #}
+  {% if active_ci_token %}
+  <div class="health-card">
+    <div class="health-card-label">CI Token</div>
+    <div class="health-card-status">
+      <span class="health-dot health-dot-ok"></span>
+      Active
+    </div>
+    <div class="health-card-sub">
+      Created by {{ active_ci_token.created_by_email.split('@')[0] }}<br>
+      Since {{ active_ci_token.created_at.strftime("%d %b %Y") }}
+    </div>
+    <div class="health-card-action">
+      <a href="/admin/configuration/ci-token">Manage →</a>
+    </div>
+  </div>
+  {% else %}
+  <div class="health-card health-critical">
+    <div class="health-card-label">CI Token</div>
+    <div class="health-card-status">
+      <span class="health-dot health-dot-bad"></span>
+      No active token
+    </div>
+    <div class="health-card-sub" style="color:var(--danger);">
+      CI pipeline scanning is disabled until a token is issued.
+    </div>
+    <div class="health-card-action">
+      <a href="/admin/configuration/ci-token" style="color:var(--danger);">Rotate now →</a>
+    </div>
+  </div>
+  {% endif %}
+
+  {# LLM Provider #}
+  <div class="health-card">
+    <div class="health-card-label">LLM Provider</div>
+    {% if llm_provider %}
+    <div class="health-card-status">
+      <span class="health-dot health-dot-ok"></span>
+      {{ 'Anthropic Claude' if llm_provider == 'anthropic' else 'Google Gemini' }}
+    </div>
+    <div class="health-card-sub">
+      {{ llm_model or '(default model)' }}
+    </div>
+    {% else %}
+    <div class="health-card-status">
+      <span class="health-dot health-dot-warn"></span>
+      Not configured
+    </div>
+    <div class="health-card-sub">Using environment defaults.</div>
+    {% endif %}
+    <div class="health-card-action">
+      <a href="/admin/configuration/org-settings">Settings →</a>
+    </div>
+  </div>
+
+  {# Scanner status #}
+  <div class="health-card">
+    <div class="health-card-label">Scanner</div>
+    <div class="health-card-status">
+      <span class="health-dot health-dot-ok"></span>
+      Healthy
+    </div>
+    <div class="health-card-sub">
+      API is responding.<br>
+      All scanner services available.
+    </div>
+    <div class="health-card-action">
+      <a href="/admin/configuration/scanner">Configure →</a>
+    </div>
+  </div>
+
+  {# Last scan #}
+  <div class="health-card">
+    <div class="health-card-label">Last Scan</div>
+    {% if last_scan %}
+    <div class="health-card-status" style="font-size:0.82rem;">
+      {{ last_scan[0].strftime("%d %b %Y %H:%M") }} UTC
+    </div>
+    <div class="health-card-sub">
+      {{ last_scan[1] | replace("https://github.com/", "") | replace("https://gitlab.com/", "") or "—" }}
+    </div>
+    {% else %}
+    <div class="health-card-status" style="color:var(--muted); font-size:0.85rem; font-weight:400;">
+      No scans yet
+    </div>
+    {% endif %}
+    <div class="health-card-action">
+      <a href="/admin/reports">View reports →</a>
+    </div>
+  </div>
+
+</div>
+
+{# ── Outcome Metrics ── #}
+<div class="outcome-strip">
+  <div class="outcome-stat">
+    <div class="os-num">{{ total_scans }}</div>
+    <div class="os-label">Total scans</div>
+  </div>
+  <div class="outcome-stat">
+    <div class="os-num {{ 'os-red' if critical_risk_scans > 0 else '' }}">{{ critical_risk_scans }}</div>
+    <div class="os-label">With criticals</div>
+  </div>
+  <div class="outcome-stat">
+    <div class="os-num {{ 'os-red' if total_critical_findings > 0 else '' }}">{{ total_critical_findings }}</div>
+    <div class="os-label">Critical findings</div>
+  </div>
+  <div class="outcome-stat">
+    <div class="os-num {{ 'os-amber' if repos_at_risk > 0 else '' }}">{{ repos_at_risk }}</div>
+    <div class="os-label">Repos at risk</div>
+  </div>
+  <div class="outcome-stat">
+    <div class="os-num">{{ active_users }}</div>
+    <div class="os-label">Active users</div>
+  </div>
+</div>
+
+{# ── Most At-Risk Repositories ── #}
+{% if at_risk_repos %}
+<div class="risk-table-wrap">
+  <div class="risk-table-header">
+    <h3>Most At-Risk Repositories</h3>
+    <a href="/admin/reports" style="font-size:0.8rem; color:var(--accent); text-decoration:none;">All reports →</a>
+  </div>
+  <div style="overflow-x:auto;">
+    <table style="min-width:540px;">
+      <thead>
+        <tr>
+          <th>Repository</th>
+          <th style="text-align:center;">Critical</th>
+          <th style="text-align:center;">High</th>
+          <th style="text-align:center;">Medium</th>
+          <th style="text-align:center;">Low</th>
+          <th style="white-space:nowrap;">Last scanned</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in at_risk_repos %}
+        <tr>
+          <td style="font-size:0.855rem; font-weight:500; max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+              title="{{ r.repo_url }}">
+            {{ r.repo_url | replace("https://github.com/", "") | replace("https://gitlab.com/", "") or r.repo_url }}
+          </td>
+          <td style="text-align:center;">
+            {% if r.critical > 0 %}<span class="sev-chip sev-chip-C">{{ r.critical }}</span>{% else %}<span class="muted">—</span>{% endif %}
+          </td>
+          <td style="text-align:center;">
+            {% if r.high > 0 %}<span class="sev-chip sev-chip-H">{{ r.high }}</span>{% else %}<span class="muted">—</span>{% endif %}
+          </td>
+          <td style="text-align:center;">
+            {% if r.medium > 0 %}<span class="sev-chip sev-chip-M">{{ r.medium }}</span>{% else %}<span class="muted">—</span>{% endif %}
+          </td>
+          <td style="text-align:center;">
+            {% if r.low > 0 %}<span class="sev-chip sev-chip-L">{{ r.low }}</span>{% else %}<span class="muted">—</span>{% endif %}
+          </td>
+          <td class="muted" style="font-size:0.78rem; white-space:nowrap;">
+            {{ r.last_scanned.strftime("%d %b %Y") if r.last_scanned else "—" }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{# ── Recent Activity / Failed Scans ── #}
+<div class="activity-grid">
+
+  {# Audit feed #}
+  <div class="activity-panel">
+    <div class="activity-panel-header">Recent Activity</div>
+    {% if recent_audits %}
+    <ul class="activity-list">
+      {% for evt in recent_audits %}
+      <li class="activity-item">
+        <div class="activity-icon">
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <circle cx="12" cy="12" r="4"/>
+          </svg>
+        </div>
+        <div class="activity-text">
+          <span class="activity-actor">{{ evt.actor_email or evt.user_email or '—' }}</span>
+          <span class="activity-event"> · {{ evt.event_type.value.replace('_', ' ') }}</span>
+        </div>
+        <span class="activity-time">{{ evt.at.strftime("%d %b %H:%M") }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="activity-empty">No activity recorded yet.</div>
+    {% endif %}
+  </div>
+
+  {# Failed scans #}
+  <div class="activity-panel">
+    <div class="activity-panel-header">Recent Failures</div>
+    {% if recent_failed %}
+    <ul class="activity-list">
+      {% for scan, source in recent_failed %}
+      <li class="activity-item">
+        <div class="activity-icon" style="background:rgba(196,26,26,0.08); border-color:rgba(196,26,26,0.2);">
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2.5">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </div>
+        <div class="activity-text">
+          <span class="activity-actor" style="max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block;">
+            {{ scan.repo_url | replace("https://github.com/", "") | replace("https://gitlab.com/", "") or "—" }}
+          </span>
+          <span class="activity-event"> · {{ scan.status.value }}</span>
+        </div>
+        <span class="activity-time">{{ scan.started_at.strftime("%d %b") }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="activity-empty">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--ok); display:block; margin:0 auto 0.4rem;">
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
+      No failed scans recently.
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+{# ── Quick nav ── #}
+<div class="quick-nav">
+  <a href="/admin/users">→ Users</a>
+  <a href="/admin/tokens">→ Access Tokens</a>
+  <a href="/admin/reports">→ Reports</a>
+  <a href="/admin/usage">→ Usage</a>
+  <a href="/admin/audit">→ Audit Log</a>
+  <a href="/admin/configuration">→ Configuration</a>
+</div>
+
+{% endblock admin_content %}
