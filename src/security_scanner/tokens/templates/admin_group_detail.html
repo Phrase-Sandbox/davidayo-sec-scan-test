@@ -1,5 +1,5 @@
 {% extends "admin_base.html" %}
-{% block title %}Admin — Group: {{ group.name }}{% endblock %}
+{% block title %}Admin | Group: {{ group.name }}{% endblock %}
 
 {% block extra_styles %}
 {{ super() }}
@@ -141,7 +141,7 @@
       {% endfor %}
     {% else %}
       <div style="padding:1.25rem; text-align:center; color:var(--muted); font-size:var(--text-sm);">
-        No members yet — add someone below.
+        No members yet. Add someone below.
       </div>
     {% endif %}
 
@@ -170,10 +170,10 @@
     </div>
 
     {% set perm_meta = {
-      'admin_access':   ('Admin Panel',   '/admin/* — full admin panel access',          'perm-name-admin'),
-      'reports_access': ('Reports',        '/portal/reports — scan reports and details',  'perm-name-reports'),
-      'usage_access':   ('Usage',          '/portal/usage — token and usage statistics',  'perm-name-usage'),
-      'portal_access':  ('Portal Access',  '/portal/* — general portal entry point',      'perm-name-portal'),
+      'admin_access':   ('Admin Panel',   '/admin/* (full admin panel access)',          'perm-name-admin'),
+      'reports_access': ('Reports',        '/portal/reports (scan reports and details)',  'perm-name-reports'),
+      'usage_access':   ('Usage',          '/portal/usage (token and usage statistics)',  'perm-name-usage'),
+      'portal_access':  ('Portal Access',  '/portal/* (general portal entry point)',      'perm-name-portal'),
     } %}
 
     {% for p in all_permissions %}

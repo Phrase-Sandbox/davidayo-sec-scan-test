@@ -1,5 +1,5 @@
 {% extends "admin_base.html" %}
-{% block title %}Admin — Usage Analytics{% endblock %}
+{% block title %}Admin | Usage Analytics{% endblock %}
 
 {% block extra_styles %}
 {{ super() }}
@@ -171,7 +171,7 @@
 {# ── CI scans section ── #}
 <div class="admin-list-card">
   <button class="section-toggle" aria-expanded="true" onclick="toggleSection(this,'ci-body')">
-    <span>CI Pipeline Activity — last {{ lookback_days }} days</span>
+    <span>CI Pipeline Activity, last {{ lookback_days }} days</span>
     <span class="ct-icon">▼</span>
   </button>
   <div class="section-body" id="ci-body">
@@ -211,7 +211,7 @@
 {# ── CLI scans section ── #}
 <div class="admin-list-card">
   <button class="section-toggle" aria-expanded="true" onclick="toggleSection(this,'cli-body')">
-    <span>CLI Activity — last {{ lookback_days }} days</span>
+    <span>CLI Activity, last {{ lookback_days }} days</span>
     <span class="ct-icon">▼</span>
   </button>
   <div class="section-body" id="cli-body">
@@ -251,7 +251,7 @@
 {# ── LLM token spend section ── #}
 <div class="admin-list-card">
   <button class="section-toggle" aria-expanded="false" onclick="toggleSection(this,'llm-body')">
-    <span>LLM Token Spend — last 3 months</span>
+    <span>LLM Token Spend, last 3 months</span>
     <span class="ct-icon">▼</span>
   </button>
   <div class="section-body hidden" id="llm-body">

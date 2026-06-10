@@ -1,5 +1,5 @@
 {% extends "admin_base.html" %}
-{% block title %}Admin — Advanced Settings{% endblock %}
+{% block title %}Admin | Advanced Settings{% endblock %}
 
 {% block extra_styles %}
 {{ super() }}
@@ -62,7 +62,7 @@
 <div class="admin-page-header">
   <div>
     <h2 class="page-title">Advanced Settings</h2>
-    <p class="page-subtitle">Fine-tune scan accuracy and behaviour. Changes take effect on the next scan — no restart needed.</p>
+    <p class="page-subtitle">Fine-tune scan accuracy and behaviour. Changes take effect on the next scan with no restart needed.</p>
   </div>
   {% if sc %}
   <div style="font-size:var(--text-xs); color:var(--muted); text-align:right;">
@@ -109,7 +109,7 @@
           <input type="radio" name="keep_confidences" value="high,medium,low" {{ 'checked' if cur_keep == 'high,medium,low' }}>
           <div>
             <div class="ro-label">All findings regardless of confidence</div>
-            <div class="ro-desc">Most sensitive. Expect more false alarms — only for high-security environments.</div>
+            <div class="ro-desc">Most sensitive. Expect more false positives. Best for high-security environments.</div>
           </div>
         </label>
       </div>
@@ -139,7 +139,7 @@
           <input type="radio" name="advisory_confidences" value="" {{ 'checked' if cur_adv == '' }}>
           <div>
             <div class="ro-label">None</div>
-            <div class="ro-desc">No advisory warnings — findings either block or are silenced entirely.</div>
+            <div class="ro-desc">No advisory warnings. Findings either block or are silenced entirely.</div>
           </div>
         </label>
       </div>
@@ -219,7 +219,7 @@
                {{ 'checked' if not sc or sc.enable_semgrep else '' }}>
         <div>
           <span class="st-name">Semgrep</span>
-          <span class="st-desc">Finds common security patterns across all languages — SQL injection, XSS, path traversal, and more.</span>
+          <span class="st-desc">Finds common security patterns across all languages: SQL injection, XSS, path traversal, and more.</span>
         </div>
       </label>
 
@@ -253,7 +253,7 @@
                {{ 'checked' if not sc or sc.enable_bandit else '' }}>
         <div>
           <span class="st-name">Bandit</span>
-          <span class="st-desc">Finds security issues in <strong>Python</strong> — hardcoded passwords, unsafe functions, weak cryptography.</span>
+          <span class="st-desc">Finds security issues in <strong>Python</strong>: hardcoded passwords, unsafe functions, weak cryptography.</span>
         </div>
       </label>
       <label class="scanner-toggle">
@@ -261,7 +261,7 @@
                {{ 'checked' if not sc or sc.enable_gosec else '' }}>
         <div>
           <span class="st-name">gosec</span>
-          <span class="st-desc">Finds security issues in <strong>Go</strong> — SQL injection, command injection, unsafe file operations.</span>
+          <span class="st-desc">Finds security issues in <strong>Go</strong>: SQL injection, command injection, unsafe file operations.</span>
         </div>
       </label>
       <label class="scanner-toggle">
@@ -269,7 +269,7 @@
                {{ 'checked' if not sc or sc.enable_eslint else '' }}>
         <div>
           <span class="st-name">ESLint Security</span>
-          <span class="st-desc">Finds security issues in <strong>JavaScript / TypeScript</strong> — eval injection, prototype pollution, regex DoS.</span>
+          <span class="st-desc">Finds security issues in <strong>JavaScript / TypeScript</strong>: eval injection, prototype pollution, regex DoS.</span>
         </div>
       </label>
 
@@ -286,7 +286,7 @@
 
       <div>
         <label class="form-label" for="high_risk_paths">Sensitive folder list</label>
-        <p class="form-hint" style="margin-bottom:0.5rem;">Findings inside these folders are treated as more serious — a medium-confidence issue here becomes a blocking finding instead of an advisory warning. One folder path prefix per line. Leave blank for built-in defaults (auth/, payments/, admin/, etc.).</p>
+        <p class="form-hint" style="margin-bottom:0.5rem;">Findings inside these folders are treated as more serious. A medium-confidence issue here becomes a blocking finding instead of an advisory warning. One folder path prefix per line. Leave blank for built-in defaults (auth/, payments/, admin/, etc.).</p>
         <textarea name="high_risk_paths" id="high_risk_paths" rows="5"
                   class="input-mono"
                   placeholder="Leave blank for built-in defaults&#10;Examples:&#10;auth/&#10;payments/&#10;admin/"
@@ -302,7 +302,7 @@
 </form>
 
 <div class="info-banner" style="margin-top:1.5rem;">
-  To delete scan reports, configure retention, or purge all scan data — go to
+  To delete scan reports, configure retention, or purge all scan data, go to
   <a href="/admin/configuration/maintenance">Maintenance</a>.
 </div>
 

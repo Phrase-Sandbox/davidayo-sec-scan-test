@@ -13,7 +13,7 @@
 
 {% if new_token %}
 <div class="card" style="border-color: var(--ok);">
-  <h2 class="ok">New CI token — copy it now</h2>
+  <h2 class="ok">New CI token. Copy it now.</h2>
   <p class="danger">
     <strong>This is the only time this token will be shown.</strong>
     Copy it immediately and update the <code>SCANNER_API_TOKEN</code> GitHub Actions secret.
@@ -56,7 +56,7 @@
         {% if active %}Rotate CI token{% else %}Generate CI token{% endif %}
       </button>
       <span class="confirm-delete-row">
-        <span style="font-size:0.85rem; color:var(--danger); margin-right:0.3rem;">Old token stops working immediately — update GitHub Actions first. Continue?</span>
+        <span style="font-size:0.85rem; color:var(--danger); margin-right:0.3rem;">Old token stops working immediately. Update GitHub Actions first. Continue?</span>
         <form method="post" action="/admin/ci-token/rotate" style="display:inline;">
           <button type="submit" class="btn btn-danger btn-sm">Yes, rotate</button>
         </form>
@@ -71,8 +71,8 @@
   <dl>
     <dt>Storage</dt><dd>Only the SHA-256 hash of the token is stored. The plaintext is shown once at generation time and never persisted.</dd>
     <dt>Revocation</dt><dd>Rotating immediately marks the old token as revoked. Any in-flight CI request using the old token that hasn't reached the server yet will 401. There is no grace period.</dd>
-    <dt>Format</dt><dd><code>phs_ci_&lt;32-bytes-url-safe-base64&gt;</code> — ~256 bits of entropy, collision-infeasible.</dd>
-    <dt>Validation</dt><dd>The CI handler computes <code>sha256(provided_token)</code> and uses <code>hmac.compare_digest</code> against the stored hash — constant-time comparison prevents timing attacks.</dd>
+    <dt>Format</dt><dd><code>phs_ci_&lt;32-bytes-url-safe-base64&gt;</code>. About 256 bits of entropy, collision-infeasible.</dd>
+    <dt>Validation</dt><dd>The CI handler computes <code>sha256(provided_token)</code> and uses <code>hmac.compare_digest</code> against the stored hash for constant-time comparison, preventing timing attacks.</dd>
   </dl>
 </div>
 

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}LLM Settings — Phrase Security Scanner{% endblock %}
+{% block title %}LLM Settings | Phrase Security Scanner{% endblock %}
 {% block tabs %}
 <nav class="tabs">
   <a href="/portal/">Token</a>
@@ -13,9 +13,8 @@
 <div class="card">
   <h2>LLM Provider Settings</h2>
   <p class="muted" style="margin-bottom: 1.25rem;">
-    Choose your LLM provider and paste your API key.
-    Your key is encrypted at rest and used only to run your scans — it is
-    never logged or shared. Leave the key field blank to keep the currently
+    Choose your LLM provider and paste your API key. Your key is encrypted at rest
+    and never logged or shared. Leave the key field blank to keep the currently
     saved key. Model selection is managed by your org admin.
   </p>
   <form method="post" action="/portal/settings" autocomplete="off">
@@ -61,7 +60,7 @@
 </div>
 
 <div class="card">
-  <h2>Model — set by your org admin</h2>
+  <h2>Model (set by your org admin)</h2>
   <p class="muted" style="font-size: 0.875rem; margin-bottom: 0.75rem;">
     Your admin controls which model is used for all scans. Contact your security administrator to request a different model.
   </p>
@@ -77,7 +76,7 @@
     <dt>Storage</dt><dd>Your key is encrypted with AES-256 (Fernet) before being written to the database. The plaintext is held in memory only for the duration of each scan request.</dd>
     <dt>Billing</dt><dd>All LLM calls are made with your key. The provider charges you directly. Visit <a href="/portal/usage">Usage</a> to see a breakdown and verify against your provider dashboard.</dd>
     <dt>Revoke</dt><dd>Delete your key from your provider's console at any time. All future scans will fail with a 401 until you update the key here.</dd>
-    <dt>Model</dt><dd>Your org admin sets the model for each provider in the Admin panel. This ensures consistent results across all users — CLI and CI alike.</dd>
+    <dt>Model</dt><dd>Your org admin sets the model for each provider in the Admin panel. This ensures consistent results across all users in both CLI and CI.</dd>
   </dl>
 </div>
 

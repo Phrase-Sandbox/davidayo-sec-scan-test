@@ -1,5 +1,5 @@
 {% extends "admin_base.html" %}
-{% block title %}Admin — Scanner Configuration{% endblock %}
+{% block title %}Admin | Scanner Configuration{% endblock %}
 
 {% block extra_styles %}
 {{ super() }}
@@ -114,7 +114,7 @@
                {{ 'checked' if not sc or sc.enable_semgrep else '' }}>
         <div>
           <span class="st-name">Semgrep</span>
-          <span class="st-desc">Finds common security patterns across all languages — SQL injection, XSS, path traversal, and more.</span>
+          <span class="st-desc">Finds common security patterns across all languages: SQL injection, XSS, path traversal, and more.</span>
         </div>
       </label>
 
@@ -148,7 +148,7 @@
                {{ 'checked' if not sc or sc.enable_bandit else '' }}>
         <div>
           <span class="st-name">Bandit</span>
-          <span class="st-desc">Finds security issues in <strong>Python</strong> — hardcoded passwords, unsafe functions, weak cryptography.</span>
+          <span class="st-desc">Finds security issues in <strong>Python</strong>: hardcoded passwords, unsafe functions, weak cryptography.</span>
         </div>
       </label>
       <label class="scanner-toggle">
@@ -156,7 +156,7 @@
                {{ 'checked' if not sc or sc.enable_gosec else '' }}>
         <div>
           <span class="st-name">gosec</span>
-          <span class="st-desc">Finds security issues in <strong>Go</strong> — SQL injection, command injection, unsafe file operations.</span>
+          <span class="st-desc">Finds security issues in <strong>Go</strong>: SQL injection, command injection, unsafe file operations.</span>
         </div>
       </label>
       <label class="scanner-toggle">
@@ -164,7 +164,7 @@
                {{ 'checked' if not sc or sc.enable_eslint else '' }}>
         <div>
           <span class="st-name">ESLint Security</span>
-          <span class="st-desc">Finds security issues in <strong>JavaScript / TypeScript</strong> — eval injection, prototype pollution, regex DoS.</span>
+          <span class="st-desc">Finds security issues in <strong>JavaScript / TypeScript</strong>: eval injection, prototype pollution, regex DoS.</span>
         </div>
       </label>
 

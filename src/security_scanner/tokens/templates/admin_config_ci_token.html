@@ -1,5 +1,5 @@
 {% extends "admin_base.html" %}
-{% block title %}Admin — CI Token{% endblock %}
+{% block title %}Admin | CI Token{% endblock %}
 
 {% block extra_styles %}
 {{ super() }}
@@ -80,7 +80,7 @@
 {# ── New token reveal (shown once after rotate) ── #}
 {% if new_token %}
 <div class="new-token-card">
-  <h3>New CI token — copy it now</h3>
+  <h3>New CI token. Copy it now.</h3>
   <p style="font-size:0.84rem; color:var(--danger); margin:0 0 0.1rem;">
     <strong>This is the only time this token will be shown.</strong>
     Once you leave this page, the plaintext is gone.
@@ -160,11 +160,11 @@
       <dt style="color:var(--muted); font-weight:500;">Storage</dt>
       <dd style="margin:0;">Only the SHA-256 hash of the token is stored. The plaintext is shown once at generation and never persisted.</dd>
       <dt style="color:var(--muted); font-weight:500;">Revocation</dt>
-      <dd style="margin:0;">Rotating immediately marks the old token revoked. No grace period — in-flight requests with the old token will 401.</dd>
+      <dd style="margin:0;">Rotating immediately marks the old token revoked. No grace period. In-flight requests with the old token will 401.</dd>
       <dt style="color:var(--muted); font-weight:500;">Format</dt>
-      <dd style="margin:0;"><code>phs_ci_&lt;32-bytes-url-safe-base64&gt;</code> — ~256 bits of entropy.</dd>
+      <dd style="margin:0;"><code>phs_ci_&lt;32-bytes-url-safe-base64&gt;</code>. About 256 bits of entropy.</dd>
       <dt style="color:var(--muted); font-weight:500;">Validation</dt>
-      <dd style="margin:0;">Uses <code>hmac.compare_digest</code> — constant-time comparison prevents timing attacks.</dd>
+      <dd style="margin:0;">Uses <code>hmac.compare_digest</code> for constant-time comparison, preventing timing attacks.</dd>
     </dl>
   </div>
 </div>

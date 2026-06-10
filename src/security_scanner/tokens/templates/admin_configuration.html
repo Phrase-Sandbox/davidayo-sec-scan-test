@@ -1,5 +1,5 @@
 {% extends "admin_base.html" %}
-{% block title %}Admin — Configuration{% endblock %}
+{% block title %}Admin | Configuration{% endblock %}
 
 {% block extra_styles %}
 {{ super() }}
@@ -126,7 +126,7 @@
     <div class="config-card-desc">GitHub Actions scanner token. Rotate or revoke to update pipeline access.</div>
     <div class="config-card-status">
       <span class="status-dot {{ 'status-ok' if ci_token_active else 'status-off' }}"></span>
-      {{ 'Active' if ci_token_active else 'No active token — CI scanning disabled' }}
+      {{ 'Active' if ci_token_active else 'No active token. CI scanning disabled.' }}
     </div>
     <div class="config-arrow">Manage →</div>
   </a>

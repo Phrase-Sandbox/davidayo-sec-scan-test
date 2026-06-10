@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Usage — Phrase Security Scanner{% endblock %}
+{% block title %}Usage | Phrase Security Scanner{% endblock %}
 
 {% block tabs %}
 <nav class="tabs">
@@ -237,7 +237,7 @@
 {# ── This month detail ── #}
 <div class="admin-list-card">
   <button class="section-toggle" aria-expanded="true" onclick="toggleSection(this,'this-month-body')">
-    <span>{{ this_month }} — this month</span>
+    <span>{{ this_month }} (this month)</span>
     <span style="font-size:var(--text-xs); color:var(--muted); font-weight:400; text-transform:none; letter-spacing:0; margin-left:auto; margin-right:0.75rem;">{{ ns.this_calls }} scans · ${{ "%.4f"|format(ns.this_cost) }}</span>
     <span class="ct-icon">▼</span>
   </button>
@@ -282,7 +282,7 @@
 {% if last_month_rows %}
 <div class="admin-list-card">
   <button class="section-toggle" aria-expanded="false" onclick="toggleSection(this,'last-month-body')">
-    <span>{{ last_month }} — last month</span>
+    <span>{{ last_month }} (last month)</span>
     <span style="font-size:var(--text-xs); color:var(--muted); font-weight:400; text-transform:none; letter-spacing:0; margin-left:auto; margin-right:0.75rem;">{{ ns.lm_calls }} scans · ${{ "%.4f"|format(ns.lm_cost) }}</span>
     <span class="ct-icon">▼</span>
   </button>

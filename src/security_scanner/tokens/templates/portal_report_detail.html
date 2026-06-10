@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Report — Phrase Security Scanner{% endblock %}
+{% block title %}Report | Phrase Security Scanner{% endblock %}
 
 {% block extra_styles %}
 <style>
@@ -77,6 +77,54 @@
   .rid-table .rid-actions { width: 1%; white-space: nowrap; text-align: right; }
   .rid-table tr:hover td { background: rgba(0,0,0,0.015); }
   [data-theme="dark"] .rid-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  /* Scan meta bar — receipt-style strip directly under the gate banner */
+  .scan-meta-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+    row-gap: 0.3rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left-width: 3px;
+    border-radius: var(--radius);
+    padding: 0.55rem 1rem;
+    margin-bottom: 1rem;
+    box-shadow: var(--shadow-s);
+  }
+  .scan-meta-bar.smb-blocked  { border-left-color: var(--gate-blocked); }
+  .scan-meta-bar.smb-advisory { border-left-color: var(--gate-advisory); }
+  .scan-meta-bar.smb-pass     { border-left-color: var(--gate-pass); }
+  .smb-item { display: flex; align-items: center; gap: 0.3rem; }
+  .smb-key {
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--muted);
+  }
+  .smb-val { font-size: var(--text-xs); color: var(--fg); }
+  .smb-val.mono { font-family: var(--ff-mono); font-size: 0.73rem; }
+  .smb-dot { color: var(--border-strong); font-size: 0.75rem; line-height: 1; }
+  .smb-spacer { flex: 1; min-width: 0.5rem; }
+
+  /* Security contact footer */
+  .security-contact {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.85rem;
+    background: var(--phrase-green-dim);
+    border: 1px solid rgba(45,212,168,0.22);
+    border-radius: var(--radius-l);
+    padding: 1rem 1.25rem;
+    margin-top: 1.5rem;
+  }
+  .sc-icon { flex-shrink: 0; color: var(--phrase-green); margin-top: 0.1rem; }
+  .sc-title { font-weight: 700; font-size: var(--text-sm); color: var(--fg); margin-bottom: 0.2rem; }
+  .sc-body { font-size: var(--text-sm); color: var(--fg-2); line-height: 1.55; }
+  .sc-body a { color: var(--accent); }
+  .sc-body code { font-family: var(--ff-mono); font-size: 0.82rem; color: var(--fg); background: rgba(45,212,168,0.12); padding: 0.1rem 0.4rem; border-radius: 4px; }
 
   /* Executive summary card */
   .exec-summary {
@@ -169,6 +217,40 @@
   </div>
 </div>
 
+{# ── Scan metadata receipt bar ── #}
+<div class="scan-meta-bar {{ 'smb-blocked' if c > 0 else ('smb-advisory' if h > 0 else 'smb-pass') }}">
+  <div class="smb-item">
+    <span class="smb-key">Repo</span>
+    <span class="smb-val">{{ scan.repo_url | replace("https://github.com/", "") | replace("https://gitlab.com/", "") }}</span>
+  </div>
+  {% if scan.provider %}
+  <span class="smb-dot">·</span>
+  <div class="smb-item">
+    <span class="smb-key">Provider</span>
+    <span class="smb-val">{{ scan.provider | title }}</span>
+  </div>
+  {% endif %}
+  {% if scan.model %}
+  <span class="smb-dot">·</span>
+  <div class="smb-item">
+    <span class="smb-key">Model</span>
+    <span class="smb-val mono">{{ scan.model }}</span>
+  </div>
+  {% endif %}
+  {% if scan.started_at %}
+  <span class="smb-dot">·</span>
+  <div class="smb-item">
+    <span class="smb-key">Scanned</span>
+    <span class="smb-val">{{ scan.started_at.strftime("%d %b %Y %H:%M") }} UTC</span>
+  </div>
+  {% endif %}
+  <span class="smb-spacer"></span>
+  <div class="smb-item">
+    <span class="smb-key">ID</span>
+    <span class="smb-val mono" style="opacity:0.65; word-break:break-all;">{{ scan.scan_id }}</span>
+  </div>
+</div>
+
 {# ── Executive summary (only when findings exist) ── #}
 {% if total > 0 %}
 <div class="exec-summary">
@@ -178,10 +260,10 @@
   </div>
   <p class="exec-summary-text">
     {% if c > 0 %}
-      {{ total }} finding{{ 's' if total != 1 else '' }} detected — {{ c }} critical{% if h > 0 %}, {{ h }} high{% endif %}{% if m > 0 %}, {{ m }} medium{% endif %}.
+      {{ total }} finding{{ 's' if total != 1 else '' }} detected: {{ c }} critical{% if h > 0 %}, {{ h }} high{% endif %}{% if m > 0 %}, {{ m }} medium{% endif %}.
       Critical issues must be resolved before this repository can be deployed safely.
     {% elif h > 0 %}
-      {{ total }} finding{{ 's' if total != 1 else '' }} detected — {{ h }} high{% if m > 0 %}, {{ m }} medium{% endif %}{% if l > 0 %}, {{ l }} low{% endif %}.
+      {{ total }} finding{{ 's' if total != 1 else '' }} detected: {{ h }} high{% if m > 0 %}, {{ m }} medium{% endif %}{% if l > 0 %}, {{ l }} low{% endif %}.
       Review and remediate high-severity issues before the next production release.
     {% else %}
       {{ total }} low-severity finding{{ 's' if total != 1 else '' }} detected. No blocking issues. Address these during routine maintenance.
@@ -238,27 +320,6 @@
   </div>
 </div>
 {% endif %}
-
-{# ── Collapsible: Scan Metadata ── #}
-<div class="collapse-section">
-  <button class="collapse-trigger" aria-expanded="false"
-          onclick="toggleCollapse(this, 'meta-body')">
-    <span>Scan Metadata</span>
-    <span class="ct-icon">▼</span>
-  </button>
-  <div class="collapse-body" id="meta-body">
-    <dl class="dl-two-col">
-      <dt>Repo</dt><dd>{{ scan.repo_url }}</dd>
-      <dt>Provider</dt><dd>{{ scan.provider or "—" }}</dd>
-      <dt>Model</dt><dd class="mono" style="font-size:0.82rem;">{{ scan.model or "—" }}</dd>
-      <dt>Started</dt><dd>{{ scan.started_at.strftime("%Y-%m-%d %H:%M UTC") if scan.started_at else "—" }}</dd>
-      <dt>Finished</dt><dd>{{ scan.finished_at.strftime("%Y-%m-%d %H:%M UTC") if scan.finished_at else "—" }}</dd>
-      <dt>Scan ID</dt><dd class="mono" style="font-size:0.78rem; word-break:break-all;">{{ scan.scan_id }}</dd>
-      <dt>Status</dt>
-      <dd>{% if scan.status == "ok" %}<span class="pill pill-ok">ok</span>{% else %}<span class="pill pill-fail">{{ scan.status }}</span>{% endif %}</dd>
-    </dl>
-  </div>
-</div>
 
 {# ── Collapsible: LLM Usage ── #}
 {% if usage %}

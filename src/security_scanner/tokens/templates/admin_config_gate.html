@@ -1,5 +1,5 @@
 {% extends "admin_base.html" %}
-{% block title %}Admin — Gate Policy{% endblock %}
+{% block title %}Admin | Gate Policy{% endblock %}
 
 {% block extra_styles %}
 {{ super() }}
@@ -34,7 +34,7 @@
 </div>
 
 <div class="info-banner" style="margin-bottom:1.25rem;">
-  Gate policy changes take effect on the next scan — no restart needed.
+  Gate policy changes take effect on the next scan. No restart needed.
 </div>
 
 <form method="post" action="/admin/configuration/gate-policy" autocomplete="off">
@@ -66,7 +66,7 @@
         <input type="radio" name="keep_confidences" value="high,medium,low" {{ 'checked' if cur_keep == 'high,medium,low' }}>
         <div>
           <div class="ro-label">All findings regardless of confidence</div>
-          <div class="ro-desc">Most sensitive. Expect more false alarms — only for high-security environments.</div>
+          <div class="ro-desc">Most sensitive. Expect more false positives. Best for high-security environments.</div>
         </div>
       </label>
 
@@ -100,7 +100,7 @@
         <input type="radio" name="advisory_confidences" value="" {{ 'checked' if cur_adv == '' }}>
         <div>
           <div class="ro-label">None</div>
-          <div class="ro-desc">No advisory warnings — findings either block or are silenced entirely.</div>
+          <div class="ro-desc">No advisory warnings. Findings either block or are silenced entirely.</div>
         </div>
       </label>
 

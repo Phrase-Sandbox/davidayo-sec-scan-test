@@ -1,5 +1,5 @@
 {% extends "admin_base.html" %}
-{% block title %}Admin — Org Settings{% endblock %}
+{% block title %}Admin | Org Settings{% endblock %}
 
 {% block admin_content %}
 
@@ -15,7 +15,7 @@
 <div class="settings-section">
   <div class="settings-section-header">
     <h3>LLM Provider</h3>
-    <p>API keys and models used for all scans — both CLI and CI pipeline. Keys are encrypted at rest.</p>
+    <p>API keys and models used for all scans, covering both CLI and CI pipeline. Keys are encrypted at rest.</p>
   </div>
   <div class="settings-section-body">
 
@@ -60,7 +60,7 @@
       <label class="form-label" for="anthropic_key">
         Anthropic API Key
         {% if masked_anthropic %}
-          — <span class="mono" style="font-size:0.78rem; color:var(--ok);">{{ masked_anthropic }} ✓</span>
+          <span style="font-size:0.78rem; color:var(--ok); font-weight:400; margin-left:0.4rem;">{{ masked_anthropic }} ✓</span>
         {% endif %}
       </label>
       <input type="password" name="anthropic_key" id="anthropic_key"
@@ -90,7 +90,7 @@
       <label class="form-label" for="google_key">
         Google API Key
         {% if masked_google %}
-          — <span class="mono" style="font-size:0.78rem; color:var(--ok);">{{ masked_google }} ✓</span>
+          <span style="font-size:0.78rem; color:var(--ok); font-weight:400; margin-left:0.4rem;">{{ masked_google }} ✓</span>
         {% endif %}
       </label>
       <input type="password" name="google_key" id="google_key"
@@ -124,7 +124,7 @@
       <label class="form-label" for="slack_webhook">
         Slack Webhook URL
         {% if masked_slack %}
-          — <span class="mono" style="font-size:0.78rem; color:var(--ok);">{{ masked_slack }} ✓</span>
+          <span style="font-size:0.78rem; color:var(--ok); font-weight:400; margin-left:0.4rem;">{{ masked_slack }} ✓</span>
         {% endif %}
       </label>
       <p class="form-hint" style="margin-bottom:0.5rem;">Stored encrypted. Overrides the <code>SLACK_WEBHOOK_URL</code> env var. Used for bypass alerts and LLM-unavailable notifications.</p>
@@ -136,7 +136,7 @@
 
     <div>
       <label class="form-label" for="bypass_slack_mode">When should bypass events trigger a Slack alert?</label>
-      <p class="form-hint" style="margin-bottom:0.5rem;"><strong>Developer bypasses only</strong> silences alerts for admin pipeline changes — the change is still audit-logged.</p>
+      <p class="form-hint" style="margin-bottom:0.5rem;"><strong>Developer bypasses only</strong> silences alerts for admin pipeline changes. The change is still audit-logged.</p>
       <select name="bypass_slack_mode" id="bypass_slack_mode" style="width:100%; max-width:360px;">
         <option value="dev_only" {{ 'selected' if current_bypass_slack_mode == 'dev_only' else '' }}>Developer bypasses only (recommended)</option>
         <option value="all"      {{ 'selected' if current_bypass_slack_mode == 'all' else '' }}>All bypasses</option>

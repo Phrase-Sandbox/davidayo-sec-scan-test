@@ -1,5 +1,5 @@
 {% extends "admin_base.html" %}
-{% block title %}Admin — Maintenance{% endblock %}
+{% block title %}Admin | Maintenance{% endblock %}
 
 {% block extra_styles %}
 {{ super() }}
@@ -177,7 +177,7 @@
       </p>
       {% else %}
       <p style="font-size:0.82rem; color:var(--muted); margin:0 0 1rem;">
-        Currently: no automatic retention — records kept indefinitely.
+        Currently set to no automatic retention. Records are kept indefinitely.
       </p>
       {% endif %}
       <button type="submit" class="btn btn-primary btn-sm" style="margin-right:0;">Save retention policy</button>
@@ -193,7 +193,7 @@
   </div>
   <div class="maintenance-section-body">
     <div style="padding:0.75rem 1rem; background:rgba(196,26,26,0.05); border:1px solid rgba(196,26,26,0.2); border-radius:var(--radius); margin-bottom:1rem; font-size:0.84rem;">
-      <strong style="color:var(--danger);">Warning:</strong> This will immediately and permanently delete every scan record — portal and CI — for the entire organisation. There is no recovery.
+      <strong style="color:var(--danger);">Warning:</strong> This will immediately and permanently delete every scan record (portal and CI) for the entire organisation. There is no recovery.
     </div>
     <form method="post" action="/admin/reports/purge-all" id="purge-form">
       <p class="form-hint" style="margin-bottom:0.5rem;">Type <strong>PURGE ALL</strong> to confirm.</p>

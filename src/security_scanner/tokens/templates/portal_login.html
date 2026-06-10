@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Sign in — Phrase Security Scanner{% endblock %}
+{% block title %}Sign in | Phrase Security Scanner{% endblock %}
 {% block tabs %}{% endblock %}
 
 {% block extra_styles %}
@@ -267,7 +267,7 @@
       {% elif not login_url %}
         <div class="no-auth-box">
           <strong>Accessed via the Phrase Platform</strong>
-          <p style="margin:0 0 0.5rem;">Navigate through the internal Phrase portal URL — the Okta gateway authenticates you automatically.</p>
+          <p style="margin:0 0 0.5rem;">Navigate through the internal Phrase portal URL. The Okta gateway authenticates you automatically.</p>
           <p style="margin:0; color:var(--muted);">If you believe you should have access, contact your security administrator.</p>
         </div>
       {% endif %}

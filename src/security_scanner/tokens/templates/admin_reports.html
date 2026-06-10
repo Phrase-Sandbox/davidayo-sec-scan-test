@@ -1,5 +1,5 @@
 {% extends "admin_base.html" %}
-{% block title %}Admin — Reports{% endblock %}
+{% block title %}Admin | Reports{% endblock %}
 
 {% block extra_styles %}
 {{ super() }}
@@ -14,7 +14,7 @@
 <div class="admin-page-header">
   <div>
     <h2 class="page-title">Scan Reports</h2>
-    <p class="page-subtitle">All portal and CI scans across the organisation — {{ portal_count }} portal · {{ ci_count }} CI</p>
+    <p class="page-subtitle">All portal and CI scans across the organisation: {{ portal_count }} portal · {{ ci_count }} CI</p>
   </div>
 </div>
 
@@ -183,7 +183,7 @@
 </div>
 
 <div class="info-banner" style="margin-top:1.25rem;">
-  To bulk-delete reports, configure retention, or purge all scan data — go to
+  To bulk-delete reports, configure retention, or purge all scan data, go to
   <a href="/admin/configuration/maintenance">Maintenance</a>.
 </div>
 
