@@ -1,0 +1,209 @@
+{% extends "admin_base.html" %}
+{% block title %}Admin — Scanner Configuration{% endblock %}
+
+{% block extra_styles %}
+{{ super() }}
+<style>
+  .scanner-toggle {
+    display: flex; align-items: flex-start; gap: 0.75rem;
+    padding: 0.75rem 0.9rem; border: 1px solid var(--border);
+    border-radius: var(--radius); cursor: pointer; transition: border-color 0.1s, background 0.1s;
+    margin-bottom: 0.6rem;
+  }
+  .scanner-toggle:last-child { margin-bottom: 0; }
+  .scanner-toggle:hover { border-color: var(--border-strong); background: var(--bg-inset); }
+  .scanner-toggle input[type="checkbox"] { margin-top: 0.15rem; flex-shrink: 0; accent-color: var(--accent); }
+  .scanner-toggle .st-name { font-weight: 600; font-size: var(--text-sm); display: block; margin-bottom: 0.1rem; }
+  .scanner-toggle .st-desc { font-size: var(--text-xs); color: var(--muted); }
+
+  .check-row {
+    display: flex; align-items: flex-start; gap: 0.65rem;
+    padding: 0.6rem 0; border-bottom: 1px solid var(--border); cursor: pointer;
+  }
+  .check-row:last-child { border-bottom: none; }
+  .check-row input[type="checkbox"] { margin-top: 0.15rem; flex-shrink: 0; accent-color: var(--accent); }
+  .cr-name { font-weight: 600; font-size: var(--text-sm); display: flex; align-items: center; gap: 0.4rem; }
+  .cr-desc { font-size: var(--text-xs); color: var(--muted); margin-top: 0.15rem; }
+</style>
+{% endblock %}
+
+{% block admin_content %}
+
+<div class="admin-page-header">
+  <div>
+    <h2 class="page-title">Scanner Configuration</h2>
+    <p class="page-subtitle">Performance, active scan tools, and sensitive path settings. Changes take effect on the next scan.</p>
+  </div>
+  {% if sc %}
+  <div style="font-size:var(--text-xs); color:var(--muted); text-align:right;">
+    Last saved by {{ sc.updated_by_email }}<br>
+    {{ sc.updated_at.strftime('%d %b %Y %H:%M') }} UTC
+  </div>
+  {% endif %}
+</div>
+
+<form method="post" action="/admin/configuration/scanner" autocomplete="off">
+
+  {# ── Performance ── #}
+  <div class="settings-section">
+    <div class="settings-section-header">
+      <h3>Performance</h3>
+      <p>Tune scan speed and API usage. Higher parallelism makes scans faster but costs more.</p>
+    </div>
+    <div class="settings-section-body">
+
+      <div style="margin-bottom:1.25rem;">
+        <label class="form-label" for="vuln_verifier_parallelism">Parallel verification workers</label>
+        <p class="form-hint" style="margin-bottom:0.5rem;">Runs this many verification checks simultaneously. Higher = faster scans, higher memory and API usage. <strong>2 is the safe default.</strong> Max: 16.</p>
+        <div style="display:flex; align-items:center; gap:0.75rem;">
+          <input type="number" name="vuln_verifier_parallelism" id="vuln_verifier_parallelism"
+                 min="1" max="16" value="{{ sc.vuln_verifier_parallelism if sc else 2 }}"
+                 style="width:80px;">
+          <span class="badge-recommended">Recommended: 2</span>
+        </div>
+      </div>
+
+      <hr class="section-divider">
+
+      <label class="check-row">
+        <input type="checkbox" name="enable_consolidation_verifier" value="on"
+               {{ 'checked' if sc and sc.enable_consolidation_verifier else '' }}>
+        <div>
+          <div class="cr-name">Consolidation verifier</div>
+          <div class="cr-desc">After individual checks complete, run a final AI pass reviewing all confirmed findings together. Detects combined-risk attack chains and can promote severity to Critical. One extra API call per scan.</div>
+        </div>
+      </label>
+      <label class="check-row">
+        <input type="checkbox" name="enable_partial_scan" value="on"
+               {{ 'checked' if not sc or sc.enable_partial_scan else '' }}>
+        <div>
+          <div class="cr-name">Partial scan on token limit <span class="badge-recommended">Recommended: on</span></div>
+          <div class="cr-desc">When a repo is too large to scan fully, scan the highest-risk files instead of returning zero findings.</div>
+        </div>
+      </label>
+      <label class="check-row">
+        <input type="checkbox" name="enable_zero_findings_retry" value="on"
+               {{ 'checked' if not sc or sc.enable_zero_findings_retry else '' }}>
+        <div>
+          <div class="cr-name">Retry on empty first pass <span class="badge-recommended">Recommended: on</span></div>
+          <div class="cr-desc">When the AI returns no findings on a non-trivial codebase, run a second pass with an explicit re-examine instruction.</div>
+        </div>
+      </label>
+      <label class="check-row">
+        <input type="checkbox" name="enable_quality_gate" value="on"
+               {{ 'checked' if sc and sc.enable_quality_gate else '' }}>
+        <div>
+          <div class="cr-name">Fix quality gate</div>
+          <div class="cr-desc">Re-generate fix suggestions for verified findings that lack code examples. Adds up to one AI call per 5 such findings.</div>
+        </div>
+      </label>
+
+    </div>
+  </div>
+
+  {# ── Active Scanners ── #}
+  <div class="settings-section">
+    <div class="settings-section-header">
+      <h3>Active Scanners</h3>
+      <p>Each tool detects different vulnerability types. Disable only if a tool produces too many false positives for your codebase. Disabling all falls back to AI-only analysis.</p>
+    </div>
+    <div class="settings-section-body">
+
+      <label class="scanner-toggle" id="semgrep-label">
+        <input type="checkbox" name="enable_semgrep" value="on" id="enable_semgrep"
+               {{ 'checked' if not sc or sc.enable_semgrep else '' }}>
+        <div>
+          <span class="st-name">Semgrep</span>
+          <span class="st-desc">Finds common security patterns across all languages — SQL injection, XSS, path traversal, and more.</span>
+        </div>
+      </label>
+
+      <div id="semgrep-rules" style="margin: -0.1rem 0 0.6rem 2rem; padding: 0.75rem 1rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-inset);">
+        <p class="form-label" style="margin-bottom:0.5rem; color:var(--muted); font-weight:600; font-size:var(--text-xs); text-transform:uppercase; letter-spacing:0.06em;">Semgrep rule packs</p>
+        <label class="check-row">
+          <input type="checkbox" name="semgrep_owasp" value="on" {{ 'checked' if not sc or sc.semgrep_owasp else '' }}>
+          <div>
+            <div class="cr-name">OWASP Top Ten <span class="badge-recommended">Recommended</span></div>
+            <div class="cr-desc">The most critical web application security risks.</div>
+          </div>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" name="semgrep_audit" value="on" {{ 'checked' if not sc or sc.semgrep_audit else '' }}>
+          <div>
+            <div class="cr-name">Security Audit <span class="badge-recommended">Recommended</span></div>
+            <div class="cr-desc">General secure-coding checks across languages.</div>
+          </div>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" name="semgrep_upload" value="on" {{ 'checked' if not sc or sc.semgrep_upload else '' }}>
+          <div>
+            <div class="cr-name">File Upload Security</div>
+            <div class="cr-desc">File upload and storage vulnerability patterns.</div>
+          </div>
+        </label>
+      </div>
+
+      <label class="scanner-toggle">
+        <input type="checkbox" name="enable_bandit" value="on"
+               {{ 'checked' if not sc or sc.enable_bandit else '' }}>
+        <div>
+          <span class="st-name">Bandit</span>
+          <span class="st-desc">Finds security issues in <strong>Python</strong> — hardcoded passwords, unsafe functions, weak cryptography.</span>
+        </div>
+      </label>
+      <label class="scanner-toggle">
+        <input type="checkbox" name="enable_gosec" value="on"
+               {{ 'checked' if not sc or sc.enable_gosec else '' }}>
+        <div>
+          <span class="st-name">gosec</span>
+          <span class="st-desc">Finds security issues in <strong>Go</strong> — SQL injection, command injection, unsafe file operations.</span>
+        </div>
+      </label>
+      <label class="scanner-toggle">
+        <input type="checkbox" name="enable_eslint" value="on"
+               {{ 'checked' if not sc or sc.enable_eslint else '' }}>
+        <div>
+          <span class="st-name">ESLint Security</span>
+          <span class="st-desc">Finds security issues in <strong>JavaScript / TypeScript</strong> — eval injection, prototype pollution, regex DoS.</span>
+        </div>
+      </label>
+
+    </div>
+  </div>
+
+  {# ── File Handling ── #}
+  <div class="settings-section">
+    <div class="settings-section-header">
+      <h3>File Handling</h3>
+      <p>Control which paths receive extra scrutiny. Retention policy is configured in <a href="/admin/configuration/maintenance">Maintenance</a>.</p>
+    </div>
+    <div class="settings-section-body">
+      <div>
+        <label class="form-label" for="high_risk_paths">Sensitive folder list</label>
+        <p class="form-hint" style="margin-bottom:0.5rem;">Findings inside these folders are treated as more serious. One folder path prefix per line. Leave blank for built-in defaults (auth/, payments/, admin/, etc.).</p>
+        <textarea name="high_risk_paths" id="high_risk_paths" rows="5"
+                  class="input-mono"
+                  placeholder="Leave blank for built-in defaults&#10;Examples:&#10;auth/&#10;payments/&#10;admin/"
+                  style="width:100%; max-width:420px; resize:vertical;">{{ sc.high_risk_paths if sc else '' }}</textarea>
+      </div>
+    </div>
+    <div class="settings-section-footer">
+      <button type="submit" class="btn btn-primary" style="margin-right:0;">Save scanner configuration</button>
+    </div>
+  </div>
+
+</form>
+
+<script>
+(function() {
+  var semgrepCb  = document.getElementById('enable_semgrep');
+  var rulesBox   = document.getElementById('semgrep-rules');
+  if (semgrepCb && rulesBox) {
+    function toggleSemgrep() { rulesBox.style.display = semgrepCb.checked ? '' : 'none'; }
+    semgrepCb.addEventListener('change', toggleSemgrep);
+    toggleSemgrep();
+  }
+})();
+</script>
+
+{% endblock admin_content %}

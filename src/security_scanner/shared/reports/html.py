@@ -57,16 +57,24 @@ _URGENT = (Severity.Critical, Severity.High)
 _CLEANUP = (Severity.Medium,)
 _ADVISORY = (Severity.Low,)
 
-# Stable OWASP edition movements. Keys are 2021 IDs (or SECRET-001); values
-# render as a footnote under each card. Categories with no movement omit.
-_OWASP_2021_TO_2025: dict[str, str] = {
-    "A03:2021": "Injection is A05:2025 in the latest edition.",
-    "A07:2021": "Renamed to A07:2025 Authentication Failures in the latest edition.",
-    "A08:2021": "Renamed to A08:2025 Software or Data Integrity Failures in the latest edition.",
-    "A09:2021": "Renamed to A09:2025 Security Logging and Alerting Failures in the latest edition.",
-    "A10:2021": "SSRF is not a standalone category in OWASP Top 10:2025.",
-    "SECRET-001": "Hard-coded credentials map to A04:2025 Cryptographic Failures in the latest edition.",  # noqa: E501
+# OWASP 2021 → 2025 category metadata: (category_name, id_2025 | None).
+# id_2025=None means the category was removed as a standalone entry.
+_OWASP_2021_META: dict[str, tuple[str, str | None]] = {
+    "A01:2021": ("Broken Access Control", "A01:2025"),
+    "A02:2021": ("Cryptographic Failures", "A02:2025"),
+    "A03:2021": ("Injection", "A05:2025"),
+    "A04:2021": ("Insecure Design", "A04:2025"),
+    "A05:2021": ("Security Misconfiguration", "A05:2025"),
+    "A06:2021": ("Vulnerable and Outdated Components", "A06:2025"),
+    "A07:2021": ("Identification and Authentication Failures", "A07:2025"),
+    "A08:2021": ("Software and Data Integrity Failures", "A08:2025"),
+    "A09:2021": ("Security Logging and Monitoring Failures", "A09:2025"),
+    "A10:2021": ("Server-Side Request Forgery", None),
+    "SECRET-001": ("Hard-coded Credentials", "A04:2025"),
 }
+
+# Regex to extract an OWASP category ID from a URL or plain string.
+_OWASP_ID_RE = re.compile(r"(A\d{2})[_:](\d{4})")
 
 # Permissive `affected_lines` parser. Accepts "42", "42-55", "42, 43".
 _LINES_RE = re.compile(r"(\d+)(?:\s*[-–]\s*(\d+))?")
@@ -660,6 +668,109 @@ ol.location-list > li { margin: 0.5em 0; }
   color: #2d6a4f;
 }
 .action-callout::before { content: "→ "; font-weight: 700; }
+
+/* ── Metadata panel grid (inside Technical details toggle) ── */
+.meta-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55em;
+  margin: 0.6em 0 0.25em;
+  font-size: 0.875em;
+}
+.meta-cell {
+  background: var(--row-tint);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.55em 0.8em 0.6em;
+}
+.meta-cell-label {
+  display: block;
+  font-size: 0.7em;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 0.35em;
+}
+.meta-cell-value {
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+  line-height: 1.3;
+}
+/* Confidence */
+.meta-conf-high   { color: #3f8a5a; }
+.meta-conf-medium { color: var(--medium); }
+.meta-conf-low    { color: var(--critical); }
+/* Verification */
+.meta-verif-verified      { color: #3f8a5a; }
+.meta-verif-unverified    { color: var(--muted); font-weight: 500; }
+.meta-verif-conflicting   { color: var(--high); }
+.meta-verif-advisory_real { color: var(--accent); }
+/* OWASP card — spans full width */
+.meta-cell-owasp { grid-column: 1 / -1; }
+.meta-owasp-edition {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  font-weight: 600;
+  font-size: 1em;
+  line-height: 1.3;
+}
+.meta-owasp-arrow { color: var(--muted); }
+.meta-owasp-new   { color: var(--accent); }
+.meta-owasp-removed { color: var(--muted); font-style: italic; font-weight: 400; font-size: 0.88em; }
+.meta-owasp-name {
+  font-size: 0.82em;
+  color: var(--muted);
+  font-weight: 400;
+  margin-top: 0.25em;
+}
+/* Patch badge */
+.meta-patch-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--low-tint);
+  border: 1px solid rgba(74,125,163,0.3);
+  border-radius: 4px;
+  padding: 0.15em 0.55em;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.meta-none { color: var(--muted); font-weight: 400; }
+/* Detection engines */
+.meta-engine-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3em;
+  align-items: center;
+}
+.meta-engine-badge {
+  display: inline-block;
+  padding: 0.1em 0.5em;
+  border-radius: 3px;
+  font-size: 0.88em;
+  font-weight: 600;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+.meta-consensus {
+  font-size: 0.82em;
+  color: var(--muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
 
 /* Print: expand every detail and drop interactive affordances. */
 @media print {
@@ -1486,29 +1597,136 @@ def _group_card(
             f'<li id="finding-{idx}">{loc}' + (f"\n{snippet}" if snippet else "") + "</li>"
         )
     parts.append("</ol>")
-    parts.append(_card_meta_row(head))
+    parts.append(
+        '<details class="tech-details">'
+        "<summary>Technical details</summary>"
+        + _card_meta_row(head)
+        + "</details>"
+    )
     parts.append("</details>")
     return "\n".join(parts)
 
 
+def _extract_owasp_id(reference: str) -> str | None:
+    """Extract a normalised OWASP ID (e.g. 'A03:2021') from a URL or plain string."""
+    if reference == "SECRET-001":
+        return "SECRET-001"
+    m = _OWASP_ID_RE.search(reference)
+    return f"{m.group(1)}:{m.group(2)}" if m else None
+
+
 def _card_meta_row(f: VulnerabilityFinding) -> str:
-    footnote = _OWASP_2021_TO_2025.get(f.vulnerability_id, "")
-    footnote_html = f" <em>— {escape(footnote)}</em>" if footnote else ""
-    # "Detected by" row: show when sources are present (even single-voter).
-    detected_by_html = ""
-    if f.consensus_score >= 1 and f.sources:
-        source_list = escape(", ".join(f.sources))
-        detected_by_html = (
-            f" &middot; <strong>Detected by:</strong> {source_list} "
-            f"({f.consensus_score} voter{'s' if f.consensus_score != 1 else ''})"
+    """Render a structured 2-column metadata grid for a finding card."""
+
+    # ── Confidence ──────────────────────────────────────────────────────────
+    _CONF = {
+        Confidence.High:   ("●", "meta-conf-high",   "High"),
+        Confidence.Medium: ("●", "meta-conf-medium",  "Medium"),
+        Confidence.Low:    ("●", "meta-conf-low",     "Low"),
+    }
+    c_icon, c_cls, c_lbl = _CONF.get(f.confidence, ("●", "", f.confidence.value))
+    conf_cell = (
+        '<div class="meta-cell">'
+        '<span class="meta-cell-label">Confidence</span>'
+        f'<span class="meta-cell-value {c_cls}">{c_icon} {escape(c_lbl)}</span>'
+        "</div>"
+    )
+
+    # ── Verification ────────────────────────────────────────────────────────
+    _VERIF = {
+        VerificationStatus.verified:      ("✓", "meta-verif-verified",      "Verified"),
+        VerificationStatus.unverified:    ("○", "meta-verif-unverified",    "Unverified"),
+        VerificationStatus.conflicting:   ("⚠", "meta-verif-conflicting",   "Conflicting"),
+        VerificationStatus.advisory_real: ("ℹ", "meta-verif-advisory_real", "Auto-triaged"),
+    }
+    v_icon, v_cls, v_lbl = _VERIF.get(
+        f.verification_status, ("○", "", f.verification_status.value)
+    )
+    verif_cell = (
+        '<div class="meta-cell">'
+        '<span class="meta-cell-label">Verification</span>'
+        f'<span class="meta-cell-value {v_cls}">{v_icon} {escape(v_lbl)}</span>'
+        "</div>"
+    )
+
+    # ── OWASP mapping (full-width) ───────────────────────────────────────────
+    owasp_id = _extract_owasp_id(f.owasp_reference) or _extract_owasp_id(f.vulnerability_id)
+    if owasp_id and owasp_id in _OWASP_2021_META:
+        cat_name, id_2025 = _OWASP_2021_META[owasp_id]
+        if id_2025:
+            edition_inner = (
+                f"<span>{escape(owasp_id)}</span>"
+                f'<span class="meta-owasp-arrow">→</span>'
+                f'<span class="meta-owasp-new">{escape(id_2025)}</span>'
+            )
+        else:
+            edition_inner = (
+                f"<span>{escape(owasp_id)}</span>"
+                f'<span class="meta-owasp-removed">— removed as standalone in 2025</span>'
+            )
+        # Wrap in link if we have a URL
+        if f.owasp_reference.startswith(("http://", "https://")):
+            href = escape(f.owasp_reference, quote=True)
+            edition_inner = (
+                f'<a href="{href}" style="color:inherit;text-decoration:none;">'
+                f"{edition_inner}"
+                "</a>"
+            )
+        owasp_cell = (
+            '<div class="meta-cell meta-cell-owasp">'
+            '<span class="meta-cell-label">OWASP Mapping</span>'
+            f'<div class="meta-owasp-edition">{edition_inner}</div>'
+            f'<div class="meta-owasp-name">{escape(cat_name)}</div>'
+            "</div>"
         )
+    elif f.owasp_reference:
+        owasp_cell = (
+            '<div class="meta-cell meta-cell-owasp">'
+            '<span class="meta-cell-label">OWASP Reference</span>'
+            f'<div class="meta-cell-value">{_owasp_link(f.owasp_reference)}</div>'
+            "</div>"
+        )
+    else:
+        owasp_cell = ""
+
+    # ── Patch ────────────────────────────────────────────────────────────────
+    if f.patch_file_path:
+        patch_inner = (
+            f'<span class="meta-patch-badge">↓ {escape(f.patch_file_path)}</span>'
+        )
+    else:
+        patch_inner = '<span class="meta-cell-value meta-none">—</span>'
+    patch_cell = (
+        '<div class="meta-cell">'
+        '<span class="meta-cell-label">Patch</span>'
+        f"{patch_inner}"
+        "</div>"
+    )
+
+    # ── Detection provenance ─────────────────────────────────────────────────
+    if f.consensus_score >= 1 and f.sources:
+        engine_badges = "".join(
+            f'<span class="meta-engine-badge">{escape(s)}</span>' for s in f.sources
+        )
+        n = f.consensus_score
+        consensus = f"<span class=\"meta-consensus\">{n} engine{'s' if n != 1 else ''}</span>"
+        engines_inner = f'<div class="meta-engine-badges">{engine_badges}{consensus}</div>'
+    else:
+        engines_inner = '<span class="meta-cell-value meta-none">—</span>'
+    engines_cell = (
+        '<div class="meta-cell">'
+        '<span class="meta-cell-label">Detected By</span>'
+        f"{engines_inner}"
+        "</div>"
+    )
+
     return (
-        '<div class="meta-row">'
-        f"<strong>Confidence:</strong> {escape(f.confidence.value)} &middot; "
-        f"<strong>Verification:</strong> {escape(f.verification_status.value)} &middot; "
-        f"<strong>OWASP:</strong> {_owasp_link(f.owasp_reference)}{footnote_html} &middot; "
-        f"<strong>Patch:</strong> {_code(f.patch_file_path)}"
-        f"{detected_by_html}"
+        '<div class="meta-panel">'
+        f"{conf_cell}"
+        f"{verif_cell}"
+        f"{owasp_cell}"
+        f"{patch_cell}"
+        f"{engines_cell}"
         "</div>"
     )
 

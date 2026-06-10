@@ -1,0 +1,189 @@
+{% extends "admin_base.html" %}
+{% block title %}Admin — CI Token{% endblock %}
+
+{% block extra_styles %}
+{{ super() }}
+<style>
+  .ci-token-status-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-l);
+    overflow: hidden;
+    box-shadow: var(--shadow-s);
+    margin-bottom: 1.25rem;
+  }
+  .ci-token-status-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-inset);
+  }
+  .ci-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.65rem;
+    border-radius: 99px;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+  .ci-status-pill.active  { background: rgba(22,163,74,0.1);  color: var(--ok);     border: 1px solid rgba(22,163,74,0.25); }
+  .ci-status-pill.inactive{ background: rgba(196,26,26,0.08); color: var(--danger); border: 1px solid rgba(196,26,26,0.25); }
+  .ci-token-status-body { padding: 1.1rem 1.25rem; }
+  .ci-token-dl { display: grid; grid-template-columns: 130px 1fr; gap: 0.5rem 1rem; font-size: 0.855rem; }
+  .ci-token-dl dt { color: var(--muted); font-weight: 500; }
+  .ci-token-dl dd { margin: 0; }
+  .ci-token-actions { display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+
+  /* New token reveal */
+  .new-token-card {
+    background: rgba(22,163,74,0.05);
+    border: 1px solid rgba(22,163,74,0.3);
+    border-radius: var(--radius-l);
+    padding: 1.1rem 1.25rem;
+    margin-bottom: 1.25rem;
+  }
+  .new-token-card h3 { margin: 0 0 0.35rem; font-size: 0.95rem; color: var(--ok); }
+  .new-token-box {
+    font-family: var(--ff-mono);
+    font-size: 0.82rem;
+    padding: 0.7rem 1rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    word-break: break-all;
+    margin: 0.65rem 0 0.5rem;
+    color: var(--fg);
+    letter-spacing: 0.02em;
+  }
+  .new-token-steps {
+    margin: 0.75rem 0 0;
+    padding-left: 1.2rem;
+    font-size: 0.84rem;
+    color: var(--fg-2);
+    line-height: 1.75;
+  }
+</style>
+{% endblock %}
+
+{% block admin_content %}
+
+<div class="admin-page-header">
+  <div>
+    <h2 class="page-title">CI Token</h2>
+    <p class="page-subtitle">GitHub Actions bearer credential for <code>/agent/scan</code>. Rotate if compromised or on a scheduled rotation.</p>
+  </div>
+</div>
+
+{# ── New token reveal (shown once after rotate) ── #}
+{% if new_token %}
+<div class="new-token-card">
+  <h3>New CI token — copy it now</h3>
+  <p style="font-size:0.84rem; color:var(--danger); margin:0 0 0.1rem;">
+    <strong>This is the only time this token will be shown.</strong>
+    Once you leave this page, the plaintext is gone.
+  </p>
+  <div class="new-token-box" id="new-ci-token">{{ new_token }}</div>
+  <button type="button" class="btn btn-sm btn-primary" onclick="copyNewToken()" style="margin-right:0;">
+    Copy to clipboard
+  </button>
+  <ol class="new-token-steps">
+    <li>Copy the token above.</li>
+    <li>Go to <strong>GitHub → master-scanner-pipeline → Settings → Secrets &amp; variables → Actions</strong>.</li>
+    <li>Update <code>SCANNER_API_TOKEN</code> with the new value.</li>
+    <li>Trigger a test CI run to confirm connectivity.</li>
+  </ol>
+</div>
+{% endif %}
+
+{# ── Token status card ── #}
+<div class="ci-token-status-card">
+  <div class="ci-token-status-header">
+    <h3 style="margin:0; font-size:0.95rem;">Active CI Token</h3>
+    {% if active %}
+    <span class="ci-status-pill active">
+      <span style="width:6px;height:6px;border-radius:50%;background:var(--ok);animation:pulse-ok 2s ease-in-out infinite;"></span>
+      Active
+    </span>
+    {% else %}
+    <span class="ci-status-pill inactive">
+      <span style="width:6px;height:6px;border-radius:50%;background:var(--danger);"></span>
+      No active token
+    </span>
+    {% endif %}
+  </div>
+
+  <div class="ci-token-status-body">
+    {% if active %}
+    <dl class="ci-token-dl">
+      <dt>Token ID</dt>
+      <dd><span class="mono" style="font-size:0.8rem;">{{ active.id }}</span></dd>
+      <dt>Created</dt>
+      <dd>{{ active.created_at.strftime("%d %b %Y %H:%M") }} UTC</dd>
+      <dt>Created by</dt>
+      <dd>{{ active.created_by_email }}</dd>
+      <dt>Hash (sha256)</dt>
+      <dd class="mono" style="font-size:0.76rem; color:var(--muted);">{{ active.token_hash[:24] }}…</dd>
+    </dl>
+    {% else %}
+    <p class="muted" style="margin:0;">No active CI token. Generate one below to enable CI pipeline scanning.</p>
+    {% endif %}
+
+    <div class="ci-token-actions">
+      <span class="confirm-delete-wrap">
+        <button type="button" class="btn btn-danger confirm-trigger">
+          {% if active %}Rotate CI token{% else %}Generate CI token{% endif %}
+        </button>
+        <span class="confirm-delete-row" style="gap:0.4rem;">
+          <span style="font-size:0.82rem; color:var(--danger);">
+            {% if active %}Old token stops working immediately. Continue?{% else %}Generate a new CI token?{% endif %}
+          </span>
+          <form method="post" action="/admin/configuration/ci-token/rotate" style="display:inline;">
+            <button type="submit" class="btn btn-danger btn-sm">Yes, rotate</button>
+          </form>
+          <button type="button" class="confirm-cancel btn btn-sm">Cancel</button>
+        </span>
+      </span>
+    </div>
+  </div>
+</div>
+
+{# ── Security notes ── #}
+<div class="settings-section">
+  <div class="settings-section-header">
+    <h3>Security notes</h3>
+  </div>
+  <div class="settings-section-body">
+    <dl style="display:grid; grid-template-columns:130px 1fr; gap:0.6rem 1rem; font-size:0.855rem; margin:0;">
+      <dt style="color:var(--muted); font-weight:500;">Storage</dt>
+      <dd style="margin:0;">Only the SHA-256 hash of the token is stored. The plaintext is shown once at generation and never persisted.</dd>
+      <dt style="color:var(--muted); font-weight:500;">Revocation</dt>
+      <dd style="margin:0;">Rotating immediately marks the old token revoked. No grace period — in-flight requests with the old token will 401.</dd>
+      <dt style="color:var(--muted); font-weight:500;">Format</dt>
+      <dd style="margin:0;"><code>phs_ci_&lt;32-bytes-url-safe-base64&gt;</code> — ~256 bits of entropy.</dd>
+      <dt style="color:var(--muted); font-weight:500;">Validation</dt>
+      <dd style="margin:0;">Uses <code>hmac.compare_digest</code> — constant-time comparison prevents timing attacks.</dd>
+    </dl>
+  </div>
+</div>
+
+<script>
+(function() {
+  function copyNewToken() {
+    var t = document.getElementById("new-ci-token");
+    if (!t) return;
+    navigator.clipboard.writeText(t.textContent.trim()).then(function() {
+      var btn = document.querySelector('[onclick="copyNewToken()"]');
+      if (!btn) return;
+      var orig = btn.textContent;
+      btn.textContent = "Copied!";
+      setTimeout(function(){ btn.textContent = orig; }, 1500);
+    });
+  }
+  window.copyNewToken = copyNewToken;
+})();
+</script>
+
+{% endblock admin_content %}

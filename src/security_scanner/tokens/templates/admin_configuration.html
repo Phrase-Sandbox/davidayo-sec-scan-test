@@ -1,0 +1,195 @@
+{% extends "admin_base.html" %}
+{% block title %}Admin — Configuration{% endblock %}
+
+{% block extra_styles %}
+{{ super() }}
+<style>
+  .config-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 0.9rem;
+  }
+  .config-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-l);
+    padding: 1.1rem 1.2rem 1rem;
+    box-shadow: var(--shadow-s);
+    text-decoration: none;
+    color: var(--fg);
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    transition: border-color 0.12s, box-shadow 0.12s, transform 0.1s;
+  }
+  .config-card:hover {
+    border-color: var(--accent);
+    box-shadow: var(--shadow-m);
+    transform: translateY(-1px);
+    text-decoration: none;
+    color: var(--fg);
+  }
+  .config-card.config-danger {
+    border-color: rgba(196,26,26,0.3);
+  }
+  .config-card.config-danger:hover {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 3px rgba(196,26,26,0.08), var(--shadow-s);
+  }
+  .config-card-icon {
+    width: 32px; height: 32px;
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 0.15rem;
+    color: var(--accent);
+  }
+  .config-danger .config-card-icon { color: var(--danger); background: rgba(196,26,26,0.06); border-color: rgba(196,26,26,0.2); }
+  .config-card-title {
+    font-size: 0.92rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .config-card-desc {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+  .config-card-status {
+    margin-top: 0.25rem;
+    font-size: 0.73rem;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--muted);
+  }
+  .config-card-status .status-dot {
+    width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+  }
+  .status-ok  { background: var(--ok); }
+  .status-warn { background: var(--warn); }
+  .status-off { background: var(--border-strong); }
+  .config-arrow {
+    margin-top: auto;
+    padding-top: 0.5rem;
+    font-size: 0.78rem;
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .config-danger .config-arrow { color: var(--danger); }
+</style>
+{% endblock %}
+
+{% block admin_content %}
+
+<div class="admin-page-header">
+  <div>
+    <h2 class="page-title">Configuration</h2>
+    <p class="page-subtitle">Manage LLM providers, scanner behaviour, and data policies.</p>
+  </div>
+</div>
+
+<div class="config-grid">
+
+  {# Organization Settings #}
+  <a href="/admin/configuration/org-settings" class="config-card">
+    <div class="config-card-icon">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    </div>
+    <div class="config-card-title">Organization Settings</div>
+    <div class="config-card-desc">LLM provider, API keys, model selection, and Slack notifications.</div>
+    <div class="config-card-status">
+      <span class="status-dot {{ 'status-ok' if llm_configured else 'status-warn' }}"></span>
+      {% if llm_configured %}
+        {{ 'Anthropic' if llm_provider == 'anthropic' else 'Google' }} configured
+        {% if slack_configured %} · Slack connected{% endif %}
+      {% else %}
+        No LLM API key saved
+      {% endif %}
+    </div>
+    <div class="config-arrow">Configure →</div>
+  </a>
+
+  {# CI Token #}
+  <a href="/admin/configuration/ci-token" class="config-card">
+    <div class="config-card-icon">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="16 18 22 12 16 6"/>
+        <polyline points="8 6 2 12 8 18"/>
+      </svg>
+    </div>
+    <div class="config-card-title">CI Token</div>
+    <div class="config-card-desc">GitHub Actions scanner token. Rotate or revoke to update pipeline access.</div>
+    <div class="config-card-status">
+      <span class="status-dot {{ 'status-ok' if ci_token_active else 'status-off' }}"></span>
+      {{ 'Active' if ci_token_active else 'No active token — CI scanning disabled' }}
+    </div>
+    <div class="config-arrow">Manage →</div>
+  </a>
+
+  {# Gate Policy #}
+  <a href="/admin/configuration/gate-policy" class="config-card">
+    <div class="config-card-icon">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      </svg>
+    </div>
+    <div class="config-card-title">Gate Policy</div>
+    <div class="config-card-desc">Confidence thresholds that determine which findings block or advise.</div>
+    <div class="config-card-status">
+      <span class="status-dot status-ok"></span>
+      Block on: {{ gate_summary | replace(',', ' + ') | title }} confidence
+    </div>
+    <div class="config-arrow">Configure →</div>
+  </a>
+
+  {# Scanner Configuration #}
+  <a href="/admin/configuration/scanner" class="config-card">
+    <div class="config-card-icon">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="4" y1="21" x2="4" y2="14"/>
+        <line x1="4" y1="10" x2="4" y2="3"/>
+        <line x1="12" y1="21" x2="12" y2="12"/>
+        <line x1="12" y1="8" x2="12" y2="3"/>
+        <line x1="20" y1="21" x2="20" y2="16"/>
+        <line x1="20" y1="12" x2="20" y2="3"/>
+        <line x1="1" y1="14" x2="7" y2="14"/>
+        <line x1="9" y1="8" x2="15" y2="8"/>
+        <line x1="17" y1="16" x2="23" y2="16"/>
+      </svg>
+    </div>
+    <div class="config-card-title">Scanner Configuration</div>
+    <div class="config-card-desc">Performance tuning, active scan tools (Semgrep, Bandit, gosec, ESLint), and sensitive paths.</div>
+    <div class="config-card-status">
+      <span class="status-dot status-ok"></span>
+      {{ enabled_scanners }}/4 scanners enabled
+    </div>
+    <div class="config-arrow">Configure →</div>
+  </a>
+
+  {# Maintenance #}
+  <a href="/admin/configuration/maintenance" class="config-card config-danger">
+    <div class="config-card-icon">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="3 6 5 6 21 6"/>
+        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+        <path d="M10 11v6M14 11v6"/>
+        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+      </svg>
+    </div>
+    <div class="config-card-title">Maintenance</div>
+    <div class="config-card-desc">Delete scan reports, configure automatic retention, and purge all data.</div>
+    <div class="config-card-status">
+      <span class="status-dot {{ 'status-ok' if retention_days else 'status-off' }}"></span>
+      {% if retention_days %}Auto-purge after {{ retention_days }} days{% else %}No retention policy set{% endif %}
+    </div>
+    <div class="config-arrow">Manage →</div>
+  </a>
+
+</div>
+
+{% endblock admin_content %}
