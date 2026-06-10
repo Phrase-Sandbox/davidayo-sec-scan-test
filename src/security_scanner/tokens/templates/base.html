@@ -918,15 +918,13 @@
     }
     .overflow-trigger:hover { border-color: var(--border-strong); color: var(--fg); background: var(--bg); }
     .overflow-menu {
-      position: absolute;
-      right: 0;
-      top: calc(100% + 4px);
+      position: fixed;
       background: var(--card);
       border: 1px solid var(--border-strong);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
       min-width: 160px;
-      z-index: 100;
+      z-index: 1000;
       overflow: hidden;
       display: none;
     }
@@ -1172,7 +1170,26 @@
         wrap.querySelector('.confirm-trigger').style.display = '';
       });
     });
-    /* Overflow menus */
+    /* Overflow menus — position: fixed to escape overflow:hidden ancestors */
+    function positionOverflowMenu(trigger, menu) {
+      var rect = trigger.getBoundingClientRect();
+      var GAP = 4;
+      var menuH = menu.offsetHeight || 200;
+      var spaceBelow = window.innerHeight - rect.bottom;
+      var spaceAbove = rect.top;
+      menu.style.right = '';
+      menu.style.left = '';
+      menu.style.top = '';
+      menu.style.bottom = '';
+      /* align right edge of menu with right edge of trigger */
+      var rightEdge = window.innerWidth - rect.right;
+      menu.style.right = rightEdge + 'px';
+      if (spaceBelow >= menuH + GAP || spaceBelow >= spaceAbove) {
+        menu.style.top = (rect.bottom + GAP) + 'px';
+      } else {
+        menu.style.bottom = (window.innerHeight - rect.top + GAP) + 'px';
+      }
+    }
     document.addEventListener('click', function(e) {
       var trigger = e.target.closest('.overflow-trigger');
       if (trigger) {
@@ -1180,7 +1197,11 @@
         var menu = trigger.closest('.overflow-anchor').querySelector('.overflow-menu');
         var wasOpen = menu.classList.contains('open');
         document.querySelectorAll('.overflow-menu.open').forEach(function(m) { m.classList.remove('open'); });
-        if (!wasOpen) menu.classList.add('open');
+        if (!wasOpen) {
+          menu.style.display = 'block';
+          positionOverflowMenu(trigger, menu);
+          menu.classList.add('open');
+        }
         return;
       }
       document.querySelectorAll('.overflow-menu.open').forEach(function(m) { m.classList.remove('open'); });
