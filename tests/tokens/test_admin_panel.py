@@ -322,7 +322,7 @@ def test_org_settings_get_no_row_shows_no_slack_test_button(client, session_fact
     """With no saved org settings, the Slack test button must not appear."""
     r = client.get("/admin/org-settings", headers=_admin_headers())
     assert r.status_code == 200
-    assert "Send test message" not in r.text
+    assert "Send test Slack message" not in r.text
 
 
 async def test_org_settings_post_encrypts_slack_webhook(client, session_factory, _crypto):
@@ -405,7 +405,7 @@ async def test_org_settings_post_shows_slack_test_button_after_save(
         },
     )
     assert r.status_code == 200
-    assert "Send test message" in r.text
+    assert "Send test Slack message" in r.text
 
 
 async def test_org_settings_test_slack_no_webhook_returns_error(
