@@ -132,6 +132,12 @@
     .activity-grid { grid-template-columns: 1fr; }
     .outcome-strip { grid-template-columns: repeat(3, 1fr); }
   }
+  @media (max-width: 460px) {
+    .outcome-strip { grid-template-columns: repeat(2, 1fr); }
+    .outcome-stat { padding: 0.75rem 0.85rem; }
+    .os-num { font-size: 1.35rem; }
+    .health-strip { grid-template-columns: 1fr; }
+  }
   .activity-panel {
     background: var(--card);
     border: 1px solid var(--border);

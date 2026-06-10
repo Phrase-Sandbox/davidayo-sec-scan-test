@@ -46,6 +46,15 @@
   .rrr-meta { font-size: var(--text-xs); color: var(--muted); margin-top: 0.1rem; }
   .rrr-right { display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0; }
 
+  @media (max-width: 460px) {
+    /* Blocked / activity rows: gate dot stays left; rest wraps to two lines */
+    .blocked-row, .activity-row { flex-wrap: wrap; row-gap: 0.35rem; padding: 0.65rem 1rem; }
+    .br-repo, .ar-repo { flex-basis: calc(100% - 24px); }
+    .br-right, .ar-right { margin-left: auto; }
+    /* Risky repos: drop rank number column to free up space */
+    .rrr-rank { display: none; }
+  }
+
   /* Recent blocked scans */
   .blocked-list { display: flex; flex-direction: column; gap: 0; }
   .blocked-row {

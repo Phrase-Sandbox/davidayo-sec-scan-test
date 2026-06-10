@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <title>{% block title %}Phrase Security Scanner{% endblock %}</title>
+  <!-- Favicon: hexagonal shield + lock — matches the in-app brand mark -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><polygon points='16,2 30,7.5 30,21 16,30 2,21 2,7.5' fill='%232558e8'/><rect x='11.5' y='16' width='9' height='7' rx='1.5' fill='white'/><path d='M14 16v-3a2 2 0 0 1 4 0v3' fill='none' stroke='white' stroke-width='2' stroke-linecap='round'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -1072,6 +1074,26 @@
       .gate-banner { padding: 1.1rem 1.25rem; }
       .gb-verdict { font-size: var(--text-2xl); }
     }
+    @media (max-width: 520px) {
+      /* Tab nav: scroll horizontally instead of wrapping to multiple lines */
+      .tabs {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+      .tabs::-webkit-scrollbar { display: none; }
+      .tabs a { white-space: nowrap; flex-shrink: 0; padding: 0.5rem 0.85rem; }
+    }
+    @media (max-width: 400px) {
+      body { padding: 1.25rem 0.75rem; }
+      /* Definition lists: switch from 2-col grid to stacked on very small screens */
+      dl { grid-template-columns: 1fr; gap: 0.15rem 0; }
+      dt { margin-top: 0.5rem; }
+    }
+    /* Code/pre blocks always scroll instead of overflowing the viewport */
+    pre { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   </style>
   {% block extra_styles %}{% endblock %}
 </head>

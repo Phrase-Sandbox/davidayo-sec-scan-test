@@ -83,6 +83,17 @@
   .shr-date { color: var(--muted); font-size: var(--text-xs); font-family: var(--ff-mono); white-space: nowrap; min-width: 70px; }
   .shr-provider { color: var(--muted); font-size: var(--text-xs); min-width: 70px; }
   .shr-right { display: flex; align-items: center; gap: 0.4rem; margin-left: auto; flex-shrink: 0; }
+
+  @media (max-width: 560px) {
+    /* Row 1: gate dot + repo name fill the width
+       Row 2: sev chips + actions pushed to the right */
+    .repo-block-header { flex-wrap: wrap; row-gap: 0.5rem; padding: 0.85rem 1rem; }
+    .repo-info { flex-basis: calc(100% - 28px); }
+    .repo-block-actions { margin-left: auto; flex-shrink: 0; }
+    /* History sub-rows wrap on very small screens */
+    .scan-history-row { flex-wrap: wrap; gap: 0.4rem; padding-left: 1rem; }
+    .shr-right { width: 100%; justify-content: flex-end; }
+  }
 </style>
 {% endblock %}
 
@@ -178,7 +189,7 @@
       <div class="rr-gate {{ gate_cls }}" title="{{ gate_label }}" style="flex-shrink:0; margin-top:0;"></div>
 
       {# Repo info #}
-      <div style="flex:1; min-width:0;">
+      <div class="repo-info" style="flex:1; min-width:0;">
         <div class="repo-name" title="{{ repo_url }}">
           {{ repo_url | replace("https://github.com/", "") | replace("https://gitlab.com/", "") }}
         </div>

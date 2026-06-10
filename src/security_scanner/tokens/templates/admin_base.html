@@ -188,15 +188,148 @@
     margin-bottom: 1.25rem;
   }
 
-  @media (max-width: 800px) {
-    .admin-layout { grid-template-columns: 1fr; }
-    .admin-sidebar { position: static; border-radius: var(--radius); }
+  /* Mobile nav bar (hamburger strip) — hidden on ≥ 720 px */
+  .mobile-nav-bar { display: none; }
+
+  /* Backdrop overlay for mobile drawer */
+  .nav-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.42);
+    z-index: 500;
+    -webkit-backdrop-filter: blur(1px);
+    backdrop-filter: blur(1px);
+  }
+  .nav-backdrop.open { display: block; }
+
+  /* Close × button inside sidebar header — hidden on desktop */
+  .mobile-nav-close { display: none; }
+
+  /* ── Tablet 720 – 960 px ─────────────────────────────── */
+  @media (max-width: 960px) {
+    .admin-layout {
+      grid-template-columns: 185px 1fr;
+      gap: 1.25rem;
+    }
+    .admin-sidebar { position: static; }
+  }
+
+  /* ── Mobile < 720 px ─────────────────────────────────── */
+  @media (max-width: 720px) {
+    /* Hamburger top bar */
+    .mobile-nav-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.65rem 0.9rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-s);
+      margin-bottom: 1rem;
+    }
+    .mobile-nav-bar > span {
+      flex: 1;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+    }
+    .mobile-nav-toggle {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-s);
+      color: var(--fg-2);
+      cursor: pointer;
+      padding: 0.3rem 0.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      margin: 0;
+      transition: border-color 0.1s, background 0.1s, color 0.1s;
+    }
+    .mobile-nav-toggle:hover {
+      border-color: var(--accent);
+      background: var(--accent-subtle);
+      color: var(--accent);
+    }
+    /* × button inside sidebar header */
+    .mobile-nav-close {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      margin-left: auto;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-s);
+      color: var(--muted);
+      cursor: pointer;
+      padding: 0;
+      flex-shrink: 0;
+      transition: border-color 0.1s, color 0.1s;
+    }
+    .mobile-nav-close:hover { border-color: var(--border-strong); color: var(--fg); }
+    /* Layout */
+    .admin-layout {
+      grid-template-columns: 1fr;
+      gap: 0;
+    }
+    /* Off-canvas drawer */
+    .admin-sidebar {
+      position: fixed;
+      left: 0; top: 0; bottom: 0;
+      width: min(272px, 85vw);
+      z-index: 600;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      transform: translateX(-100%);
+      transition: transform 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+      border-radius: 0;
+      border: none;
+      border-right: 1px solid var(--border);
+      box-shadow: none;
+      padding-bottom: 2rem;
+    }
+    .admin-sidebar.nav-open {
+      transform: translateX(0);
+      box-shadow: 8px 0 32px rgba(0,0,0,0.2);
+    }
+    /* Touch-friendly tap targets */
+    .admin-sidebar a { padding: 0.58rem 1rem; }
+    .admin-sidebar a.sub-link { padding: 0.48rem 1rem 0.48rem 2.2rem; }
+  }
+
+  /* ── Extra-small < 400 px ────────────────────────────── */
+  @media (max-width: 400px) {
+    .page-title { font-size: var(--text-xl); }
   }
 </style>
 {% endblock %}
 
 {% block content %}
   {%- set cp = request.url.path -%}
+
+  {# ── Mobile top bar (hamburger) — hidden on ≥ 720 px ── #}
+  <div class="mobile-nav-bar">
+    <div class="admin-sidebar-header-icon" style="width:14px; height:16px;"></div>
+    <span>Admin Panel</span>
+    <button class="mobile-nav-toggle" id="mobile-nav-btn"
+            onclick="openMobileNav()" aria-label="Open navigation" aria-expanded="false">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <line x1="3" y1="12" x2="21" y2="12"/>
+        <line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
+  </div>
+  <div class="nav-backdrop" id="nav-backdrop" onclick="closeMobileNav()"></div>
+
   <div class="admin-layout">
 
     {# ── Sidebar navigation ───────────────────────────────────────────── #}
@@ -204,6 +337,13 @@
       <div class="admin-sidebar-header">
         <div class="admin-sidebar-header-icon"></div>
         <span>Admin Panel</span>
+        <button class="mobile-nav-close" onclick="closeMobileNav()" aria-label="Close navigation">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
       </div>
       <div class="admin-sidebar-nav">
 
@@ -396,6 +536,25 @@
     function toggleConfigNav() {
       document.getElementById('config-nav')?.classList.toggle('nav-expand-open');
     }
+    function openMobileNav() {
+      document.querySelector('.admin-sidebar').classList.add('nav-open');
+      document.getElementById('nav-backdrop').classList.add('open');
+      document.getElementById('mobile-nav-btn').setAttribute('aria-expanded', 'true');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeMobileNav() {
+      document.querySelector('.admin-sidebar').classList.remove('nav-open');
+      document.getElementById('nav-backdrop').classList.remove('open');
+      var btn = document.getElementById('mobile-nav-btn');
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+      document.body.style.overflow = '';
+    }
+    // Close drawer when tapping a nav link on mobile
+    document.querySelectorAll('.admin-sidebar a').forEach(function(l) {
+      l.addEventListener('click', function() {
+        if (window.innerWidth <= 720) closeMobileNav();
+      });
+    });
     </script>
 
     {# ── Page content ── #}
