@@ -3,8 +3,9 @@
 {% block tabs %}
 <nav class="tabs">
   <a href="/portal/">Token</a>
-  <a href="/portal/settings">Settings</a>
+  <a href="/portal/scans">Scans</a>
   <a href="/portal/reports" class="active">Reports</a>
+  <a href="/portal/settings">Settings</a>
   <a href="/portal/usage">Usage</a>
 </nav>
 {% endblock %}
@@ -21,10 +22,10 @@
         <th>Repo</th>
         <th>Provider</th>
         <th>Status</th>
-        <th style="text-align: center;">C</th>
-        <th style="text-align: center;">H</th>
-        <th style="text-align: center;">M</th>
-        <th style="text-align: center;">L</th>
+        <th style="text-align: center;"><abbr title="Critical" style="text-decoration: none; cursor: help; border-bottom: 1px dotted var(--muted);">C</abbr></th>
+        <th style="text-align: center;"><abbr title="High"     style="text-decoration: none; cursor: help; border-bottom: 1px dotted var(--muted);">H</abbr></th>
+        <th style="text-align: center;"><abbr title="Medium"   style="text-decoration: none; cursor: help; border-bottom: 1px dotted var(--muted);">M</abbr></th>
+        <th style="text-align: center;"><abbr title="Low"      style="text-decoration: none; cursor: help; border-bottom: 1px dotted var(--muted);">L</abbr></th>
         <th></th>
       </tr>
     </thead>
@@ -58,7 +59,7 @@
           {% if scan.low %}<span class="sev sev-L">{{ scan.low }}</span>{% else %}<span class="muted">0</span>{% endif %}
         </td>
         <td>
-          <a href="/portal/reports/{{ scan.scan_id }}" style="font-size: 0.85rem; white-space: nowrap;">View →</a>
+          <a href="/portal/reports/{{ scan.scan_id }}" style="font-size: 0.85rem; white-space: nowrap;">View &rarr;</a>
         </td>
       </tr>
       {% endfor %}
@@ -69,19 +70,22 @@
     <span class="muted" style="font-size: 0.85rem;">Page {{ page }}</span>
     <div>
       {% if page > 1 %}
-        <a href="/portal/reports?page={{ page - 1 }}" class="btn" style="font-size: 0.85rem;">← Prev</a>
+        <a href="/portal/reports?page={{ page - 1 }}" class="btn" style="font-size: 0.85rem;">&larr; Prev</a>
       {% endif %}
       {% if has_next %}
-        <a href="/portal/reports?page={{ page + 1 }}" class="btn" style="font-size: 0.85rem;">Next →</a>
+        <a href="/portal/reports?page={{ page + 1 }}" class="btn" style="font-size: 0.85rem;">Next &rarr;</a>
       {% endif %}
     </div>
   </div>
   {% else %}
-  <div style="padding: 2rem 1.5rem; text-align: center; color: var(--muted);">
-    <p>No scans yet.</p>
-    <p style="font-size: 0.9rem;">
-      Run <code>phrase-sec-scan .</code> in your project directory to start your first scan.
-    </p>
+  <div class="empty-state">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <rect x="3" y="3" width="18" height="18" rx="2"/>
+      <line x1="3" y1="9" x2="21" y2="9"/>
+      <line x1="9" y1="21" x2="9" y2="9"/>
+    </svg>
+    <p class="empty-state-title">No reports yet</p>
+    <p class="empty-state-hint">Completed scans generate a full HTML + Markdown report here automatically.</p>
   </div>
   {% endif %}
 </div>

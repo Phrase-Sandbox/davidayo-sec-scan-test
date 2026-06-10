@@ -156,21 +156,31 @@
             </span>
           {% else %}
             {% if u.is_active %}
-            <form method="post" action="/admin/users/{{ u.email | urlencode }}/deactivate"
-                  style="display:inline;"
-                  onsubmit="return confirm('Deactivate this user? Their next scan will fail with 401.')">
-              <button type="submit" class="btn btn-sm btn-danger">Deactivate</button>
-            </form>
+            <span class="confirm-delete-wrap">
+              <button type="button" class="btn btn-sm btn-danger confirm-trigger">Deactivate</button>
+              <span class="confirm-delete-row">
+                <span style="font-size:0.8rem; color:var(--danger); margin-right:0.2rem;">Deactivate?</span>
+                <form method="post" action="/admin/users/{{ u.email | urlencode }}/deactivate" style="display:inline;">
+                  <button type="submit" class="btn btn-sm btn-danger">Yes</button>
+                </form>
+                <button type="button" class="confirm-cancel btn btn-sm">No</button>
+              </span>
+            </span>
             {% else %}
             <form method="post" action="/admin/users/{{ u.email | urlencode }}/reactivate" style="display:inline;">
               <button type="submit" class="btn btn-sm btn-primary">Reactivate</button>
             </form>
             {% endif %}
-            <form method="post" action="/admin/users/{{ u.email | urlencode }}/revoke-tokens"
-                  style="display:inline;"
-                  onsubmit="return confirm('Revoke all active tokens for this user?')">
-              <button type="submit" class="btn btn-sm">Revoke tokens</button>
-            </form>
+            <span class="confirm-delete-wrap">
+              <button type="button" class="btn btn-sm confirm-trigger">Revoke tokens</button>
+              <span class="confirm-delete-row">
+                <span style="font-size:0.8rem; color:var(--danger); margin-right:0.2rem;">Revoke all?</span>
+                <form method="post" action="/admin/users/{{ u.email | urlencode }}/revoke-tokens" style="display:inline;">
+                  <button type="submit" class="btn btn-sm btn-danger">Yes</button>
+                </form>
+                <button type="button" class="confirm-cancel btn btn-sm">No</button>
+              </span>
+            </span>
             {%- if u.auth_provider != "okta" and not is_protected -%}
             <form method="post" action="/admin/users/{{ u.email | urlencode }}/force-password-reset"
                   style="display:inline"

@@ -39,7 +39,6 @@
   </div>
   <p class="muted" style="margin:0; font-size:0.83rem;">
     Combined view of all portal and CI scans across the organisation.
-    Combined view of all portal and CI scans across the organisation.
   </p>
 </div>
 
@@ -135,10 +134,16 @@
             {% else %}
               <span class="muted" style="font-size:0.8rem; margin-right:0.5rem;">—</span>
             {% endif %}
-            <form method="post" action="/admin/reports/{{ row.scan_id }}/delete" style="display:inline;"
-                  onsubmit="return confirm('Delete this record?')">
-              <button type="submit" class="btn btn-danger" style="font-size:0.76rem; padding:0.2rem 0.5rem;">Delete</button>
-            </form>
+            <span class="confirm-delete-wrap">
+              <button type="button" class="btn btn-danger btn-sm confirm-trigger">Delete</button>
+              <span class="confirm-delete-row">
+                <span style="font-size:0.8rem; color:var(--danger); margin-right:0.2rem;">Sure?</span>
+                <form method="post" action="/admin/reports/{{ row.scan_id }}/delete" style="display:inline;">
+                  <button type="submit" class="btn btn-danger btn-sm">Yes</button>
+                </form>
+                <button type="button" class="confirm-cancel btn btn-sm">No</button>
+              </span>
+            </span>
           </td>
         </tr>
         {% endfor %}
