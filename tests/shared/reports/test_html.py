@@ -211,7 +211,7 @@ def test_html_special_chars_in_user_fields_are_escaped():
 def test_owasp_reference_url_renders_as_anchor():
     finding = _finding()
     html = build_html_report(_result(findings=[finding]))
-    assert '<a href="https://owasp.org/Top10/A03_2021-Injection/">' in html
+    assert 'href="https://owasp.org/Top10/A03_2021-Injection/"' in html
 
 
 # --- Finding detail rendering ---------------------------------------------

@@ -246,10 +246,10 @@
       </div>
     </div>
 
-    {# Right: overflow menu or protected lock #}
+    {# Right: inline role toggle + overflow (or lock for protected / self) #}
     <div class="uc-right">
       {% if is_protected %}
-        <span class="uc-lock" title="Super-admin — actions locked">
+        <span class="uc-lock" title="Super-admin — cannot be modified via this panel">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
             <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
@@ -257,26 +257,31 @@
           Protected
         </span>
       {% elif u.email == user.email %}
-        <span class="uc-lock">(you)</span>
+        <span class="uc-lock" title="You cannot modify your own role">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+          </svg>
+          You
+        </span>
       {% else %}
-        <div class="overflow-anchor">
-          <button class="overflow-trigger" type="button" aria-label="User actions">···</button>
-          <div class="overflow-menu">
-            {# Role management #}
-            {% if u.role.value == "user" %}
-              <form method="post" action="/admin/users/{{ u.email | urlencode }}/promote"
-                    onsubmit="return confirm('Promote {{ u.email }} to admin?')">
-                <button type="submit">Promote to Admin</button>
-              </form>
-            {% else %}
-              <form method="post" action="/admin/users/{{ u.email | urlencode }}/demote"
-                    onsubmit="return confirm('Remove admin role from {{ u.email }}?')">
-                <button type="submit">Remove Admin</button>
-              </form>
-            {% endif %}
+        {# Inline role toggle — primary action, always visible #}
+        {% if u.role.value == "user" %}
+          <form method="post" action="/admin/users/{{ u.email | urlencode }}/promote"
+                onsubmit="return confirm('Promote {{ u.email }} to admin?\n\nThey will have full access to this admin panel on next login.')">
+            <button type="submit" class="role-btn role-btn-promote" title="Grant admin role">↑ Make Admin</button>
+          </form>
+        {% else %}
+          <form method="post" action="/admin/users/{{ u.email | urlencode }}/demote"
+                onsubmit="return confirm('Remove admin role from {{ u.email }}?\n\nThey will be redirected to the user portal on next login.')">
+            <button type="submit" class="role-btn role-btn-demote" title="Remove admin role">↓ Remove Admin</button>
+          </form>
+        {% endif %}
 
+        {# Overflow: destructive / infrequent actions only #}
+        <div class="overflow-anchor">
+          <button class="overflow-trigger" type="button" aria-label="More user actions">···</button>
+          <div class="overflow-menu">
             {# Activation toggle #}
-            <hr>
             {% if u.is_active %}
               <form method="post" action="/admin/users/{{ u.email | urlencode }}/deactivate"
                     onsubmit="return confirm('Deactivate {{ u.email }}? This blocks future scans.')">
