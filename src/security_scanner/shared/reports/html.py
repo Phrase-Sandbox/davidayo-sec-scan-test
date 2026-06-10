@@ -1689,36 +1689,32 @@ def _card_meta_row(f: VulnerabilityFinding) -> str:
     else:
         owasp_cell = ""
 
-    # ── Patch ────────────────────────────────────────────────────────────────
+    # ── Patch (only when generated) ──────────────────────────────────────────
     if f.patch_file_path:
-        patch_inner = (
+        patch_cell = (
+            '<div class="meta-cell">'
+            '<span class="meta-cell-label">Patch</span>'
             f'<span class="meta-patch-badge">↓ {escape(f.patch_file_path)}</span>'
+            "</div>"
         )
     else:
-        patch_inner = '<span class="meta-cell-value meta-none">—</span>'
-    patch_cell = (
-        '<div class="meta-cell">'
-        '<span class="meta-cell-label">Patch</span>'
-        f"{patch_inner}"
-        "</div>"
-    )
+        patch_cell = ""
 
-    # ── Detection provenance ─────────────────────────────────────────────────
+    # ── Detection provenance (only when populated) ───────────────────────────
     if f.consensus_score >= 1 and f.sources:
         engine_badges = "".join(
             f'<span class="meta-engine-badge">{escape(s)}</span>' for s in f.sources
         )
         n = f.consensus_score
         consensus = f"<span class=\"meta-consensus\">{n} engine{'s' if n != 1 else ''}</span>"
-        engines_inner = f'<div class="meta-engine-badges">{engine_badges}{consensus}</div>'
+        engines_cell = (
+            '<div class="meta-cell">'
+            '<span class="meta-cell-label">Detected By</span>'
+            f'<div class="meta-engine-badges">{engine_badges}{consensus}</div>'
+            "</div>"
+        )
     else:
-        engines_inner = '<span class="meta-cell-value meta-none">—</span>'
-    engines_cell = (
-        '<div class="meta-cell">'
-        '<span class="meta-cell-label">Detected By</span>'
-        f"{engines_inner}"
-        "</div>"
-    )
+        engines_cell = ""
 
     return (
         '<div class="meta-panel">'
