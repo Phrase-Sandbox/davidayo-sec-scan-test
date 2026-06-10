@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import base64
 import re
-from collections import OrderedDict
+from collections import Counter, OrderedDict
 from datetime import datetime
 from html import escape
 from pathlib import Path
@@ -88,6 +88,8 @@ _BRAND_HEADER = (
 
 
 _STYLE = """
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+
 :root {
   --bg: #fafaf7;
   --surface: #ffffff;
@@ -112,8 +114,7 @@ _STYLE = """
 }
 * { box-sizing: border-box; }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter",
-               "Helvetica Neue", Arial, sans-serif;
+  font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
   max-width: 960px;
   margin: 2.5em auto;
   padding: 0 1.25em 4em;
@@ -123,13 +124,13 @@ body {
   font-size: 16px;
 }
 h1 {
-  font-size: 1.8em;
+  font-size: 1.9em;
+  font-weight: 700;
   margin: 0 0 1em;
   padding-bottom: 0.4em;
   border-bottom: 2px solid var(--brand);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
-
 .brand-header {
   display: flex;
   align-items: center;
@@ -156,12 +157,13 @@ h1 {
   font-weight: 600;
 }
 h2 {
-  font-size: 1.25em;
-  margin-top: 2.25em;
+  font-size: 1.15em;
+  font-weight: 600;
+  margin-top: 2.5em;
   margin-bottom: 0.75em;
-  padding-bottom: 0.3em;
+  padding-bottom: 0.4em;
   border-bottom: 1px solid var(--border);
-  letter-spacing: -0.005em;
+  letter-spacing: -0.01em;
 }
 h3 { font-size: 1.05em; margin-top: 1.5em; margin-bottom: 0.4em; }
 h4 { font-size: 0.95em; margin: 1em 0 0.3em; color: var(--muted);
@@ -225,60 +227,6 @@ h4 { font-size: 0.95em; margin: 1em 0 0.3em; color: var(--muted);
   border-radius: 0 6px 6px 0;
 }
 
-.gate-decision {
-  display: inline-block;
-  padding: 0.45em 1em;
-  border-radius: 6px;
-  color: white;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: 0.9em;
-}
-
-table {
-  border-collapse: separate;
-  border-spacing: 0;
-  width: 100%;
-  margin-top: 0.75em;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
-}
-th, td {
-  padding: 0.65em 0.9em;
-  border-bottom: 1px solid var(--border);
-  text-align: left;
-  vertical-align: top;
-}
-thead th {
-  background: var(--row-tint);
-  font-size: 0.85em;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-tbody tr:nth-child(even) td { background: var(--row-tint); }
-tbody tr:hover td { background: #ecedf0; }
-tbody tr:last-child td { border-bottom: 0; }
-td a.finding-link {
-  color: var(--accent);
-  text-decoration: none;
-  font-weight: 600;
-}
-td a.finding-link:hover { text-decoration: underline; }
-td a.finding-link .vuln-name {
-  display: block;
-  font-size: 0.78em;
-  color: var(--muted);
-  font-weight: 400;
-  margin-top: 0.15em;
-}
-
 code {
   background: var(--row-tint);
   padding: 0.1em 0.45em;
@@ -296,7 +244,7 @@ pre {
   font-size: 0.88em;
 }
 
-/* Bucket headers — section dividers above each severity tier. */
+/* Bucket headers */
 .bucket-header {
   margin: 2em 0 0.5em;
   padding: 0.4em 0.9em;
@@ -315,22 +263,21 @@ pre {
   letter-spacing: 0.02em;
 }
 
-/* Finding cards — collapsible, anchor target gets a gentle nudge. */
+/* Finding cards — left-border accent only, no outer box */
 details.finding-block {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-left-width: 4px;
-  border-radius: 6px;
-  padding: 0 1.25em;
+  border-left: 3px solid var(--border);
+  padding: 0 0 0 1.25em;
   margin: 0.8em 0;
-  transition: border-color 0.15s ease;
 }
 details.finding-block.sev-critical { border-left-color: var(--critical); }
 details.finding-block.sev-high     { border-left-color: var(--high); }
 details.finding-block.sev-medium   { border-left-color: var(--medium); }
 details.finding-block.sev-low      { border-left-color: var(--low); }
 details.finding-block:target,
-details.finding-block:has(:target) { box-shadow: 0 0 0 3px rgba(74, 125, 163, 0.18); }
+details.finding-block:has(:target) {
+  background: rgba(74, 125, 163, 0.04);
+  border-radius: 0 6px 6px 0;
+}
 details.finding-block > summary {
   cursor: pointer;
   list-style: none;
@@ -347,17 +294,12 @@ details.finding-block > summary::before {
   color: var(--muted);
   font-size: 0.9em;
   transition: transform 0.15s ease;
+  flex-shrink: 0;
 }
 details.finding-block[open] > summary::before { transform: rotate(90deg); }
-details.finding-block .meta-row {
-  font-size: 0.85em;
-  color: var(--muted);
-  margin: 0.5em 0 1em;
-}
-details.finding-block .meta-row strong { color: var(--text); font-weight: 600; }
 details.finding-block > *:last-child { margin-bottom: 1em; }
 
-/* Quick-fix badge. */
+/* Quick-fix badge */
 .fix-badge {
   display: inline-block;
   padding: 0.1em 0.6em;
@@ -370,20 +312,37 @@ details.finding-block > *:last-child { margin-bottom: 1em; }
   margin-left: auto;
 }
 
-/* Risk callout — soft red band, not screaming. */
-.risk-callout {
-  background: var(--critical-tint);
-  color: var(--critical);
-  border-left: 3px solid var(--critical);
-  padding: 0.6em 0.9em;
-  border-radius: 0 6px 6px 0;
-  margin: 0.6em 0 0.9em;
+/* Finding card content: impact and fix as plain text */
+.finding-impact {
+  font-style: italic;
+  color: var(--muted);
+  margin: 0.2em 0 0.6em;
   font-size: 0.95em;
+  line-height: 1.55;
 }
-.risk-callout::before { content: "⚠ Risk: "; font-weight: 600; }
+.finding-fix {
+  margin: 0.4em 0 0.8em;
+  font-size: 0.95em;
+  line-height: 1.55;
+}
 
-/* "PASTE THIS INTO YOUR AI EDITOR" — dark surface, always visible when
-   the card is open (no JS, no copy button). */
+/* AI-prompt collapse toggle — subordinate to content */
+details.prompt-toggle {
+  margin: 0.4em 0 0.9em;
+}
+details.prompt-toggle > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 0.35em 0;
+  font-size: 0.8em;
+  color: var(--muted);
+  font-weight: 500;
+}
+details.prompt-toggle > summary::-webkit-details-marker { display: none; }
+details.prompt-toggle > summary::before { content: "▸ "; }
+details.prompt-toggle[open] > summary::before { content: "▾ "; }
+
+/* "PASTE THIS" dark surface */
 .ai-prompt {
   background: var(--code-bg);
   color: var(--code-fg);
@@ -406,23 +365,29 @@ details.finding-block > *:last-child { margin-bottom: 1em; }
   margin-bottom: 0.6em;
 }
 
-/* AI-prompt collapse toggle inside a finding card. */
-details.prompt-toggle {
+/* Technical-details toggle inside a finding card */
+details.tech-details {
   margin: 0.4em 0 0.9em;
 }
-details.prompt-toggle > summary {
+details.tech-details > summary {
   cursor: pointer;
   list-style: none;
-  padding: 0.35em 0;
-  font-size: 0.82em;
-  color: var(--accent);
-  font-weight: 600;
+  padding: 0.3em 0;
+  font-size: 0.8em;
+  color: var(--muted);
+  font-weight: 500;
 }
-details.prompt-toggle > summary::-webkit-details-marker { display: none; }
-details.prompt-toggle > summary::before { content: "▸ "; }
-details.prompt-toggle[open] > summary::before { content: "▾ "; }
+details.tech-details > summary::-webkit-details-marker { display: none; }
+details.tech-details > summary::before { content: "▸ "; }
+details.tech-details[open] > summary::before { content: "▾ "; }
+.meta-row {
+  font-size: 0.85em;
+  color: var(--muted);
+  margin: 0.5em 0;
+}
+.meta-row strong { color: var(--text); font-weight: 600; }
 
-/* Nested code-reveal toggle inside a finding card. */
+/* Nested code-reveal toggle */
 details.code-toggle {
   margin: 0.4em 0 1em;
   border: 1px dashed var(--border);
@@ -461,7 +426,7 @@ details.code-toggle pre.code-snippet {
   margin-right: 0.9em;
 }
 
-/* Group card — multiple Medium findings sharing id+severity. */
+/* Group card */
 .group-intro {
   background: var(--low-tint);
   border-left: 3px solid var(--accent);
@@ -488,8 +453,8 @@ ol.location-list > li { margin: 0.5em 0; }
 /* Verdict hero banner */
 .gate-hero {
   border-radius: 8px;
-  padding: 1.4em 1.75em 1.2em;
-  margin: 0 0 1.5em;
+  padding: 1.6em 2em 1.4em;
+  margin: 0 0 0.75em;
 }
 .gate-hero.blocked    { background: #fff1f0; border: 1.5px solid #ffa39e; }
 .gate-hero.pass       { background: #f0fff4; border: 1.5px solid #95de64; }
@@ -497,30 +462,52 @@ ol.location-list > li { margin: 0.5em 0; }
 .gate-hero.bypassed   { background: #f9f0ff; border: 1.5px solid #d3adf7; }
 .gate-hero.scan_failed { background: #fff1f0; border: 1.5px solid #ffa39e; }
 .gate-hero-verdict {
-  font-size: 2.2em;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  margin: 0 0 0.15em;
-  line-height: 1.1;
+  font-size: 3em;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  margin: 0 0 0.2em;
+  line-height: 1.0;
 }
 .gate-hero.blocked .gate-hero-verdict    { color: #b94a4a; }
 .gate-hero.pass .gate-hero-verdict       { color: #3f8a5a; }
 .gate-hero.advisory .gate-hero-verdict   { color: #7c6b2a; }
 .gate-hero.bypassed .gate-hero-verdict   { color: #7c3aed; }
 .gate-hero.scan_failed .gate-hero-verdict { color: #b94a4a; }
+.gate-hero-score-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7em;
+  margin: 0 0 0.5em;
+}
+.gate-hero-score {
+  font-size: 1.9em;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.gate-hero-score-label {
+  font-size: 0.95em;
+  font-weight: 600;
+}
 .gate-hero-counts {
   font-size: 1em;
   font-weight: 600;
   color: #444;
-  margin: 0 0 0.4em;
+  margin: 0 0 0.35em;
 }
 .gate-hero-reason {
   font-size: 0.95em;
   color: #555;
-  margin: 0 0 0.7em;
+  margin: 0 0 0.35em;
   line-height: 1.55;
 }
-.gate-top-risks { display: flex; flex-wrap: wrap; gap: 0.5em; }
+.gate-hero-cause {
+  font-size: 0.9em;
+  color: #555;
+  margin: 0 0 0.7em;
+}
+.gate-hero-cause strong { color: var(--text); }
+.gate-top-risks { display: flex; flex-wrap: wrap; gap: 0.5em; margin-top: 0.25em; }
 .top-risk-chip {
   display: inline-block;
   padding: 0.22em 0.7em;
@@ -530,6 +517,127 @@ ol.location-list > li { margin: 0.5em 0; }
   background: rgba(185,74,74,0.1);
   color: #b94a4a;
   border: 1px solid rgba(185,74,74,0.25);
+}
+
+/* Repo context strip */
+.repo-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5em;
+  margin: 0 0 1.75em;
+  font-size: 0.83em;
+}
+.repo-context-chip {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.2em 0.65em;
+  color: var(--muted);
+  font-weight: 500;
+}
+.repo-context-chip strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* Executive summary section */
+.exec-summary {
+  margin: 0 0 2em;
+}
+.exec-summary p {
+  font-size: 1.05em;
+  line-height: 1.75;
+  max-width: 680px;
+  margin: 0 0 0.75em;
+  color: #333;
+}
+.exec-score-line {
+  font-size: 1em;
+  font-weight: 600;
+  margin: 0 0 0.6em;
+  color: var(--text);
+}
+
+/* Remediation complexity badge */
+.remediation-complexity {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+  font-size: 0.9em;
+  color: var(--muted);
+  margin-top: 0.25em;
+}
+.complexity-badge {
+  display: inline-block;
+  padding: 0.15em 0.65em;
+  border-radius: 4px;
+  font-size: 0.9em;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.complexity-low      { background: var(--low-tint);      color: var(--low); }
+.complexity-medium   { background: var(--medium-tint);   color: var(--medium); }
+.complexity-high     { background: var(--high-tint);     color: var(--high); }
+.complexity-critical { background: var(--critical-tint); color: var(--critical); }
+
+/* Fix First section */
+.fix-first {
+  margin: 0 0 2em;
+}
+.fix-first-list {
+  list-style: none;
+  margin: 0.75em 0 0;
+  padding: 0;
+}
+.fix-first-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.9em;
+  padding: 0.55em 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.97em;
+  text-decoration: none;
+  color: inherit;
+}
+.fix-first-list li:last-child { border-bottom: none; }
+.fix-first-list a {
+  display: flex;
+  align-items: baseline;
+  gap: 0.9em;
+  width: 100%;
+  text-decoration: none;
+  color: inherit;
+}
+.fix-first-list a:hover .fix-first-name { text-decoration: underline; }
+.fix-first-num {
+  font-size: 1em;
+  font-weight: 700;
+  color: var(--muted);
+  min-width: 1.4em;
+  flex-shrink: 0;
+}
+.fix-first-name {
+  font-weight: 600;
+  flex: 1;
+}
+.fix-first-loc {
+  color: var(--muted);
+  font-size: 0.88em;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* Recommended actions section */
+.recommended-actions {
+  margin: 0 0 2em;
+}
+.recommended-actions ol {
+  margin: 0.75em 0 0;
+  padding-left: 1.6em;
+}
+.recommended-actions li {
+  padding: 0.4em 0;
+  line-height: 1.55;
+  font-size: 0.97em;
 }
 
 /* Action callout — green "do this first" band */
@@ -545,35 +653,274 @@ ol.location-list > li { margin: 0.5em 0; }
 }
 .action-callout::before { content: "→ "; font-weight: 700; }
 
-/* Impact callout — replaces old .risk-callout */
-.impact-callout {
-  background: var(--critical-tint);
-  border-left: 3px solid var(--critical);
-  padding: 0.5em 0.9em 0.6em;
-  border-radius: 0 6px 6px 0;
-  margin: 0.5em 0 0.8em;
-  font-size: 0.9em;
-  line-height: 1.5;
-}
-.impact-callout-label {
-  font-size: 0.75em;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--critical);
-  display: block;
-  margin-bottom: 0.25em;
-}
-
 /* Print: expand every detail and drop interactive affordances. */
 @media print {
   body { background: white; max-width: none; margin: 1em; }
   details.finding-block, details.code-toggle { break-inside: avoid; }
   details, details > * { display: block !important; }
   details > summary::before { content: ""; }
-  thead th { position: static; }
 }
 """
+
+
+# --- Risk score, executive summary, context strip, actions ----------------
+
+_ACTION_BY_VULN_ID: dict[str, str] = {
+    "SECRET-001": "Rotate all exposed credentials and audit secret storage",
+    "A01:2021": "Restrict access controls and apply least-privilege principle",
+    "A02:2021": "Update cryptographic algorithms to current standards",
+    "A03:2021": "Parameterize all database queries and sanitize inputs",
+    "A04:2021": "Remove hardcoded configuration and use secrets management",
+    "A05:2021": "Patch or upgrade vulnerable dependencies",
+    "A06:2021": "Update deprecated or vulnerable components",
+    "A07:2021": "Harden authentication configuration and enforce MFA",
+    "A08:2021": "Validate all deserialized input before processing",
+    "A09:2021": "Enable security logging and set up alerting",
+    "A10:2021": "Disable or restrict server-side request forgery entry points",
+}
+
+
+def _risk_score(findings: list[VulnerabilityFinding]) -> int:
+    """Compute a 0–100 risk score. High score = high danger."""
+    score = 0
+    for f in findings:
+        verified = f.verification_status == VerificationStatus.verified
+        if f.severity == Severity.Critical:
+            score += 18 if verified else 12
+        elif f.severity == Severity.High:
+            score += 8 if verified else 5
+        elif f.severity == Severity.Medium:
+            score += 3 if verified else 2
+        else:
+            score += 1
+    return min(100, score)
+
+
+def _risk_score_label(score: int) -> tuple[str, str]:
+    """Return (label, css_class) for a risk score."""
+    if score >= 81:
+        return ("Critical Risk", "var(--critical)")
+    if score >= 51:
+        return ("High Risk", "var(--high)")
+    if score >= 21:
+        return ("Medium Risk", "var(--medium)")
+    return ("Low Risk", "var(--low)")
+
+
+def _remediation_complexity(
+    findings: list[VulnerabilityFinding],
+) -> tuple[str, str]:
+    """Return (label, css_suffix) for remediation complexity."""
+    crit_verified = sum(
+        1
+        for f in findings
+        if f.severity == Severity.Critical
+        and f.verification_status == VerificationStatus.verified
+    )
+    high_verified = sum(
+        1
+        for f in findings
+        if f.severity == Severity.High
+        and f.verification_status == VerificationStatus.verified
+    )
+    if crit_verified >= 3:
+        return ("Critical", "critical")
+    if crit_verified >= 1 or high_verified >= 3:
+        return ("High", "high")
+    if high_verified >= 1:
+        return ("Medium", "medium")
+    return ("Low", "low")
+
+
+def _repo_context_row(result: ScanResult) -> str:
+    """Compact context strip: repo name, scan type, actor, date."""
+    # Extract the last two path segments of the repo URL as the repo name.
+    repo_name = result.repo_url.rstrip("/").rsplit("/", 2)
+    repo_display = "/".join(repo_name[-2:]) if len(repo_name) >= 2 else repo_name[-1]
+
+    chips = [
+        f'<span class="repo-context-chip"><strong>{escape(repo_display)}</strong></span>',
+        f'<span class="repo-context-chip">{escape(result.scan_type.value)}</span>',
+        f'<span class="repo-context-chip">{escape(result.triggered_by)}</span>',
+        f'<span class="repo-context-chip">'
+        f'{escape(result.timestamp.strftime("%Y-%m-%d %H:%M UTC"))}'
+        f"</span>",
+    ]
+    return f'<div class="repo-context">{"".join(chips)}</div>'
+
+
+def _executive_summary_section(result: ScanResult, risk_score: int) -> str:
+    """Template-generate a plain-English executive summary from findings data."""
+    findings = result.findings
+    if not findings:
+        score_label, score_colour = _risk_score_label(0)
+        return (
+            '<section class="exec-summary">'
+            '<p class="exec-score-line">'
+            f'Risk Score: <span style="color:{score_colour}">0</span>'
+            f' — <span style="color:{score_colour}">{escape(score_label)}</span>'
+            "</p>"
+            "<p>No security findings were identified in this scan. "
+            "The repository appears clean and deployment may proceed.</p>"
+            "</section>"
+        )
+
+    score_label, score_colour = _risk_score_label(risk_score)
+
+    crit_verified = [
+        f
+        for f in findings
+        if f.severity == Severity.Critical
+        and f.verification_status == VerificationStatus.verified
+    ]
+    high_verified = [
+        f
+        for f in findings
+        if f.severity == Severity.High
+        and f.verification_status == VerificationStatus.verified
+    ]
+    total_blocking = len(crit_verified) + len(high_verified)
+
+    type_counts = Counter(
+        vuln_display_name(f.vulnerability_id) or f.vulnerability_id
+        for f in findings
+        if f.severity in (Severity.Critical, Severity.High)
+    )
+    top_two = [name for name, _ in type_counts.most_common(2)]
+
+    # Sentence 1: what was found
+    if total_blocking:
+        count_word = str(total_blocking)
+        issues_word = "issue" if total_blocking == 1 else "issues"
+        sentence1 = (
+            f"{count_word} verified critical or high-severity {issues_word} "
+            "were identified in this repository."
+        )
+    else:
+        crit_count = sum(1 for f in findings if f.severity == Severity.Critical)
+        high_count = sum(1 for f in findings if f.severity == Severity.High)
+        if crit_count or high_count:
+            sentence1 = (
+                f"{crit_count + high_count} critical or high-severity findings "
+                "were detected, though none have been verified."
+            )
+        else:
+            sentence1 = (
+                f"{len(findings)} finding{'s' if len(findings) != 1 else ''} "
+                "were identified, all medium severity or below."
+            )
+
+    # Sentence 2: most common types
+    if top_two:
+        types_str = " and ".join(escape(t) for t in top_two)
+        sentence2 = f"Most issues originate from {types_str}."
+    else:
+        sentence2 = ""
+
+    complexity_label, complexity_css = _remediation_complexity(findings)
+
+    score_html = (
+        '<p class="exec-score-line">'
+        f'Risk Score: <span style="color:{score_colour};font-weight:700">{risk_score}</span>'
+        f' — <span style="color:{score_colour}">{escape(score_label)}</span>'
+        "</p>"
+    )
+    p1 = f"<p>{escape(sentence1)}{(' ' + sentence2) if sentence2 else ''}</p>"
+    complexity_html = (
+        '<div class="remediation-complexity">'
+        "Remediation Complexity: "
+        f'<span class="complexity-badge complexity-{complexity_css}">'
+        f"{escape(complexity_label)}"
+        "</span>"
+        "</div>"
+    )
+    return (
+        '<section class="exec-summary">'
+        f"{score_html}"
+        f"{p1}"
+        f"{complexity_html}"
+        "</section>"
+    )
+
+
+def _fix_first_section(findings: list[VulnerabilityFinding]) -> str:
+    """Top 3 critical/high findings as a prioritised action list."""
+    top = [f for f in findings if f.severity in (Severity.Critical, Severity.High)][:3]
+    if not top:
+        return ""
+
+    items_html = []
+    for i, f in enumerate(findings, start=1):
+        if f not in top:
+            continue
+        idx = findings.index(f) + 1
+        name = escape(vuln_display_name(f.vulnerability_id) or f.vulnerability_id)
+        loc = f.affected_file
+        if f.affected_lines:
+            loc = f"{loc}:{f.affected_lines}"
+        items_html.append(
+            f'<li><a href="#finding-{idx}">'
+            f'<span class="fix-first-num">{top.index(f) + 1}</span>'
+            f'<span class="fix-first-name">{name}</span>'
+            f'<span class="fix-first-loc">{escape(loc)}</span>'
+            "</a></li>"
+        )
+
+    list_html = f'<ol class="fix-first-list">{"".join(items_html)}</ol>'
+    return (
+        '<section class="fix-first">'
+        "<h2>Fix First</h2>"
+        f"{list_html}"
+        "</section>"
+    )
+
+
+def _recommended_actions_section(findings: list[VulnerabilityFinding]) -> str:
+    """Top 3 unique recommended actions derived from vulnerability category."""
+    if not findings:
+        return ""
+
+    priority_order = [Severity.Critical, Severity.High, Severity.Medium, Severity.Low]
+    sorted_findings = sorted(
+        findings,
+        key=lambda f: (
+            priority_order.index(f.severity),
+            0 if f.verification_status == VerificationStatus.verified else 1,
+        ),
+    )
+
+    seen_actions: list[str] = []
+    seen_vuln_ids: set[str] = set()
+    for f in sorted_findings:
+        if len(seen_actions) >= 3:
+            break
+        # Look up a clean action by vuln_id prefix or exact match.
+        action = _ACTION_BY_VULN_ID.get(f.vulnerability_id)
+        if action is None:
+            # Try prefix match (e.g. "A03" matches "A03:2021")
+            for key, val in _ACTION_BY_VULN_ID.items():
+                if f.vulnerability_id.startswith(key[:3]):
+                    action = val
+                    break
+        if action is None:
+            # Fall back to first sentence of suggested_fix, capitalised
+            raw = (f.suggested_fix or "").strip().split(".")[0].strip()
+            if raw:
+                action = raw[0].upper() + raw[1:]
+        if action and action not in seen_actions and f.vulnerability_id not in seen_vuln_ids:
+            seen_actions.append(action)
+            seen_vuln_ids.add(f.vulnerability_id)
+
+    if not seen_actions:
+        return ""
+
+    items_html = "".join(f"<li>{escape(a)}</li>" for a in seen_actions)
+    return (
+        '<section class="recommended-actions">'
+        "<h2>Recommended Actions</h2>"
+        f"<ol>{items_html}</ol>"
+        "</section>"
+    )
 
 
 def build_html_report(
@@ -587,32 +934,48 @@ def build_html_report(
     vulnerable code" toggle revealing the actual lines referenced by
     ``affected_lines``. Without *files*, the toggle is silently omitted.
     """
+    report_title = (
+        "Deployment Risk Assessment"
+        if result.scan_type == ScanType.deployment_gate
+        else "Repository Security Assessment"
+    )
+
+    risk_score = _risk_score(result.findings) if result.findings else 0
+
     sections: list[str] = []
 
-    # Gate hero banner is the first thing the reader sees.
     if result.scan_type == ScanType.deployment_gate:
-        sections.append(_gate_decision_section(result.gate_decision, result.findings))
+        sections.append(
+            _gate_decision_section(result.gate_decision, result.findings, risk_score)
+        )
+
+    sections.append(_repo_context_row(result))
+    sections.append(_executive_summary_section(result, risk_score))
 
     if result.findings:
         sections.append(_summary_bar(result.findings))
 
-    # One-sentence action callout immediately after the summary.
+    fix_first = _fix_first_section(result.findings)
+    if fix_first:
+        sections.append(fix_first)
+
     if result.scan_type == ScanType.deployment_gate and result.findings:
         callout = _action_callout(result.gate_decision, result.findings)
         if callout:
             sections.append(callout)
+
+    rec_actions = _recommended_actions_section(result.findings)
+    if rec_actions:
+        sections.append(rec_actions)
 
     warnings = _gather_warnings(result)
     if warnings:
         sections.append(_warnings_section(warnings))
 
     if result.findings:
-        sections.append(_findings_table(result.findings))
         sections.append(_detailed_findings(result.findings, files))
 
-    # Metadata collapsed at the bottom — readers who need it can expand it.
     sections.append(_metadata_section(result))
-
     sections.append(_footer(result.findings_count))
 
     body = "\n".join(sections)
@@ -621,12 +984,14 @@ def build_html_report(
         '<html lang="en">\n'
         "<head>\n"
         '<meta charset="utf-8">\n'
-        "<title>Security Scan Report</title>\n"
+        f"<title>{escape(report_title)}</title>\n"
+        '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
+        '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
         f"<style>{_STYLE}</style>\n"
         "</head>\n"
         "<body>\n"
         f"{_BRAND_HEADER}\n"
-        "<h1>Security Scan Report</h1>\n"
+        f"<h1>{escape(report_title)}</h1>\n"
         f"{body}\n"
         "</body>\n"
         "</html>\n"
@@ -720,7 +1085,11 @@ def _warnings_section(warnings: list[str]) -> str:
     return f"<section>\n<h2>Warnings</h2>\n{blocks}\n</section>"
 
 
-def _gate_decision_section(decision: GateDecision, findings: list[VulnerabilityFinding]) -> str:
+def _gate_decision_section(
+    decision: GateDecision,
+    findings: list[VulnerabilityFinding],
+    risk_score: int,
+) -> str:
     c = sum(1 for f in findings if f.severity == Severity.Critical)
     h = sum(1 for f in findings if f.severity == Severity.High)
     m = sum(1 for f in findings if f.severity == Severity.Medium)
@@ -739,18 +1108,35 @@ def _gate_decision_section(decision: GateDecision, findings: list[VulnerabilityF
 
     _REASONS: dict[GateDecision, str] = {
         GateDecision.blocked: (
-            "Deployment blocked. Verified critical issues could expose sensitive data "
-            "or allow unauthorized access. Fix critical findings before deploying."
+            "Deployment blocked due to verified critical findings that could expose "
+            "sensitive data or allow unauthorized access."
         ),
         GateDecision.pass_: "No blocking issues found. Safe to deploy.",
         GateDecision.advisory: (
             "Deployment can proceed with caution. Non-blocking issues were found — "
             "review and schedule fixes before the next sprint."
         ),
-        GateDecision.bypassed: "Gate bypassed. Issues were acknowledged and the override is recorded for audit.",
+        GateDecision.bypassed: (
+            "Gate bypassed. Issues were acknowledged and the override is recorded for audit."
+        ),
         GateDecision.scan_failed: "Scan encountered an error and could not reach a gate decision.",
     }
     reason = _REASONS.get(decision, "Gate decision: " + decision.value)
+
+    # Most likely cause: most-frequent vulnerability type among Critical/High findings.
+    cause_html = ""
+    top_type_counts = Counter(
+        vuln_display_name(f.vulnerability_id) or f.vulnerability_id
+        for f in findings
+        if f.severity in (Severity.Critical, Severity.High)
+    )
+    if top_type_counts:
+        top_type = top_type_counts.most_common(1)[0][0]
+        cause_html = (
+            f'<div class="gate-hero-cause">'
+            f"<strong>Most likely cause:</strong> {escape(top_type)}"
+            f"</div>"
+        )
 
     top_findings = [f for f in findings if f.severity in (Severity.Critical, Severity.High)][:3]
     chips_html = ""
@@ -763,15 +1149,25 @@ def _gate_decision_section(decision: GateDecision, findings: list[VulnerabilityF
         )
         chips_html = f'<div class="gate-top-risks">{chips}</div>'
 
-    css_cls = decision.value.replace("_", "_")  # "pass_" stays but CSS class is "pass"
-    # GateDecision.pass_ has value "pass", others match their value directly.
+    score_label, score_colour = _risk_score_label(risk_score)
+    score_row_html = (
+        f'<div class="gate-hero-score-row">'
+        f'<span class="gate-hero-score" style="color:{score_colour}">{risk_score}</span>'
+        f'<span class="gate-hero-score-label" style="color:{score_colour}">'
+        f"Risk Score — {escape(score_label)}"
+        f"</span>"
+        f"</div>"
+    )
+
     css_cls = decision.value
 
     return (
         f'<div class="gate-hero {css_cls}">\n'
         f'<div class="gate-hero-verdict">{escape(decision.value.upper())}</div>\n'
+        f"{score_row_html}\n"
         f'<div class="gate-hero-counts">{counts_html}</div>\n'
         f'<div class="gate-hero-reason">{escape(reason)}</div>\n'
+        f"{cause_html}\n"
         f"{chips_html}\n"
         f"</div>"
     )
@@ -795,41 +1191,6 @@ def _action_callout(decision: GateDecision, findings: list[VulnerabilityFinding]
     return f'<div class="action-callout">{text}</div>'
 
 
-def _findings_table(findings: list[VulnerabilityFinding]) -> str:
-    rows = "\n".join(_findings_table_row(f, idx) for idx, f in enumerate(findings, start=1))
-    return (
-        "<section>\n"
-        f"<h2>Findings ({len(findings)})</h2>\n"
-        "<table>\n"
-        "<thead><tr>"
-        "<th>ID</th><th>Severity</th><th>Confidence</th>"
-        "<th>Verification</th><th>File</th><th>Lines</th>"
-        "<th>OWASP reference</th>"
-        "</tr></thead>\n"
-        f"<tbody>\n{rows}\n</tbody>\n"
-        "</table>\n"
-        "</section>"
-    )
-
-
-def _findings_table_row(f: VulnerabilityFinding, idx: int) -> str:
-    anchor = f"finding-{idx}"
-    name = vuln_display_name(f.vulnerability_id)
-    name_html = f'<span class="vuln-name">{escape(name)}</span>' if name else ""
-    return (
-        "<tr>"
-        f'<td><a class="finding-link" href="#{anchor}">'
-        f"{escape(f.vulnerability_id)}{name_html}</a></td>"
-        f"<td>{_severity_span(f.severity)}</td>"
-        f"<td>{escape(f.confidence.value)}</td>"
-        f"<td>{escape(f.verification_status.value)}</td>"
-        f"<td>{_code(f.affected_file)}</td>"
-        f"<td>{escape(f.affected_lines or '—')}</td>"
-        f"<td>{_owasp_link(f.owasp_reference)}</td>"
-        "</tr>"
-    )
-
-
 # --- Detailed findings: bucket, group, render -----------------------------
 
 
@@ -843,12 +1204,12 @@ def _detailed_findings(
     # `#finding-N` anchors continue to resolve correctly.
     indices = {id(f): i for i, f in enumerate(findings, start=1)}
 
-    parts: list[str] = ["<section>\n<h2>Finding details</h2>"]
+    parts: list[str] = ["<section>\n<h2>Finding Details</h2>"]
 
     if urgent:
         parts.append(
             _render_bucket(
-                "Urgent",
+                "Urgent Findings",
                 "urgent",
                 "fix before you launch",
                 urgent,
@@ -860,7 +1221,7 @@ def _detailed_findings(
     if cleanup:
         parts.append(
             _render_bucket(
-                "Cleanup",
+                "High Priority Findings",
                 "cleanup",
                 "fix soon",
                 cleanup,
@@ -872,7 +1233,7 @@ def _detailed_findings(
     if advisory:
         parts.append(
             _render_bucket(
-                "Advisory",
+                "Additional Findings",
                 "advisory",
                 "review when convenient",
                 advisory,
@@ -1030,24 +1391,26 @@ def _finding_card(
         f"<span>{escape(f.vulnerability_id)}{name_suffix} — {location}</span>",
         badge,
     ]
-    # Advisory_real findings get the auto-triaged badge.
     if f.verification_status == VerificationStatus.advisory_real:
         parts.append(_advisory_real_badge())
     parts += [
         "</summary>",
+        # What is wrong?
         f"<p>{escape(f.description)}</p>",
-        '<div class="impact-callout">'
-        '<span class="impact-callout-label">Impact</span>'
-        f"{escape(f.exploit_scenario)}"
-        "</div>",
-        _ai_prompt_block(_synthesize_ai_prompt(f), header="Paste this into your AI editor"),
+        # Why does it matter? — italic, no box
+        f'<p class="finding-impact"><em>{escape(f.exploit_scenario)}</em></p>',
+        # What should I do? — plain text, always visible
+        f'<p class="finding-fix"><strong>Fix:</strong> {escape(f.suggested_fix)}</p>',
     ]
-    # Render upload context panel when present (upload findings).
+    # Collapsed: code snippet
+    snippet = _code_snippet_block(files, f.affected_file, f.affected_lines)
+    if snippet:
+        parts.append(snippet)
+    # Collapsed: upload or cross-file context
     upload_panel = _upload_context_panel(f.context_summary)
     if upload_panel:
         parts.append(upload_panel)
     elif f.context_summary:
-        # Fallback: generic cross-file context toggle.
         parts.append(
             '<details class="code-toggle">'
             "<summary>Cross-file context</summary>"
@@ -1055,10 +1418,17 @@ def _finding_card(
             f"{escape(f.context_summary)}</pre>"
             "</details>"
         )
-    snippet = _code_snippet_block(files, f.affected_file, f.affected_lines)
-    if snippet:
-        parts.append(snippet)
-    parts.append(_card_meta_row(f))
+    # Collapsed: AI fix prompt
+    parts.append(
+        _ai_prompt_block(_synthesize_ai_prompt(f), header="AI fix prompt")
+    )
+    # Collapsed: technical metadata
+    parts.append(
+        '<details class="tech-details">'
+        "<summary>Technical details</summary>"
+        + _card_meta_row(f)
+        + "</details>"
+    )
     parts.append("</details>")
     return "\n".join(parts)
 
@@ -1166,7 +1536,7 @@ def _synthesize_group_prompt(group: list[VulnerabilityFinding]) -> str:
 def _ai_prompt_block(prompt_text: str, *, header: str) -> str:
     return (
         '<details class="prompt-toggle">'
-        f'<summary>📋 {escape(header)}</summary>'
+        f'<summary>→ {escape(header)}</summary>'
         '<div class="ai-prompt">'
         f"{escape(prompt_text)}"
         "</div>"
