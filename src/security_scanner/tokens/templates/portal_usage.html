@@ -1,171 +1,336 @@
 {% extends "base.html" %}
 {% block title %}Usage — Phrase Security Scanner{% endblock %}
+
 {% block tabs %}
 <nav class="tabs">
+  <a href="/portal/dashboard">Dashboard</a>
   <a href="/portal/">Token</a>
-  <a href="/portal/scans">Scans</a>
   <a href="/portal/reports">Reports</a>
   <a href="/portal/settings">Settings</a>
   <a href="/portal/usage" class="active">Usage</a>
 </nav>
 {% endblock %}
+
+{% block extra_styles %}
+<style>
+  main { max-width: 900px; }
+
+  /* Replicate admin-list-card for portal context */
+  .admin-list-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-l);
+    overflow: hidden;
+    box-shadow: var(--shadow-s);
+    margin-bottom: 1.25rem;
+  }
+  .section-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.85rem 1.15rem;
+    cursor: pointer;
+    background: var(--bg-inset);
+    border: none;
+    width: 100%;
+    text-align: left;
+    font: inherit;
+    color: var(--fg-2);
+    font-size: var(--text-sm);
+    font-weight: 700;
+    transition: background 0.1s;
+    gap: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .section-toggle:hover { background: var(--bg); color: var(--fg); }
+  .section-toggle .ct-icon { font-size: 0.7rem; color: var(--muted); transition: transform 0.2s; flex-shrink: 0; }
+  .section-toggle[aria-expanded="true"] .ct-icon { transform: rotate(180deg); }
+  .section-body { border-top: 1px solid var(--border); }
+  .section-body.hidden { display: none; }
+
+  .provider-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem; }
+  .provider-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-l);
+    padding: 1.1rem 1.25rem;
+    box-shadow: var(--shadow-s);
+  }
+  .provider-card h4 {
+    font-size: var(--text-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+    margin: 0 0 0.75rem;
+  }
+  .pc-stat { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.3rem; }
+  .pc-stat-label { font-size: var(--text-xs); color: var(--muted); }
+  .pc-stat-val { font-size: var(--text-sm); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .pc-model { margin-top: 0.6rem; font-size: 0.75rem; color: var(--muted); font-family: var(--ff-mono); border-top: 1px solid var(--border); padding-top: 0.5rem; }
+
+  .usage-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+  .usage-table th { background: var(--bg-inset); color: var(--muted); font-weight: 600; font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.055em; padding: 0.5rem 0.9rem; text-align: left; border-bottom: 1px solid var(--border); }
+  .usage-table td { padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--border); }
+  .usage-table tbody tr:last-child td { border-bottom: none; }
+
+  .about-card { background: var(--bg-inset); border: 1px solid var(--border); border-radius: var(--radius-l); padding: 1.1rem 1.25rem; font-size: var(--text-sm); color: var(--muted); line-height: 1.65; }
+  .about-card h4 { font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--fg-2); margin: 0 0 0.5rem; }
+</style>
+{% endblock %}
+
 {% block content %}
 
-{# ---- Group usage rows by month ------------------------------------------ #}
+{# ── Compute aggregates ── #}
+{% set ns = namespace(
+  this_calls=0, this_in=0, this_out=0, this_cost=0.0,
+  lm_calls=0, lm_in=0, lm_out=0, lm_cost=0.0
+) %}
+
 {% set this_month_rows = [] %}
 {% set last_month_rows = [] %}
 {% for entry in usage %}
   {% if entry.row.year_month == this_month %}
     {% set _ = this_month_rows.append(entry) %}
+    {% set ns.this_calls = ns.this_calls + entry.row.scan_count %}
+    {% set ns.this_in    = ns.this_in    + entry.row.input_tokens %}
+    {% set ns.this_out   = ns.this_out   + entry.row.output_tokens %}
+    {% set ns.this_cost  = ns.this_cost  + entry.est_cost %}
   {% else %}
     {% set _ = last_month_rows.append(entry) %}
+    {% set ns.lm_calls = ns.lm_calls + entry.row.scan_count %}
+    {% set ns.lm_in    = ns.lm_in    + entry.row.input_tokens %}
+    {% set ns.lm_out   = ns.lm_out   + entry.row.output_tokens %}
+    {% set ns.lm_cost  = ns.lm_cost  + entry.est_cost %}
   {% endif %}
 {% endfor %}
 
-{# ---- Totals for this month ------------------------------------------------ #}
-{% set total_calls = namespace(v=0) %}
-{% set total_in = namespace(v=0) %}
-{% set total_out = namespace(v=0) %}
-{% set total_cost = namespace(v=0.0) %}
-{% for entry in this_month_rows %}
-  {% set total_calls.v = total_calls.v + entry.row.scan_count %}
-  {% set total_in.v    = total_in.v    + entry.row.input_tokens %}
-  {% set total_out.v   = total_out.v   + entry.row.output_tokens %}
-  {% set total_cost.v  = total_cost.v  + entry.est_cost %}
-{% endfor %}
+<div class="page-header">
+  <h1 class="page-title">Usage</h1>
+  <p class="page-subtitle">LLM scan activity and estimated cost</p>
+</div>
 
-<div class="card">
-  <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
-    <h2 style="margin: 0;">{{ this_month }} — this month</h2>
-    <span class="muted" style="font-size: 0.82rem;">Estimates based on published list prices</span>
+{# ── Outcomes-first posture strip ── #}
+<div class="posture-strip">
+  <div class="posture-stat">
+    <div class="ps-num">{{ ns.this_calls }}</div>
+    <div class="ps-label">Scans this month</div>
   </div>
-
-  {% if this_month_rows %}
-  <div class="stat-grid" style="margin-bottom: 1.25rem;">
-    <div class="stat-card">
-      <div class="stat-num">{{ "{:,}".format(total_calls.v) }}</div>
-      <div class="stat-label">Scans</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-num">{{ "{:,}".format(total_in.v) }}</div>
-      <div class="stat-label">Input tokens</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-num">{{ "{:,}".format(total_out.v) }}</div>
-      <div class="stat-label">Output tokens</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-num">${{ "%.4f"|format(total_cost.v) }}</div>
-      <div class="stat-label">Est. cost</div>
-    </div>
+  <div class="posture-stat">
+    <div class="ps-num">{{ "{:,.0f}".format((ns.this_in + ns.this_out) / 1000) }}k</div>
+    <div class="ps-label">Tokens this month</div>
   </div>
-
-  <div style="overflow-x: auto;">
-    <table>
-      <thead>
-        <tr>
-          <th>Provider</th>
-          <th>Model</th>
-          <th style="text-align: right;">Scans</th>
-          <th style="text-align: right;">Input tokens</th>
-          <th style="text-align: right;">Output tokens</th>
-          <th style="text-align: right;">Est. cost (USD)</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for entry in this_month_rows %}
-        <tr>
-          <td>{{ entry.row.provider }}</td>
-          <td class="mono" style="font-size: 0.83rem;">{{ entry.row.model or "—" }}</td>
-          <td style="text-align: right;">{{ "{:,}".format(entry.row.scan_count) }}</td>
-          <td style="text-align: right;">{{ "{:,}".format(entry.row.input_tokens) }}</td>
-          <td style="text-align: right;">{{ "{:,}".format(entry.row.output_tokens) }}</td>
-          <td style="text-align: right;">
-            {% if entry.est_cost > 0 %}${{ "%.4f"|format(entry.est_cost) }}
-            {% else %}<span class="muted">—</span>{% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+  <div class="posture-stat">
+    <div class="ps-num">${{ "%.2f"|format(ns.this_cost) }}</div>
+    <div class="ps-label">Est. cost this month</div>
   </div>
-
-  <div style="margin-top: 1rem; display: flex; gap: 1rem; flex-wrap: wrap;">
-    <a href="https://console.anthropic.com/settings/billing" target="_blank" rel="noopener" style="font-size: 0.85rem;">Verify in Anthropic Console ↗</a>
-    <a href="https://console.cloud.google.com/billing" target="_blank" rel="noopener" style="font-size: 0.85rem;">Verify in Google Cloud Billing ↗</a>
+  {% if last_month_rows %}
+  <div class="posture-stat">
+    <div class="ps-num">{{ ns.lm_calls }}</div>
+    <div class="ps-label">Scans last month</div>
   </div>
-  {% else %}
-  <p class="muted">No usage recorded for {{ this_month }} yet.</p>
+  <div class="posture-stat">
+    <div class="ps-num">${{ "%.2f"|format(ns.lm_cost) }}</div>
+    <div class="ps-label">Cost last month</div>
+  </div>
   {% endif %}
 </div>
 
-{% if last_month_rows %}
-{# ---- Last month (collapsed) --------------------------------------------- #}
-{% set lm_calls = namespace(v=0) %}
-{% set lm_in = namespace(v=0) %}
-{% set lm_out = namespace(v=0) %}
-{% set lm_cost = namespace(v=0.0) %}
-{% for entry in last_month_rows %}
-  {% set lm_calls.v = lm_calls.v + entry.row.scan_count %}
-  {% set lm_in.v    = lm_in.v    + entry.row.input_tokens %}
-  {% set lm_out.v   = lm_out.v   + entry.row.output_tokens %}
-  {% set lm_cost.v  = lm_cost.v  + entry.est_cost %}
+{# ── Provider breakdown cards ── #}
+{% if this_month_rows %}
+{% set pns = namespace() %}
+{% set providers = {} %}
+{% for entry in this_month_rows %}
+  {% set p = entry.row.provider %}
+  {# accumulate per-provider in template — Jinja2 workaround: use loop variable tracking #}
 {% endfor %}
-
-<details class="card card-no-pad">
-  <summary style="padding: 1rem 1.4rem; cursor: pointer; font-weight: 600; user-select: none;
-                  list-style: none; display: flex; justify-content: space-between; align-items: center;
-                  border-radius: var(--radius);">
-    <span>{{ last_month }} — last month</span>
-    <span class="muted" style="font-size: 0.82rem; font-weight: normal;">
-      {{ "{:,}".format(lm_calls.v) }} calls &middot;
-      {{ "{:,}".format(lm_in.v + lm_out.v) }} tokens &middot;
-      ${{ "%.4f"|format(lm_cost.v) }} est.
-    </span>
-  </summary>
-  <div style="border-top: 1px solid var(--border); padding: 1.25rem 1.5rem; overflow-x: auto;">
-    <table>
-      <thead>
-        <tr>
-          <th>Provider</th>
-          <th>Model</th>
-          <th style="text-align: right;">Scans</th>
-          <th style="text-align: right;">Input tokens</th>
-          <th style="text-align: right;">Output tokens</th>
-          <th style="text-align: right;">Est. cost (USD)</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for entry in last_month_rows %}
-        <tr>
-          <td>{{ entry.row.provider }}</td>
-          <td class="mono" style="font-size: 0.83rem;">{{ entry.row.model or "—" }}</td>
-          <td style="text-align: right;">{{ "{:,}".format(entry.row.scan_count) }}</td>
-          <td style="text-align: right;">{{ "{:,}".format(entry.row.input_tokens) }}</td>
-          <td style="text-align: right;">{{ "{:,}".format(entry.row.output_tokens) }}</td>
-          <td style="text-align: right;">
-            {% if entry.est_cost > 0 %}${{ "%.4f"|format(entry.est_cost) }}
-            {% else %}<span class="muted">—</span>{% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+<div class="provider-cards">
+  {% set seen_providers = [] %}
+  {% for entry in this_month_rows %}
+  {% if entry.row.provider not in seen_providers %}
+  {% set _ = seen_providers.append(entry.row.provider) %}
+  {% set prov_ns = namespace(calls=0, inp=0, outp=0, cost=0.0, models=[]) %}
+  {% for e2 in this_month_rows %}
+    {% if e2.row.provider == entry.row.provider %}
+      {% set prov_ns.calls = prov_ns.calls + e2.row.scan_count %}
+      {% set prov_ns.inp   = prov_ns.inp   + e2.row.input_tokens %}
+      {% set prov_ns.outp  = prov_ns.outp  + e2.row.output_tokens %}
+      {% set prov_ns.cost  = prov_ns.cost  + e2.est_cost %}
+      {% if e2.row.model and e2.row.model not in prov_ns.models %}
+        {% set _ = prov_ns.models.append(e2.row.model) %}
+      {% endif %}
+    {% endif %}
+  {% endfor %}
+  <div class="provider-card">
+    <h4>{{ entry.row.provider | title }}</h4>
+    <div class="pc-stat">
+      <span class="pc-stat-label">Scans</span>
+      <span class="pc-stat-val">{{ prov_ns.calls }}</span>
+    </div>
+    <div class="pc-stat">
+      <span class="pc-stat-label">Input tokens</span>
+      <span class="pc-stat-val">{{ "{:,}".format(prov_ns.inp) }}</span>
+    </div>
+    <div class="pc-stat">
+      <span class="pc-stat-label">Output tokens</span>
+      <span class="pc-stat-val">{{ "{:,}".format(prov_ns.outp) }}</span>
+    </div>
+    <div class="pc-stat">
+      <span class="pc-stat-label">Est. cost</span>
+      <span class="pc-stat-val">${{ "%.4f"|format(prov_ns.cost) }}</span>
+    </div>
+    {% if prov_ns.models %}
+    <div class="pc-model">{{ prov_ns.models | join(', ') }}</div>
+    {% endif %}
   </div>
-</details>
+  {% endif %}
+  {% endfor %}
+</div>
 {% endif %}
 
-<div class="card">
-  <h2>About these estimates</h2>
-  <p class="muted" style="font-size: 0.875rem;">
-    Cost estimates use published list prices and are provided for convenience only.
-    Your actual invoice may differ due to volume discounts, promotional credits, or
-    price changes after this software was last updated.
-  </p>
-  <p class="muted" style="font-size: 0.875rem; margin-top: 0.5rem;">
-    Token counts come directly from the provider SDK response and are recorded per scan.
-    To verify, open any report in <a href="/portal/reports">Reports</a> and click a response ID to
-    inspect it in your provider's console.
-  </p>
+{# ── Chart: monthly comparison ── #}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<div class="chart-row">
+  <div class="chart-card" style="flex:1;">
+    <h4>Scan count</h4>
+    <canvas id="scanCountChart"></canvas>
+  </div>
+  <div class="chart-card" style="flex:1;">
+    <h4>Token volume</h4>
+    <canvas id="tokenChart"></canvas>
+  </div>
 </div>
+<script>
+(function() {
+  var isDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+    (!document.documentElement.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  var textColor = isDark ? '#7a8499' : '#64748b';
+  var gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)';
+
+  var labels = ["{{ last_month }}", "{{ this_month }}"];
+  var scans   = [{{ ns.lm_calls }}, {{ ns.this_calls }}];
+  var tokens  = [{{ ns.lm_in + ns.lm_out }}, {{ ns.this_in + ns.this_out }}];
+
+  var barOpts = {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { color: textColor, font: { size: 11 } }, grid: { color: gridColor } },
+      y: { ticks: { color: textColor, font: { size: 11 } }, grid: { color: gridColor }, beginAtZero: true }
+    }
+  };
+
+  new Chart(document.getElementById('scanCountChart'), {
+    type: 'bar',
+    data: { labels: labels, datasets: [{ data: scans, backgroundColor: ['rgba(37,88,232,0.4)', 'rgba(37,88,232,0.75)'], borderRadius: 5 }] },
+    options: barOpts
+  });
+  new Chart(document.getElementById('tokenChart'), {
+    type: 'bar',
+    data: { labels: labels, datasets: [{ data: tokens, backgroundColor: ['rgba(45,212,168,0.35)', 'rgba(45,212,168,0.7)'], borderRadius: 5 }] },
+    options: barOpts
+  });
+})();
+</script>
+
+{# ── This month detail ── #}
+<div class="admin-list-card">
+  <button class="section-toggle" aria-expanded="true" onclick="toggleSection(this,'this-month-body')">
+    <span>{{ this_month }} — this month</span>
+    <span style="font-size:var(--text-xs); color:var(--muted); font-weight:400; text-transform:none; letter-spacing:0; margin-left:auto; margin-right:0.75rem;">{{ ns.this_calls }} scans · ${{ "%.4f"|format(ns.this_cost) }}</span>
+    <span class="ct-icon">▼</span>
+  </button>
+  <div class="section-body" id="this-month-body">
+    {% if this_month_rows %}
+    <div style="overflow-x:auto;">
+      <table class="usage-table">
+        <thead>
+          <tr>
+            <th>Provider</th><th>Model</th>
+            <th style="text-align:right;">Scans</th>
+            <th style="text-align:right;">Input</th>
+            <th style="text-align:right;">Output</th>
+            <th style="text-align:right;">Est. cost</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in this_month_rows %}
+          <tr>
+            <td>{{ entry.row.provider }}</td>
+            <td class="mono" style="font-size:0.8rem;">{{ entry.row.model or "—" }}</td>
+            <td style="text-align:right; font-variant-numeric:tabular-nums;">{{ "{:,}".format(entry.row.scan_count) }}</td>
+            <td style="text-align:right; font-variant-numeric:tabular-nums;">{{ "{:,}".format(entry.row.input_tokens) }}</td>
+            <td style="text-align:right; font-variant-numeric:tabular-nums;">{{ "{:,}".format(entry.row.output_tokens) }}</td>
+            <td style="text-align:right; font-variant-numeric:tabular-nums;">{% if entry.est_cost > 0 %}${{ "%.4f"|format(entry.est_cost) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div style="padding:0.75rem 0.9rem; border-top:1px solid var(--border); display:flex; gap:1.25rem; flex-wrap:wrap;">
+      <a href="https://console.anthropic.com/settings/billing" target="_blank" rel="noopener" style="font-size:var(--text-xs); color:var(--accent);">Verify in Anthropic Console ↗</a>
+      <a href="https://console.cloud.google.com/billing" target="_blank" rel="noopener" style="font-size:var(--text-xs); color:var(--accent);">Verify in Google Cloud Billing ↗</a>
+    </div>
+    {% else %}
+    <div class="empty-state"><p class="empty-state-title">No usage recorded for {{ this_month }} yet</p></div>
+    {% endif %}
+  </div>
+</div>
+
+{# ── Last month detail ── #}
+{% if last_month_rows %}
+<div class="admin-list-card">
+  <button class="section-toggle" aria-expanded="false" onclick="toggleSection(this,'last-month-body')">
+    <span>{{ last_month }} — last month</span>
+    <span style="font-size:var(--text-xs); color:var(--muted); font-weight:400; text-transform:none; letter-spacing:0; margin-left:auto; margin-right:0.75rem;">{{ ns.lm_calls }} scans · ${{ "%.4f"|format(ns.lm_cost) }}</span>
+    <span class="ct-icon">▼</span>
+  </button>
+  <div class="section-body hidden" id="last-month-body">
+    <div style="overflow-x:auto;">
+      <table class="usage-table">
+        <thead>
+          <tr>
+            <th>Provider</th><th>Model</th>
+            <th style="text-align:right;">Scans</th>
+            <th style="text-align:right;">Input</th>
+            <th style="text-align:right;">Output</th>
+            <th style="text-align:right;">Est. cost</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in last_month_rows %}
+          <tr>
+            <td>{{ entry.row.provider }}</td>
+            <td class="mono" style="font-size:0.8rem;">{{ entry.row.model or "—" }}</td>
+            <td style="text-align:right; font-variant-numeric:tabular-nums;">{{ "{:,}".format(entry.row.scan_count) }}</td>
+            <td style="text-align:right; font-variant-numeric:tabular-nums;">{{ "{:,}".format(entry.row.input_tokens) }}</td>
+            <td style="text-align:right; font-variant-numeric:tabular-nums;">{{ "{:,}".format(entry.row.output_tokens) }}</td>
+            <td style="text-align:right; font-variant-numeric:tabular-nums;">{% if entry.est_cost > 0 %}${{ "%.4f"|format(entry.est_cost) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ── About estimates ── #}
+<div class="about-card">
+  <h4>About these estimates</h4>
+  <p>Cost estimates use published list prices and are for convenience only. Your actual invoice may differ due to volume discounts or promotional credits.</p>
+  <p style="margin-top:0.5rem;">Token counts come directly from the provider SDK response and are recorded per scan. To verify, open any report in <a href="/portal/reports" style="color:var(--accent);">Reports</a> and click a response ID.</p>
+</div>
+
+<script>
+function toggleSection(btn, bodyId) {
+  var body = document.getElementById(bodyId);
+  if (!body) return;
+  var isOpen = !body.classList.contains('hidden');
+  body.classList.toggle('hidden', isOpen);
+  btn.setAttribute('aria-expanded', !isOpen);
+}
+</script>
+
 {% endblock %}

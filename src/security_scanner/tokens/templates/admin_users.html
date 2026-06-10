@@ -4,206 +4,300 @@
 {% block extra_styles %}
 {{ super() }}
 <style>
-  .protected-badge {
-    display: inline-flex;
+  main { max-width: 1000px; }
+
+  /* User card */
+  .user-card {
+    display: flex;
     align-items: center;
-    gap: 0.2rem;
-    font-size: 0.72rem;
-    font-weight: 600;
-    padding: 0.14em 0.45em;
-    border-radius: 4px;
-    background: rgba(245,158,11,0.1);
-    border: 1px solid rgba(245,158,11,0.35);
-    color: #92400e;
-    white-space: nowrap;
-    letter-spacing: 0.03em;
-    margin-left: 0.3rem;
-    vertical-align: middle;
+    gap: 1rem;
+    padding: 0.85rem 1.15rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--card);
+    transition: background 0.1s;
   }
-  .protected-locked {
+  .user-card:last-child { border-bottom: none; }
+  .user-card:hover { background: var(--bg-inset); }
+  [data-theme="dark"] .user-card:hover { background: rgba(255,255,255,0.02); }
+
+  /* Avatar initial circle */
+  .user-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: 0;
+  }
+  .avatar-a { background: #2563eb; }
+  .avatar-b { background: #7c3aed; }
+  .avatar-c { background: #db2777; }
+  .avatar-d { background: #059669; }
+  .avatar-e { background: #d97706; }
+  .avatar-f { background: #dc2626; }
+  .avatar-g { background: #0891b2; }
+  .avatar-h { background: #65a30d; }
+  .avatar-other { background: #64748b; }
+
+  /* Center info */
+  .uc-info { flex: 1; min-width: 0; }
+  .uc-email {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .uc-meta {
+    font-size: var(--text-xs);
+    color: var(--muted);
+    margin-top: 0.15rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  /* Pill overrides for smaller size */
+  .uc-meta .pill { font-size: 0.68rem; padding: 0.12em 0.45em; }
+
+  /* Right actions cluster */
+  .uc-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+  }
+
+  /* Protected lock indicator */
+  .uc-lock {
     display: inline-flex;
     align-items: center;
     gap: 0.25rem;
-    font-size: 0.78rem;
+    font-size: var(--text-xs);
     color: var(--muted);
+    padding: 0.3rem 0.6rem;
+  }
+
+  /* auth provider badge */
+  .auth-badge {
+    display: inline-block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 0.12em 0.45em;
+    border-radius: 4px;
+    letter-spacing: 0.03em;
     white-space: nowrap;
+  }
+  .auth-badge-okta {
+    background: rgba(37,99,235,0.1);
+    border: 1px solid rgba(37,99,235,0.3);
+    color: var(--accent);
+  }
+  .auth-badge-local {
+    background: rgba(107,114,128,0.1);
+    border: 1px solid rgba(107,114,128,0.3);
+    color: var(--muted);
+  }
+
+  /* pwd reset badge */
+  .pwd-reset-badge {
+    display: inline-block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 0.12em 0.45em;
+    border-radius: 4px;
+    background: rgba(245,158,11,0.15);
+    border: 1px solid rgba(245,158,11,0.4);
+    color: #92400e;
+    white-space: nowrap;
+  }
+
+  /* Filter bar */
+  .users-filter-bar {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 0.9rem 1.15rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-inset);
+  }
+  .users-filter-bar input[type="text"] {
+    flex: 1;
+    min-width: 200px;
+    max-width: 320px;
   }
 </style>
 {% endblock %}
 
 {% block admin_content %}
-<div class="card">
-  <div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:0.75rem; flex-wrap:wrap; gap:0.5rem;">
-    <h2 style="margin:0;">User Management</h2>
+
+<div class="admin-page-header">
+  <div>
+    <h2 class="page-title">Users</h2>
+    <p class="page-subtitle">Auto-provisioned on first portal login. Deactivating blocks scans without revoking tokens. Protected accounts cannot be demoted via this panel.</p>
   </div>
-  <p class="muted" style="margin-bottom:1rem;">
-    Users are auto-provisioned on first portal login. Deactivating blocks all future
-    scans (401) without revoking their token — useful while access is under review.
-    <strong>Protected</strong> accounts cannot be demoted or deactivated via this panel.
-  </p>
-  <form method="get" action="/admin/users"
-        style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
-    <input type="text" name="q" placeholder="Filter by email…" value="{{ q }}"
-           style="width:230px;">
-    <button type="submit" class="btn">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-           stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-      </svg>
-      Search
-    </button>
-    {% if q %}
-      <a href="/admin/users" class="btn">Clear</a>
-    {% endif %}
-  </form>
 </div>
 
-<div class="card card-no-pad">
+<div class="admin-list-card">
+
+  {# Filter bar #}
+  <form method="get" action="/admin/users" class="users-filter-bar">
+    <input type="text" name="q" placeholder="Search by email…" value="{{ q }}" autocomplete="off">
+    <button type="submit" class="btn btn-sm">Search</button>
+    {% if q %}<a href="/admin/users" class="btn btn-sm">Clear</a>{% endif %}
+  </form>
+
   {% if users %}
-  <table>
-    <thead>
-      <tr>
-        <th>Email</th>
-        <th>Role</th>
-        <th>Status</th>
-        <th>Last login</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for u in users %}
-      {%- set is_protected = u.email in protected_admin_emails -%}
-      <tr>
-        <td style="font-weight:500;">
-          {{ u.email }}
-          {% if is_protected %}
-            <span class="protected-badge">
-              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                   stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-              </svg>
-              protected
-            </span>
-          {% endif %}
-          {% if u.auth_provider == "okta" %}
-          <span style="display:inline-block;font-size:0.72rem;font-weight:600;padding:0.14em 0.45em;border-radius:4px;background:rgba(37,99,235,0.1);border:1px solid rgba(37,99,235,0.3);color:var(--accent);margin-left:0.3rem;" title="Authenticated via Okta SSO">Okta</span>
-          {% else %}
-          <span style="display:inline-block;font-size:0.72rem;font-weight:600;padding:0.14em 0.45em;border-radius:4px;background:rgba(107,114,128,0.1);border:1px solid rgba(107,114,128,0.3);color:var(--muted);margin-left:0.3rem;" title="Local password authentication">Local</span>
-          {% endif %}
-        </td>
-        <td style="white-space:nowrap;">
-          {% if u.role.value == "admin" %}
-            <span class="pill" style="background:rgba(37,99,235,0.1); color:var(--accent);">admin</span>
-          {% else %}
-            <span class="pill" style="background:var(--bg); color:var(--muted); border:1px solid var(--border);">user</span>
-          {% endif %}
-          {% if u.role.value == "user" %}
-            <form method="post" action="/admin/users/{{ u.email | urlencode }}/promote"
-                  style="display:inline; margin-left:0.3rem;"
-                  onsubmit="return confirm('Promote this user to admin?')">
-              <button type="submit" class="btn-sm btn-promote">↑ Make Admin</button>
-            </form>
-          {% elif is_protected %}
-            <span class="muted" style="font-size:0.75rem; margin-left:0.3rem;"
-                  title="Super-admin — cannot be demoted via this panel">🔒</span>
-          {% elif u.email != user.email %}
-            <form method="post" action="/admin/users/{{ u.email | urlencode }}/demote"
-                  style="display:inline; margin-left:0.3rem;"
-                  onsubmit="return confirm('Remove admin role from this user?')">
-              <button type="submit" class="btn-sm btn-demote">↓ Remove Admin</button>
-            </form>
-          {% else %}
-            <span class="muted" style="font-size:0.75rem; margin-left:0.3rem;">(you)</span>
-          {% endif %}
-        </td>
-        <td>
-          {% if u.is_active %}
-            <span class="pill pill-ok">active</span>
-          {% else %}
-            <span class="pill pill-fail">deactivated</span>
-          {% endif %}
-          {% if u.must_change_password %}
-          <span style="display:inline-block;font-size:0.72rem;font-weight:600;padding:0.14em 0.45em;border-radius:4px;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);color:#92400e;margin-left:0.3rem;" title="Password reset required on next login">&#9888; pwd reset</span>
-          {% endif %}
-        </td>
-        <td class="muted" style="font-size:0.82rem; white-space:nowrap;">
-          {{ u.last_login_at.strftime("%Y-%m-%d %H:%M") if u.last_login_at else "—" }}
-        </td>
-        <td style="white-space:nowrap;">
-          {% if is_protected %}
-            <span class="protected-locked" title="Super-admin — actions locked">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-              </svg>
-              Protected account
-            </span>
-          {% else %}
-            {% if u.is_active %}
-            <span class="confirm-delete-wrap">
-              <button type="button" class="btn btn-sm btn-danger confirm-trigger">Deactivate</button>
-              <span class="confirm-delete-row">
-                <span style="font-size:0.8rem; color:var(--danger); margin-right:0.2rem;">Deactivate?</span>
-                <form method="post" action="/admin/users/{{ u.email | urlencode }}/deactivate" style="display:inline;">
-                  <button type="submit" class="btn btn-sm btn-danger">Yes</button>
-                </form>
-                <button type="button" class="confirm-cancel btn btn-sm">No</button>
-              </span>
-            </span>
+
+  {# User card list #}
+  {% for u in users %}
+  {%- set is_protected = u.email in protected_admin_emails -%}
+  {%- set first_char = u.email[0] | lower -%}
+  {%- set avatar_class = {
+    'a': 'avatar-a', 'b': 'avatar-b', 'c': 'avatar-c', 'd': 'avatar-d',
+    'e': 'avatar-e', 'f': 'avatar-f', 'g': 'avatar-g', 'h': 'avatar-h'
+  }.get(first_char, 'avatar-other') -%}
+
+  <div class="user-card">
+    {# Avatar #}
+    <div class="user-avatar {{ avatar_class }}">{{ u.email[0] | upper }}</div>
+
+    {# Center info #}
+    <div class="uc-info">
+      <div class="uc-email" title="{{ u.email }}">
+        {{ u.email }}
+        {% if is_protected %}
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-left:0.2rem; color:var(--muted);" title="Protected account">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+        {% endif %}
+      </div>
+      <div class="uc-meta">
+        {# Auth provider badge #}
+        {% if u.auth_provider == "okta" %}
+          <span class="auth-badge auth-badge-okta" title="Authenticated via Okta SSO">Okta</span>
+        {% else %}
+          <span class="auth-badge auth-badge-local" title="Local password authentication">Local</span>
+        {% endif %}
+
+        {# Role pill #}
+        {% if u.role.value == "admin" %}
+          <span class="pill" style="background:rgba(37,99,235,0.1); color:var(--accent);">admin</span>
+        {% else %}
+          <span class="pill" style="background:var(--bg); color:var(--muted); border:1px solid var(--border);">user</span>
+        {% endif %}
+
+        {# Status pill #}
+        {% if u.is_active %}
+          <span class="pill pill-ok">active</span>
+        {% else %}
+          <span class="pill pill-fail">deactivated</span>
+        {% endif %}
+
+        {# Password reset badge #}
+        {% if u.must_change_password %}
+          <span class="pwd-reset-badge">&#9888; pwd reset required</span>
+        {% endif %}
+
+        {# Last login #}
+        <span style="color:var(--muted);">Last login: {{ u.last_login_at.strftime("%d %b %Y %H:%M") if u.last_login_at else "never" }}</span>
+      </div>
+    </div>
+
+    {# Right: overflow menu or protected lock #}
+    <div class="uc-right">
+      {% if is_protected %}
+        <span class="uc-lock" title="Super-admin — actions locked">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          Protected
+        </span>
+      {% elif u.email == user.email %}
+        <span class="uc-lock">(you)</span>
+      {% else %}
+        <div class="overflow-anchor">
+          <button class="overflow-trigger" type="button" aria-label="User actions">···</button>
+          <div class="overflow-menu">
+            {# Role management #}
+            {% if u.role.value == "user" %}
+              <form method="post" action="/admin/users/{{ u.email | urlencode }}/promote"
+                    onsubmit="return confirm('Promote {{ u.email }} to admin?')">
+                <button type="submit">Promote to Admin</button>
+              </form>
             {% else %}
-            <form method="post" action="/admin/users/{{ u.email | urlencode }}/reactivate" style="display:inline;">
-              <button type="submit" class="btn btn-sm btn-primary">Reactivate</button>
-            </form>
+              <form method="post" action="/admin/users/{{ u.email | urlencode }}/demote"
+                    onsubmit="return confirm('Remove admin role from {{ u.email }}?')">
+                <button type="submit">Remove Admin</button>
+              </form>
             {% endif %}
-            <span class="confirm-delete-wrap">
-              <button type="button" class="btn btn-sm confirm-trigger">Revoke tokens</button>
-              <span class="confirm-delete-row">
-                <span style="font-size:0.8rem; color:var(--danger); margin-right:0.2rem;">Revoke all?</span>
-                <form method="post" action="/admin/users/{{ u.email | urlencode }}/revoke-tokens" style="display:inline;">
-                  <button type="submit" class="btn btn-sm btn-danger">Yes</button>
-                </form>
-                <button type="button" class="confirm-cancel btn btn-sm">No</button>
-              </span>
-            </span>
-            {%- if u.auth_provider != "okta" and not is_protected -%}
+
+            {# Activation toggle #}
+            <hr>
+            {% if u.is_active %}
+              <form method="post" action="/admin/users/{{ u.email | urlencode }}/deactivate"
+                    onsubmit="return confirm('Deactivate {{ u.email }}? This blocks future scans.')">
+                <button type="submit" class="om-danger">Deactivate</button>
+              </form>
+            {% else %}
+              <form method="post" action="/admin/users/{{ u.email | urlencode }}/reactivate">
+                <button type="submit">Reactivate</button>
+              </form>
+            {% endif %}
+
+            {# Token revocation #}
+            <form method="post" action="/admin/users/{{ u.email | urlencode }}/revoke-tokens"
+                  onsubmit="return confirm('Revoke all tokens for {{ u.email }}?')">
+              <button type="submit" class="om-danger">Revoke Tokens</button>
+            </form>
+
+            {# Password reset (local auth only) #}
+            {%- if u.auth_provider != "okta" -%}
+            <hr>
             <form method="post" action="/admin/users/{{ u.email | urlencode }}/force-password-reset"
-                  style="display:inline"
-                  onsubmit="return confirm('Force ' + {{ u.email | tojson }} + ' to change their password on next login?')">
-              <button type="submit" class="btn btn-sm" style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);color:#92400e;">Force pwd reset</button>
+                  onsubmit="return confirm('Force {{ u.email }} to change password on next login?')">
+              <button type="submit">Force Pwd Reset</button>
             </form>
             {%- endif -%}
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
 
+  {# Pagination #}
   <div class="pagination-bar">
-    <span class="muted" style="font-size:0.82rem;">Page {{ page }}</span>
+    <span class="muted" style="font-size:var(--text-sm);">Page {{ page }}</span>
     <div style="display:flex; gap:0.3rem;">
       {% if page > 1 %}
-        <a href="/admin/users?page={{ page - 1 }}{% if q %}&q={{ q }}{% endif %}"
-           class="btn btn-sm">← Prev</a>
+        <a href="/admin/users?page={{ page - 1 }}{% if q %}&q={{ q }}{% endif %}" class="btn btn-sm">← Prev</a>
       {% endif %}
       {% if has_next %}
-        <a href="/admin/users?page={{ page + 1 }}{% if q %}&q={{ q }}{% endif %}"
-           class="btn btn-sm">Next →</a>
+        <a href="/admin/users?page={{ page + 1 }}{% if q %}&q={{ q }}{% endif %}" class="btn btn-sm">Next →</a>
       {% endif %}
     </div>
   </div>
 
   {% else %}
   <div class="empty-state">
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         stroke-width="1.5">
-      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.2; margin:0 auto 0.75rem; display:block;">
+      <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
     </svg>
-    <p class="empty-state-title">No users found{% if q %} matching <em>{{ q }}</em>{% endif %}</p>
+    <p class="empty-state-title">No users found{% if q %} matching "{{ q }}"{% endif %}</p>
   </div>
   {% endif %}
+
 </div>
 
 {% endblock admin_content %}

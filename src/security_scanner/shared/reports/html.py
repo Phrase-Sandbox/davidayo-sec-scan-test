@@ -469,6 +469,86 @@ ol.location-list > li { margin: 0.5em 0; }
   font-size: 0.85em;
 }
 
+/* Gate decision hero banner */
+.gate-hero {
+  border-radius: 8px;
+  padding: 1.4em 1.75em 1.2em;
+  margin: 0 0 1.5em;
+}
+.gate-hero.blocked    { background: #fff1f0; border: 1.5px solid #ffa39e; }
+.gate-hero.pass       { background: #f0fff4; border: 1.5px solid #95de64; }
+.gate-hero.advisory   { background: #fffbeb; border: 1.5px solid #ffd666; }
+.gate-hero.bypassed   { background: #f9f0ff; border: 1.5px solid #d3adf7; }
+.gate-hero.scan_failed { background: #fff1f0; border: 1.5px solid #ffa39e; }
+.gate-hero-verdict {
+  font-size: 2.2em;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.15em;
+  line-height: 1.1;
+}
+.gate-hero.blocked .gate-hero-verdict    { color: #b94a4a; }
+.gate-hero.pass .gate-hero-verdict       { color: #3f8a5a; }
+.gate-hero.advisory .gate-hero-verdict   { color: #7c6b2a; }
+.gate-hero.bypassed .gate-hero-verdict   { color: #7c3aed; }
+.gate-hero.scan_failed .gate-hero-verdict { color: #b94a4a; }
+.gate-hero-counts {
+  font-size: 1em;
+  font-weight: 600;
+  color: #444;
+  margin: 0 0 0.4em;
+}
+.gate-hero-reason {
+  font-size: 0.95em;
+  color: #555;
+  margin: 0 0 0.7em;
+  line-height: 1.55;
+}
+.gate-top-risks { display: flex; flex-wrap: wrap; gap: 0.5em; }
+.top-risk-chip {
+  display: inline-block;
+  padding: 0.22em 0.7em;
+  border-radius: 4px;
+  font-size: 0.82em;
+  font-weight: 600;
+  background: rgba(185,74,74,0.1);
+  color: #b94a4a;
+  border: 1px solid rgba(185,74,74,0.25);
+}
+
+/* Action callout — green "do this first" band */
+.action-callout {
+  background: #f0fff4;
+  border-left: 3px solid #3f8a5a;
+  padding: 0.65em 1em;
+  border-radius: 0 6px 6px 0;
+  margin: 0 0 1.5em;
+  font-size: 0.95em;
+  font-weight: 600;
+  color: #2d6a4f;
+}
+.action-callout::before { content: "→ "; font-weight: 700; }
+
+/* Impact callout — replaces old .risk-callout */
+.impact-callout {
+  background: var(--critical-tint);
+  border-left: 3px solid var(--critical);
+  padding: 0.5em 0.9em 0.6em;
+  border-radius: 0 6px 6px 0;
+  margin: 0.5em 0 0.8em;
+  font-size: 0.9em;
+  line-height: 1.5;
+}
+.impact-callout-label {
+  font-size: 0.75em;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--critical);
+  display: block;
+  margin-bottom: 0.25em;
+}
+
 /* Print: expand every detail and drop interactive affordances. */
 @media print {
   body { background: white; max-width: none; margin: 1em; }
@@ -491,21 +571,31 @@ def build_html_report(
     vulnerable code" toggle revealing the actual lines referenced by
     ``affected_lines``. Without *files*, the toggle is silently omitted.
     """
-    sections: list[str] = [_metadata_section(result)]
+    sections: list[str] = []
+
+    # Gate hero banner is the first thing the reader sees.
+    if result.scan_type == ScanType.deployment_gate:
+        sections.append(_gate_decision_section(result.gate_decision, result.findings))
 
     if result.findings:
         sections.append(_summary_bar(result.findings))
+
+    # One-sentence action callout immediately after the summary.
+    if result.scan_type == ScanType.deployment_gate and result.findings:
+        callout = _action_callout(result.gate_decision, result.findings)
+        if callout:
+            sections.append(callout)
 
     warnings = _gather_warnings(result)
     if warnings:
         sections.append(_warnings_section(warnings))
 
-    if result.scan_type == ScanType.deployment_gate:
-        sections.append(_gate_decision_section(result.gate_decision))
-
     if result.findings:
         sections.append(_findings_table(result.findings))
         sections.append(_detailed_findings(result.findings, files))
+
+    # Metadata collapsed at the bottom — readers who need it can expand it.
+    sections.append(_metadata_section(result))
 
     sections.append(_footer(result.findings_count))
 
